@@ -95,4 +95,7 @@ versioned API contracts as the Dashboard, authenticate with a scoped Auth API
 key or service token, and make destructive operations explicit. It must not
 reach into Cloud's JSON stores or bypass platform approval. The next CLI scope
 is read-only discovery and health, then catalog and node administration, then
-development workflows with separate scopes and audit events.
+development workflows with separate scopes and audit events. `nexus discover`
+provides the first unified read-only view across the public Cloud, Auth, API,
+and Terminal manifests; individual contract commands remain available when a
+caller needs the complete route list for one service.

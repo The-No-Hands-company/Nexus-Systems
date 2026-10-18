@@ -88,6 +88,11 @@ const commands: Record<string, { desc: string; usage: string; run: CommandHandle
     usage: "nexus cloud",
     run: cmdCloudContract,
   },
+  discover: {
+    desc: "Discover the public contracts for platform services",
+    usage: "nexus discover",
+    run: cmdDiscover,
+  },
   api: {
     desc: "Read the versioned Nexus API contract",
     usage: "nexus api",
@@ -425,6 +430,56 @@ async function cmdCloudContract() {
     console.log(`  ${String(route.method).padEnd(6)} ${String(route.path).padEnd(54)} ${access}`);
   }
   console.log(`\n  ${(payload.routes as unknown[]).length} declared Cloud route${(payload.routes as unknown[]).length === 1 ? "" : "s"}`);
+}
+
+async function cmdDiscover() {
+  const services: Array<{ id: string; name: string; url: string; init?: RequestInit }> = [
+    {
+      id: "cloud",
+      name: "Nexus Cloud",
+      url: `${cloudUrl()}/api/v1/contract`,
+      init: { headers: cloudHeaders() },
+    },
+    {
+      id: "auth",
+      name: "Nexus Auth",
+      url: `${(process.env.NEXUS_AUTH_URL || "http://localhost:4310").trim().replace(/\/$/, "")}/api/v1/auth/contract`,
+    },
+    {
+      id: "api",
+      name: "Nexus API",
+      url: `${(process.env.NEXUS_API_URL || "http://localhost:3036").trim().replace(/\/$/, "")}/api/v1/contract`,
+    },
+    {
+      id: "terminal",
+      name: "Nexus Terminal",
+      url: `${(process.env.NEXUS_TERMINAL_URL || "http://localhost:3110").trim().replace(/\/$/, "")}/api/v1/terminal/contract`,
+    },
+  ];
+
+  const results = await Promise.all(services.map(async (service) => ({
+    ...service,
+    payload: await fetchJson(service.url, service.init),
+  })));
+
+  console.log(BANNER);
+  console.log(color("Nexus Platform Discovery\n", CYAN));
+  console.log(`  ${DIM}Public versioned contracts; this command does not grant access or mutate state.${RESET}\n`);
+  console.log(`  ${bold("SERVICE".padEnd(18))}${bold("SURFACE".padEnd(20))}${bold("HOSTED PATH".padEnd(16))}${bold("STATUS".padEnd(12))}${bold("ROUTES")}`);
+  console.log(`  ${"─".repeat(78)}`);
+
+  for (const result of results) {
+    const service = result.payload?.service as Record<string, unknown> | undefined;
+    const routes = Array.isArray(result.payload?.routes) ? result.payload.routes.length : 0;
+    const available = Boolean(service && Array.isArray(result.payload?.routes));
+    const surface = String(service?.surface || (result.id === "api" ? "api-service" : "—"));
+    const hostedPath = String(service?.hostedPath || (result.id === "api" ? "—" : "—"));
+    const status = available ? color("available", GREEN) : color("offline", RED);
+    console.log(`  ${result.name.padEnd(18)}${surface.padEnd(20)}${hostedPath.padEnd(16)}${status.padEnd(21)}${available ? String(routes) : "—"}`);
+  }
+
+  const available = results.filter((result) => result.payload?.service && Array.isArray(result.payload.routes)).length;
+  console.log(`\n  ${available}/${services.length} public platform contracts available`);
 }
 
 async function cmdApiContract() {

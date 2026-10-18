@@ -10,6 +10,7 @@ Cloud reads.
 nexus catalog             # approved Cloud catalog
 nexus catalog develop     # catalog entries on one shelf
 nexus cloud                # Nexus Cloud control-plane contract
+nexus discover             # public contracts for Cloud, Auth, API, and Terminal
 nexus api                 # versioned Nexus API contract
 nexus auth                # Nexus Auth platform-service contract
 nexus terminal contract   # read the guarded Terminal surface and access classes
