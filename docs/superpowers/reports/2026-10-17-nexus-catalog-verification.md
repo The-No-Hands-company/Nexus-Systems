@@ -13,13 +13,15 @@ Branch: `feat/nexus-app-catalog`
 | Cloud typecheck | pass | `tsc --noEmit` |
 | Cloud app-root check | pass | `bun run check` — 85 files |
 | Cloud catalog/release/route regression | pass | 50 tests, 0 failures, 207 assertions |
-| Cloud complete suite | pass | 160 tests across 28 files, 0 failures, 707 assertions |
+| Cloud complete suite | pass | 162 tests across 29 files, 0 failures, 714 assertions |
 | Auth typecheck | pass | `bun run check` with frozen lockfile after lock refresh |
 | Auth regression | pass | 144 tests, 0 failures, 448 assertions |
 
 The Cloud gate covers approval, rollback, audit durability, global projection,
 tenant entitlements, node-local overlays, seed idempotency, release fixture
-states, Dashboard normalization, and API route manifest parity.
+states, Dashboard normalization, API route manifest parity, and the versioned
+control-plane contract advertised at `/api/v1/contract` and
+`/.well-known/nexus-cloud`.
 
 ## Previously recorded frontend matrix
 
