@@ -84,6 +84,16 @@ describe("normalizeCatalogEntry", () => {
     const entries = await listApps();
     expect(entries.filter(isLauncherApp).map((entry) => entry.id)).toEqual(["mail", "valid-url"]);
   });
+
+  it("uses an explicit legacy relative url as a shell-native route", async () => {
+    const raw = app({ delivery: "shell-native", publicUrl: undefined });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ apps: [
+      { ...raw, id: "relative", path: undefined, url: "/mail" },
+      { ...raw, id: "unsafe-relative", path: undefined, url: "//outside.test" },
+    ] }), { status: 200, headers: { "content-type": "application/json" } })));
+    const entries = await listApps();
+    expect(entries.filter(isLauncherApp).map((entry) => [entry.id, entry.path])).toEqual([["relative", "/mail"]]);
+  });
 });
 
 afterEach(() => vi.unstubAllGlobals());

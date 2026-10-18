@@ -138,7 +138,7 @@ export async function listApps(): Promise<AppEntry[]> {
   // Normalise once, here, so no component has to care whether the server that
   // answered is older than the bundle asking.
   return apps.map(({ url, ...a }) => {
-    const path = pathFor(a);
+    const path = pathFor({ ...a, url });
     const publicUrl = a.publicUrl ?? (url?.startsWith("/") ? undefined : url);
     const delivery = a.delivery ?? (url?.startsWith("/") ? "shell-native" : "framed");
     return normalizeCatalogEntry({ ...a, path, ...(publicUrl ? { publicUrl } : {}), delivery });
