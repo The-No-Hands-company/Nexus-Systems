@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Avatar } from "../../../../../packages/nexus-design/src/components/ui/avatar";
 import { Kbd } from "../../../../../packages/nexus-design/src/components/ui/kbd";
 import AppsDrawer from "./AppsDrawer";
 import { useDensity } from "./useDensity";
 import type { AppEntry } from "../api";
+import { useRecentApps } from "./useRecentApps";
 
 /**
  * The frame every app renders inside.
@@ -55,6 +56,8 @@ export default function Shell({
   // this component. The setter drives the toggle button below — before this,
   // it was discarded and there was no way to actually change density.
   const [density, setDensity] = useDensity();
+  const location = useLocation();
+  const [, recordRecent] = useRecentApps();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -71,6 +74,15 @@ export default function Shell({
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  useEffect(() => {
+    // A deep link such as /mail/inbox still belongs to the Mail app. Record
+    // the owning app by exact path first, then by a route-segment prefix so
+    // navigation history remains useful inside nested shell-native routes.
+    const app = apps.find((entry) => entry.path === location.pathname)
+      ?? apps.find((entry) => entry.path !== "/" && location.pathname.startsWith(`${entry.path}/`));
+    if (app) recordRecent(app.id);
+  }, [apps, location.pathname, recordRecent]);
 
   return (
     <div className="flex h-screen flex-col bg-zinc-900 text-zinc-100">

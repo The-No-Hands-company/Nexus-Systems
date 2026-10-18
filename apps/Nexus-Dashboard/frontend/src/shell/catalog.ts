@@ -49,7 +49,7 @@ const stableName = (a: AppEntry, b: AppEntry) => a.name.localeCompare(b.name) ||
 const healthyFirst = (a: AppEntry, b: AppEntry) => Number(b.health === "healthy") - Number(a.health === "healthy") || stableName(a, b);
 
 export function appsForShelf(apps: AppEntry[], shelf: CatalogShelf): AppEntry[] {
-  return apps.filter((app) => visible(app) && (app.primaryShelf === shelf || app.secondaryShelves.includes(shelf))).sort(stableName);
+  return apps.filter((app) => visible(app) && (app.primaryShelf === shelf || (app.secondaryShelves ?? []).includes(shelf))).sort(stableName);
 }
 
 export function groupAppsByShelf(apps: AppEntry[]): Record<CatalogShelf, AppEntry[]> {
@@ -64,10 +64,10 @@ export function searchCatalog(
   const needle = query.trim().toLowerCase();
   return apps
     .filter(visible)
-    .filter((app) => !needle || [app.name, app.id, app.description, ...app.capabilities].join(" ").toLowerCase().includes(needle))
-    .filter((app) => !filters.shelf || filters.shelf === "all" || app.primaryShelf === filters.shelf || app.secondaryShelves.includes(filters.shelf))
-    .filter((app) => !filters.audience || filters.audience === "all" || app.audiences.includes(filters.audience))
-    .filter((app) => !filters.capability || filters.capability === "all" || app.capabilities.includes(filters.capability))
+    .filter((app) => !needle || [app.name, app.id, app.description, ...(app.capabilities ?? [])].join(" ").toLowerCase().includes(needle))
+    .filter((app) => !filters.shelf || filters.shelf === "all" || app.primaryShelf === filters.shelf || (app.secondaryShelves ?? []).includes(filters.shelf))
+    .filter((app) => !filters.audience || filters.audience === "all" || (app.audiences ?? []).includes(filters.audience))
+    .filter((app) => !filters.capability || filters.capability === "all" || (app.capabilities ?? []).includes(filters.capability))
     .sort(healthyFirst);
 }
 

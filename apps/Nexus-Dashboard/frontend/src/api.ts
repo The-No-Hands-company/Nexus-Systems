@@ -28,13 +28,14 @@ export type AppEntry = {
   publicUrl?: string;
   delivery: "shell-native" | "proxied-app" | "framed" | "external";
   health: "healthy" | "offline";
-  primaryShelf: CatalogShelf;
-  secondaryShelves: CatalogShelf[];
-  audiences: CatalogAudience[];
-  capabilities: string[];
-  maturity: CatalogMaturity;
-  visibility: CatalogVisibility;
-  reviewStatus: CatalogReviewStatus;
+  /** Optional for legacy callers; listApps() always fills these fields. */
+  primaryShelf?: CatalogShelf;
+  secondaryShelves?: CatalogShelf[];
+  audiences?: CatalogAudience[];
+  capabilities?: string[];
+  maturity?: CatalogMaturity;
+  visibility?: CatalogVisibility;
+  reviewStatus?: CatalogReviewStatus;
 };
 
 export type Me = { id: string; username: string; email: string; role: string };

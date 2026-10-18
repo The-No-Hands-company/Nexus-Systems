@@ -1,6 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { listApps, type AppEntry } from "../api";
+import { CATALOG_SHELVES, groupAppsByShelf, searchCatalog, type CatalogAudience, type CatalogShelf } from "../shell/catalog";
+import AppCard from "../components/AppCard";
+import AppShelf from "../components/AppShelf";
+import CatalogFilters from "../components/CatalogFilters";
 
 type State =
   | { kind: "loading" }
@@ -20,6 +24,10 @@ type State =
  */
 export default function Grid() {
   const [state, setState] = useState<State>({ kind: "loading" });
+  const [query, setQuery] = useState("");
+  const [shelf, setShelf] = useState<CatalogShelf | "all">("all");
+  const [audience, setAudience] = useState<CatalogAudience | "all">("all");
+  const [capability, setCapability] = useState<string | "all">("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -28,6 +36,17 @@ export default function Grid() {
       .catch(() => { if (!cancelled) setState({ kind: "error" }); });
     return () => { cancelled = true; };
   }, []);
+
+  // Keep all hooks above the loading/error branches: the registry response is
+  // asynchronous, so rendering a spinner must not change hook order.
+  const capabilities = useMemo(() => [...new Set(state.kind === "ready" ? state.apps.flatMap((app) => app.capabilities ?? []) : [])].sort(), [state]);
+  const apps = state.kind === "ready" ? state.apps : [];
+  const hasFilters = Boolean(query.trim()) || shelf !== "all" || audience !== "all" || capability !== "all";
+  const matches = useMemo(
+    () => searchCatalog(apps, query, { shelf, audience, capability }),
+    [audience, capability, query, shelf, apps],
+  );
+  const shelves = useMemo(() => groupAppsByShelf(apps), [apps]);
 
   if (state.kind === "loading") {
     return <section className="mx-auto max-w-4xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
@@ -56,43 +75,37 @@ export default function Grid() {
   }
 
   return (
-    <section className="mx-auto max-w-4xl px-4 py-6 sm:p-8">
-      <h1 className="text-2xl font-semibold">Your apps</h1>
-      <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {state.apps.map((app) => (
-          <li key={app.id}>
-            {app.health === "healthy" ? (
-              // Every app is an in-shell route now, so all of them route
-              // client-side. A framed app is still framed — that happens at
-              // the route, not in this link.
-              <Link
-                to={app.path}
-                className="block h-full rounded-lg border border-zinc-800 bg-zinc-900 p-4 transition-colors hover:border-blue-600"
-              >
-                <div className="font-medium text-zinc-100">{app.name}</div>
-                {app.description && (
-                  <div className="mt-1 text-sm text-zinc-400">{app.description}</div>
-                )}
-              </Link>
-            ) : (
-              // Rendered as a plain element, not a link: offering a click that
-              // goes nowhere is worse than a tile explaining why it cannot.
-              <div
-                className="h-full cursor-not-allowed rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-4 opacity-60"
-                aria-disabled="true"
-              >
-                <div className="font-medium text-zinc-300">{app.name}</div>
-                {app.description && (
-                  <div className="mt-1 text-sm text-zinc-500">{app.description}</div>
-                )}
-                <div className="mt-2 text-xs uppercase tracking-wide text-amber-500">
-                  Unavailable
-                </div>
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
+    <section className="mx-auto max-w-6xl px-4 py-6 sm:p-8">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">App directory</h1>
+          <p className="mt-1 text-sm text-zinc-400">Browse the ecosystem by what you want to do.</p>
+        </div>
+        <Link to="/" className="text-sm text-accent hover:underline focus-visible:outline-2 focus-visible:outline-accent">Back to dashboard</Link>
+      </div>
+
+      <CatalogFilters
+        query={query}
+        shelf={shelf}
+        audience={audience}
+        capability={capability}
+        capabilities={capabilities}
+        onQueryChange={setQuery}
+        onShelfChange={setShelf}
+        onAudienceChange={setAudience}
+        onCapabilityChange={setCapability}
+      />
+
+      {hasFilters ? (
+        <section className="mt-8" aria-labelledby="search-results-heading">
+          <h2 id="search-results-heading" className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Search results</h2>
+          {matches.length === 0 ? <p className="text-sm text-zinc-500">No apps match those filters.</p> : <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{matches.map((app) => <li key={app.id}><AppCard app={app} showShelf /></li>)}</ul>}
+        </section>
+      ) : (
+        <div className="mt-8 space-y-10">
+          {CATALOG_SHELVES.map((key) => <AppShelf key={key} shelf={key} apps={shelves[key]} limit={6} />)}
+        </div>
+      )}
     </section>
   );
 }

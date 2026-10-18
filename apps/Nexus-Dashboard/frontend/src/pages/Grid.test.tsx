@@ -5,9 +5,11 @@ import Grid from "./Grid";
 
 const APPS = [
   { id: "nexus-chat", name: "Nexus Chat", description: "Real-time messaging",
-    publicUrl: "https://chat.tnhc.dev", path: "/chat", delivery: "framed", health: "healthy" },
+    publicUrl: "https://chat.tnhc.dev", path: "/chat", delivery: "framed", health: "healthy",
+    primaryShelf: "everyday", secondaryShelves: [], audiences: ["general"], capabilities: ["messaging"], maturity: "stable", visibility: "default", reviewStatus: "approved" },
   { id: "nexus-draw", name: "Nexus Draw", description: "Whiteboard",
-    publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "offline" },
+    publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "offline",
+    primaryShelf: "create", secondaryShelves: [], audiences: ["creator"], capabilities: ["drawing"], maturity: "stable", visibility: "default", reviewStatus: "approved" },
 ];
 
 function jsonResponse(body: unknown, status = 200) {

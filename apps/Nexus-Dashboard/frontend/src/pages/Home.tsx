@@ -9,6 +9,8 @@ import { Badge } from "../../../../../packages/nexus-design/src/components/ui/ba
 import Activity from "./widgets/Activity";
 import { buildAuthPageUrl } from "../authPages";
 import Pinned from "./widgets/Pinned";
+import AppShelf from "../components/AppShelf";
+import { groupAppsByShelf } from "../shell/catalog";
 
 const AUTH_LOGIN_URL =
   import.meta.env.VITE_AUTH_LOGIN_URL ?? "https://auth.tnhc.dev/login";
@@ -104,6 +106,15 @@ export default function Home() {
                 Service Health
               </h2>
               <HealthStrip apps={apps} />
+            </section>
+
+            {/* Curated entry points keep the dashboard useful without turning
+                it into a flat wall of every registered service. The full
+                directory remains one click away at /apps. */}
+            <section aria-label="Curated app shelves" className="space-y-8">
+              {(["everyday", "work", "create"] as const).map((shelf) => (
+                <AppShelf key={shelf} shelf={shelf} apps={groupAppsByShelf(apps)[shelf]} limit={3} />
+              ))}
             </section>
 
             {/* Pinned apps + activity */}

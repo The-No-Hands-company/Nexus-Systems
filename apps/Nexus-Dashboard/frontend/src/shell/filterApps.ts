@@ -1,4 +1,5 @@
 import type { AppEntry } from "../api";
+import { EMPTY_QUERY_CAP as CATALOG_EMPTY_QUERY_CAP, orderedLauncherApps } from "./catalog";
 
 /**
  * Healthy first, then offline, alphabetical within each group.
@@ -10,8 +11,8 @@ import type { AppEntry } from "../api";
 export function filterApps(apps: AppEntry[], query: string): AppEntry[] {
   const q = query.trim().toLowerCase();
   const matched = q
-    ? apps.filter((a) => a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q))
-    : [...apps];
+    ? apps.filter((a) => a.visibility !== "hidden" && [a.name, a.id, a.description, ...(a.capabilities ?? [])].join(" ").toLowerCase().includes(q))
+    : apps.filter((a) => a.visibility !== "hidden");
 
   return matched.sort((a, b) => {
     if (a.health !== b.health) return a.health === "healthy" ? -1 : 1;
@@ -21,7 +22,7 @@ export function filterApps(apps: AppEntry[], query: string): AppEntry[] {
 
 /** Bound on the drawer's empty-query state. Named so the "never all 86" rule
  *  reads as a constant, not a magic number scattered through the file. */
-export const EMPTY_QUERY_CAP = 12;
+export const EMPTY_QUERY_CAP = CATALOG_EMPTY_QUERY_CAP;
 
 /**
  * What the drawer shows before anyone types anything.
@@ -40,22 +41,5 @@ export function emptyQueryApps(
   opts: { pinnedIds?: string[]; recentIds?: string[] } = {},
 ): AppEntry[] {
   const { pinnedIds = [], recentIds = [] } = opts;
-  const byId = new Map(apps.map((a) => [a.id, a]));
-  const seen = new Set<string>();
-  const ordered: AppEntry[] = [];
-
-  function take(id: string) {
-    const app = byId.get(id);
-    if (!app || app.health !== "healthy" || seen.has(id)) return;
-    seen.add(id);
-    ordered.push(app);
-  }
-
-  for (const id of pinnedIds) take(id);
-  for (const id of recentIds) take(id);
-  for (const a of [...apps].sort((x, y) => x.name.localeCompare(y.name))) {
-    take(a.id);
-  }
-
-  return ordered.slice(0, EMPTY_QUERY_CAP);
+  return orderedLauncherApps(apps, pinnedIds, recentIds);
 }
