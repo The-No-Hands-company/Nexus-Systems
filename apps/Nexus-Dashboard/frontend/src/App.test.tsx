@@ -7,7 +7,7 @@ vi.mock("@xterm/addon-fit", () => ({ FitAddon: class {} }));
 // Mock the api module with only the functions needed by these tests
 vi.mock("./api", () => ({
   listApps: vi.fn(async () => [
-    { id: "nexus-draw", name: "Draw", description: "", publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "healthy", surface: "user-app", releaseState: "released" },
+    { id: "nexus-draw", name: "Draw", description: "", publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "healthy", surface: "user-app", releaseState: "released", maturity: "stable", visibility: "default", reviewStatus: "approved", primaryShelf: "create", secondaryShelves: [], audiences: ["creator"], capabilities: ["drawing"] },
   ]),
   getCatalogPreferences: vi.fn(async () => ({ pinnedIds: [], recentIds: [], preferredShelf: "everyday" })),
   saveCatalogPreferences: vi.fn(async (preferences) => preferences),
@@ -90,7 +90,7 @@ describe("shell routing", () => {
     expect(screen.queryByTitle("Draw")).toBeNull();
 
     resolveList([
-      { id: "nexus-draw", name: "Draw", description: "", publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "healthy", surface: "user-app", releaseState: "released" },
+      { id: "nexus-draw", name: "Draw", description: "", publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "healthy", surface: "user-app", releaseState: "released", maturity: "stable", visibility: "default", reviewStatus: "approved", primaryShelf: "create", secondaryShelves: [], audiences: ["creator"], capabilities: ["drawing"] },
     ]);
 
     await waitFor(() => expect(screen.getByTitle("Draw")).toBeTruthy());
