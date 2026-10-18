@@ -99,8 +99,8 @@ const commands: Record<string, { desc: string; usage: string; run: CommandHandle
     run: cmdAuthContract,
   },
   terminal: {
-    desc: "Read audited Nexus Terminal sessions",
-    usage: "nexus terminal audit",
+    desc: "Read the Terminal contract or audited sessions",
+    usage: "nexus terminal <contract|audit>",
     run: cmdTerminal,
   },
   knowledge: {
@@ -468,8 +468,12 @@ async function cmdAuthContract() {
 }
 
 async function cmdTerminal(args: string[]) {
+  if (args[0] === "contract") {
+    await cmdTerminalContract();
+    return;
+  }
   if (args[0] !== "audit") {
-    console.log(color("Usage: nexus terminal audit", YELLOW));
+    console.log(color("Usage: nexus terminal <contract|audit>", YELLOW));
     return;
   }
   const token = process.env.NEXUS_AUTH_TOKEN?.trim();
@@ -492,6 +496,26 @@ async function cmdTerminal(args: string[]) {
     console.log(`  started ${String(session.started_at || "unknown")} · ended ${String(session.ended_at || "active")} · exit ${String(session.exit_code ?? "—")}`);
   }
   console.log(`\n  ${(payload.sessions as unknown[]).length} audited session${(payload.sessions as unknown[]).length === 1 ? "" : "s"}`);
+}
+
+async function cmdTerminalContract() {
+  const base = (process.env.NEXUS_TERMINAL_URL || "http://localhost:3110").trim().replace(/\/$/, "");
+  const payload = await fetchJson(`${base}/api/v1/terminal/contract`);
+  if (!payload || !payload.service || !Array.isArray(payload.routes)) {
+    console.log(color("Nexus Terminal contract unavailable — check NEXUS_TERMINAL_URL", RED));
+    return;
+  }
+
+  const service = payload.service as Record<string, unknown>;
+  console.log(BANNER);
+  console.log(color("Nexus Terminal Contract\n", CYAN));
+  console.log(`  ${bold(String(service.name || service.id))}`);
+  console.log(`  Auth: ${String(service.auth || "unspecified")} · Enabled by default: ${String(service.enabledByDefault ?? "unspecified")}\n`);
+  for (const route of payload.routes as Array<Record<string, unknown>>) {
+    const access = route.access === "public" ? color("public", GREEN) : color(String(route.access), YELLOW);
+    console.log(`  ${String(route.method).padEnd(10)} ${String(route.path).padEnd(46)} ${access}`);
+  }
+  console.log(`\n  ${(payload.routes as unknown[]).length} declared Terminal route${(payload.routes as unknown[]).length === 1 ? "" : "s"}`);
 }
 
 async function cmdKnowledge(args: string[]) {
