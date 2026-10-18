@@ -98,4 +98,7 @@ is read-only discovery and health, then catalog and node administration, then
 development workflows with separate scopes and audit events. `nexus discover`
 provides the first unified read-only view across the public Cloud, Auth, API,
 and Terminal manifests; individual contract commands remain available when a
-caller needs the complete route list for one service.
+caller needs the complete route list for one service. `nexus status` and
+`nexus health` use the same configured Cloud, Auth, API, and Terminal base URLs
+for read-only liveness checks; local process start and stop commands continue
+to target the local development ports only.

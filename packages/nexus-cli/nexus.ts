@@ -154,13 +154,45 @@ function cloudHeaders(): Record<string, string> {
   };
 }
 
-async function checkHealth(port: number): Promise<{ alive: boolean; service: string; uptime: number }> {
-  const data = await fetchJson(`http://localhost:${port}/health`);
+type HealthResult = {
+  alive: boolean;
+  service: string;
+  uptime: number;
+  status: string;
+  version: string;
+};
+
+async function checkHealth(port: number): Promise<HealthResult> {
+  return checkHealthAt(`http://localhost:${port}`);
+}
+
+async function checkHealthAt(baseUrl: string): Promise<HealthResult> {
+  const data = await fetchJson(`${baseUrl}/health`);
   return {
     alive: data !== null && data.status === "ok",
     service: (data?.service as string) || "unknown",
     uptime: (data?.uptimeSeconds as number) || 0,
+    status: (data?.status as string) || "unavailable",
+    version: (data?.version as string) || "v1",
   };
+}
+
+function serviceBaseUrl(name: string, port: number): string {
+  const configured = name === "cloud"
+    ? cloudUrl()
+    : name === "auth"
+    ? process.env.NEXUS_AUTH_URL
+    : name === "api"
+    ? process.env.NEXUS_API_URL
+    : name === "terminal"
+    ? process.env.NEXUS_TERMINAL_URL
+    : undefined;
+  return (configured || `http://localhost:${port}`).trim().replace(/\/$/, "");
+}
+
+async function checkServiceHealth(name: string, port: number) {
+  const baseUrl = serviceBaseUrl(name, port);
+  return { ...await checkHealthAt(baseUrl), baseUrl };
 }
 
 async function cmdUp(args: string[]) {
@@ -210,28 +242,30 @@ async function cmdStatus() {
   const rows: string[][] = [];
 
   for (const [name, app] of Object.entries(APPS)) {
-    const { alive, service, uptime } = await checkHealth(app.port);
+    const { alive, uptime, baseUrl } = await checkServiceHealth(name, app.port);
     if (alive) aliveCount++;
 
     const dot = alive ? color("●", GREEN) : color("○", RED);
     const status = alive ? color("healthy", GREEN) : color("down", RED);
     const uptimeStr = alive ? `${Math.floor(uptime / 60)}m ${uptime % 60}s` : "—";
-    rows.push([`  ${dot}`, bold(name.padEnd(12)), `:${app.port}`.padEnd(8), status.padEnd(10), uptimeStr.padEnd(10), DIM + app.desc + RESET]);
+    const target = baseUrl === `http://localhost:${app.port}` ? `:${app.port}` : baseUrl;
+    rows.push([`  ${dot}`, bold(name.padEnd(12)), target.padEnd(30), status.padEnd(10), uptimeStr.padEnd(10), DIM + app.desc + RESET]);
   }
 
   // Header
-  console.log(`  ${bold("SERVICE".padEnd(15))}${bold("PORT".padEnd(9))}${bold("STATUS".padEnd(11))}${bold("UPTIME".padEnd(11))}${bold("DESCRIPTION")}`);
-  console.log(`  ${"─".repeat(90)}`);
+  console.log(`  ${bold("SERVICE".padEnd(15))}${bold("TARGET".padEnd(32))}${bold("STATUS".padEnd(11))}${bold("UPTIME".padEnd(11))}${bold("DESCRIPTION")}`);
+  console.log(`  ${"─".repeat(112)}`);
 
   for (const row of rows) console.log(row.join(""));
 
-  console.log(`\n  ${color(`${aliveCount}/10 services healthy`, aliveCount === 10 ? GREEN : YELLOW)}`);
+  const totalServices = Object.keys(APPS).length;
+  console.log(`\n  ${color(`${aliveCount}/${totalServices} services healthy`, aliveCount === totalServices ? GREEN : YELLOW)}`);
 
   // Also try to get Cloud status for more detail
-  const cloudStatus = await fetchJson(`http://localhost:8787/api/v1/status`);
+  const cloudStatus = await fetchJson(`${serviceBaseUrl("cloud", 8787)}/api/v1/status`, { headers: cloudHeaders() });
   if (cloudStatus) {
     const s = cloudStatus as Record<string, unknown>;
-    console.log(`\n  ${CYAN}Cloud Dashboard:${RESET} http://localhost:8787`);
+    console.log(`\n  ${CYAN}Cloud Dashboard:${RESET} ${serviceBaseUrl("cloud", 8787)}`);
     console.log(`  Tools registered: ${s.toolCount || 0}  Healthy: ${s.healthyToolCount || 0}`);
   }
 }
@@ -264,19 +298,23 @@ async function cmdTopology() {
 
 async function cmdHealth(args: string[]) {
   const name = args[0];
-  if (!name || !APPS[name]) { console.log(color("Usage: nexus health <service>", YELLOW)); return; }
+  const app = name ? APPS[name] : undefined;
+  const platformService = name === "terminal"
+    ? { port: 3110, desc: "Audited operator and developer terminal" }
+    : undefined;
+  if (!name || (!app && !platformService)) { console.log(color("Usage: nexus health <service>", YELLOW)); return; }
 
-  const app = APPS[name]!;
-  const data = await fetchJson(`http://localhost:${app.port}/health`);
-  if (!data) { console.log(color(`${name} is not running on :${app.port}`, RED)); return; }
+  const target = app || platformService!;
+  const result = await checkServiceHealth(name, target.port);
+  if (!result.alive) { console.log(color(`${name} health unavailable at ${result.baseUrl}/health`, RED)); return; }
 
   console.log(bold(`\n${name} Health`));
-  console.log(`  Status:    ${color(data.status as string, data.status === "ok" ? GREEN : RED)}`);
-  console.log(`  Service:   ${data.service}`);
-  console.log(`  Version:   ${data.version || "v1"}`);
-  console.log(`  Uptime:    ${data.uptimeSeconds}s`);
-  console.log(`  Port:      ${app.port}`);
-  console.log(`  Desc:      ${app.desc}`);
+  console.log(`  Status:    ${color(result.status, result.status === "ok" ? GREEN : RED)}`);
+  console.log(`  Service:   ${result.service}`);
+  console.log(`  Version:   ${result.version}`);
+  console.log(`  Uptime:    ${result.uptime}s`);
+  console.log(`  Endpoint:  ${result.baseUrl}/health`);
+  console.log(`  Desc:      ${target.desc}`);
 }
 
 async function cmdDetect(args: string[]) {
