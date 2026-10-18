@@ -1,3 +1,5 @@
+import { normalizeCatalogEntry } from "./shell/catalog";
+
 /**
  * Same-origin calls to the dashboard server.
  *
@@ -122,7 +124,6 @@ export async function listApps(): Promise<AppEntry[]> {
   // The catalog helper is the single frontend normalization boundary. Older
   // Dashboard servers may omit every placement field, so components must not
   // inspect the wire response directly.
-  const { normalizeCatalogEntry } = await import("./shell/catalog");
   // Normalise once, here, so no component has to care whether the server that
   // answered is older than the bundle asking.
   return apps.map(({ url, ...a }) => {
