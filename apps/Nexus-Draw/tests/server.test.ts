@@ -15,7 +15,10 @@ describe("nexus-draw", () => {
   let handle: Awaited<ReturnType<typeof createServer>>;
 
   beforeAll(async () => {
-    process.env["PORT"] = "0";
+    // Bun 1.3.12 cannot bind port 0 in the test sandbox. Use a dedicated
+    // loopback port so each fixture can start deterministically.
+    process.env["PORT"] = "43154";
+    process.env["NEXUS_DRAW_ENABLE_CLOUD_INTEGRATION"] = "false";
     process.env["NEXUS_DRAW_DB"] = `${tmpdir()}/nexus-draw-test-${randomUUID()}.sqlite`;
     handle = await createServer();
     await new Promise((r) => setTimeout(r, 200));

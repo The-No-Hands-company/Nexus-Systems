@@ -23,11 +23,15 @@ export interface Client {
   ): Promise<ApiResponse<T>>;
 }
 
-/** Starts a server on a random port with a fresh in-memory database. */
+/** Starts a server on a dedicated test port with a fresh in-memory database. */
 export async function startTestServer() {
   process.env.NEXUS_PROJECT_DB = ":memory:";
-  process.env.PORT = "0";
+  process.env.PORT = "43160";
   process.env.NEXUS_PROJECT_DASHBOARD_SECRET = TEST_SECRET;
+  // Integration with Nexus-Cloud is intentionally outside this in-process
+  // server suite. Keep the fire-and-forget client disabled even when the test
+  // runner has inherited a developer's Cloud URL and token configuration.
+  process.env.NEXUS_PROJECT_ENABLE_CLOUD_INTEGRATION = "false";
   const { createServer } = await import("../../src/server");
   const handle = await createServer();
   const base = `http://127.0.0.1:${handle.server.port}`;

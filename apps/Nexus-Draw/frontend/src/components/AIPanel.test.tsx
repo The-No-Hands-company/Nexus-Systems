@@ -37,5 +37,8 @@ describe("AIPanel", () => {
     fireEvent.change(screen.getByPlaceholderText("Describe a diagram… e.g. login flow with auth"), { target: { value: "x" } });
     fireEvent.click(screen.getByText("Generate"));
     expect((screen.getByText("Generating…") as HTMLButtonElement).disabled).toBe(true);
+    // The mocked generator resolves immediately; wait for its completion so the
+    // asynchronous state update is observed inside Testing Library's act wrapper.
+    await waitFor(() => expect(screen.getByText("Generate")).toBeTruthy());
   });
 });

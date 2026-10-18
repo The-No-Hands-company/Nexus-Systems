@@ -25,7 +25,9 @@ let captured: Captured[] = [];
 function startFakeMail(status: number) {
   captured = [];
   mail = Bun.serve({
-    port: 0,
+    // Bun 1.3.12 cannot bind port 0 in the test sandbox. A dedicated
+    // loopback port keeps the fake mail service deterministic and isolated.
+    port: 43153,
     hostname: "127.0.0.1",
     async fetch(req) {
       if (new URL(req.url).pathname !== "/internal/v1/system-mail") return new Response("nope", { status: 404 });

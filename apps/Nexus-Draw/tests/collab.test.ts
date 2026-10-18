@@ -15,10 +15,10 @@ describe("collab websocket", () => {
   let boardId: string;
 
   beforeEach(async () => {
-    // Ephemeral port and a private database, for the same reasons as
-    // server.test.ts: the live nexus-draw service holds 3075 on this machine,
-    // and a hard-coded db path would have this suite writing to real boards.
-    process.env["PORT"] = "0";
+    // A dedicated test port and private database keep this suite isolated from
+    // the live nexus-draw service and real boards.
+    process.env["PORT"] = "43155";
+    process.env["NEXUS_DRAW_ENABLE_CLOUD_INTEGRATION"] = "false";
     process.env["NEXUS_DRAW_DB"] = `${tmpdir()}/nexus-draw-collab-${randomUUID()}.sqlite`;
 
     const { server: s, close: c } = await createServer();

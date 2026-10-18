@@ -4,7 +4,7 @@ describe("nexus-video", () => {
   let base = "";
   let handle: Awaited<ReturnType<typeof createServer>>;
   beforeAll(async () => {
-    process.env.PORT = "0";
+    process.env.PORT = "43159";
     process.env.NEXUS_VIDEO_ENABLE_CLOUD_INTEGRATION = "false";
     handle = await createServer();
     await new Promise((r) => setTimeout(r, 200));

@@ -6,7 +6,7 @@ describe("nexus-design", () => {
   let handle: ReturnType<typeof createServer>;
 
   beforeAll(async () => {
-    process.env.PORT = "0";
+    process.env.PORT = "43156";
     process.env.NEXUS_DESIGN_ENABLE_CLOUD_INTEGRATION = "false";
     handle = createServer();
     await new Promise((r) => setTimeout(r, 200));

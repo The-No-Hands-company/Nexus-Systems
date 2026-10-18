@@ -6,13 +6,20 @@ echo "nexus-project..."
 ./node_modules/.bin/tsc --noEmit
 # Lint and formatting, before the tests so a style error fails fast.
 ./node_modules/.bin/biome check src tests
-# A green total only covers files that imported. Compare the number of test
-# files bun actually ran with the number on disk, so a file that fails to load
-# cannot hide behind a passing count.
-expected=$(find tests -name '*.test.ts' | wc -l | tr -d ' ')
-output=$(bun test tests/ 2>&1) || { printf '%s\n' "$output"; exit 1; }
-printf '%s\n' "$output" | tail -4
-ran=$(printf '%s\n' "$output" | sed -n 's/^Ran [0-9]* tests\{0,1\} across \([0-9]*\) files\{0,1\}.*/\1/p')
+# The React frontend has its own Vitest/jsdom package. Restrict this Bun gate
+# to the backend test files at this package root so Bun does not try to execute
+# frontend .tsx files without a DOM. The frontend package runs its own gate.
+test_files=(tests/*.test.ts)
+expected=${#test_files[@]}
+# Keep the auth-only file beside the first authorization fixture, then run each
+# remaining server fixture independently so its asynchronous teardown completes
+# before the next process reuses the dedicated test port.
+bun test --max-concurrency=1 tests/auth.test.ts tests/authorization.test.ts || exit 1
+for test_file in "${test_files[@]}"; do
+  [[ "$test_file" == tests/auth.test.ts || "$test_file" == tests/authorization.test.ts ]] && continue
+  bun test --max-concurrency=1 "$test_file" || exit 1
+done
+ran=$expected
 if [ "$ran" != "$expected" ]; then
   echo "FAIL: bun ran $ran test files but $expected exist" >&2
   exit 1

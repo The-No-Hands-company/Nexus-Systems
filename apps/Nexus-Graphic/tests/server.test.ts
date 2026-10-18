@@ -6,7 +6,7 @@ describe("nexus-graphic", () => {
   let handle: Awaited<ReturnType<typeof createServer>>;
 
   beforeAll(async () => {
-    process.env.PORT = "0";
+    process.env.PORT = "43157";
     process.env.NEXUS_GRAPHIC_ENABLE_CLOUD_INTEGRATION = "false";
     handle = await createServer();
     base = `http://127.0.0.1:${handle.server.port}`;

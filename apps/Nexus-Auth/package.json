@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "bun run src/index.ts",
     "start": "bun run src/index.ts",
-    "precheck": "test -e node_modules/bun-types/package.json || bun install --frozen-lockfile",
+    "precheck": "test -e node_modules/bun-types/package.json || npm install --workspaces=false --include=dev --ignore-scripts --no-audit --no-fund --package-lock=false",
     "check": "bunx tsc --noEmit",
     "test": "bun test"
   },

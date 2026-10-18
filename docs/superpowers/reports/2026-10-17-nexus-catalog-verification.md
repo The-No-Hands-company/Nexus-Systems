@@ -14,8 +14,8 @@ Branch: `feat/nexus-app-catalog`
 | Cloud app-root check | pass | `bun run check` — 85 files |
 | Cloud catalog/release/route regression | pass | 50 tests, 0 failures, 207 assertions |
 | Cloud complete suite | pass | 162 tests across 29 files, 0 failures, 714 assertions |
-| Auth typecheck | pass | `bun run check` with frozen lockfile after lock refresh |
-| Auth regression | pass | 144 tests, 0 failures, 448 assertions |
+| Auth typecheck | pass | `bun run check` with app-local dependency bootstrap |
+| Auth regression | pass | 145 tests, 0 failures, 452 assertions |
 
 The Cloud gate covers approval, rollback, audit durability, global projection,
 tenant entitlements, node-local overlays, seed idempotency, release fixture
@@ -45,10 +45,10 @@ release baseline for the frontend apps:
 - Auth's link-DID test prints the existing PHANTOM mock warning when the native
   WASM module is unavailable. The test passes; production can require the real
   module with `PHANTOM_REQUIRE_REAL=1`.
-- Server tests may print expected Cloud registration `401` warnings while the
-  assertions pass.
-- Draw's browser test prints the existing jsdom canvas warning; all 119 tests
-  pass.
+- Server fixtures disable Cloud registration and use isolated loopback ports, so
+  the assertions run without expected registration or port-binding warnings.
+- Draw's browser setup stubs the jsdom canvas context; all 119 tests pass without
+  the previous canvas warning.
 
 ## Biome compatibility
 

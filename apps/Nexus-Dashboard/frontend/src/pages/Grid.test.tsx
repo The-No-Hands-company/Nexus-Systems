@@ -29,10 +29,10 @@ describe("Grid", () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(buildCatalogReleaseFixture())));
 
     render(<MemoryRouter><Grid /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Nexus Calendar")).toBeTruthy());
-    expect(screen.getByText("Everyday")).toBeTruthy();
-    expect(screen.getByText("Create")).toBeTruthy();
-    expect(screen.getByText("Nexus Experimental")).toBeTruthy();
+    await waitFor(() => expect(screen.getAllByText("Nexus Calendar").length).toBeGreaterThan(0));
+    expect(screen.getByRole("heading", { name: "Everyday" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Create" })).toBeTruthy();
+    expect(screen.getAllByText("Nexus Experimental").length).toBeGreaterThan(0);
     expect(screen.getByText(/offline/i)).toBeTruthy();
   });
 

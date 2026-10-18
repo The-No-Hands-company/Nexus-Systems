@@ -43,8 +43,8 @@ const ROUTE_MODULES: ((router: Router<Context>) => void)[] = [
   registerScheduleRoutes,
 ];
 
-export async function createServer() {
-  const port = Number(process.env.PORT || "3152");
+export async function createServer(options: { port?: number } = {}) {
+  const port = options.port ?? Number(process.env.PORT || "3152");
   const baseUrl = process.env.NEXUS_PROJECT_BASE_URL || `http://localhost:${port}`;
   const startedAt = Date.now();
   const dbPath = process.env.NEXUS_PROJECT_DB || "data/project.sqlite";
@@ -121,9 +121,9 @@ export async function createServer() {
   return {
     server,
     db,
-    close: () => {
+    close: async () => {
       stopHeartbeat();
-      server.stop(true);
+      await server.stop(true);
       db.close();
     },
   };
