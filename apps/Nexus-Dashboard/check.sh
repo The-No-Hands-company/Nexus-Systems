@@ -26,6 +26,6 @@ echo "nexus-dashboard..."
 # `document`, so all of those tests fail on a runner that was never meant to
 # execute them. That is the same fault that kept CI red for five days on
 # Nexus-Draw; this app simply had no gate for it to show up in.
-bun test tests/
+bun test --max-concurrency=1 tests/
 
 echo "PASS"
