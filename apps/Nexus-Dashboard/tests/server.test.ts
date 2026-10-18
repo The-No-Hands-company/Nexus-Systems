@@ -6,6 +6,7 @@ import { buildCatalogReleaseFixture } from "../../Nexus-Cloud/src/catalog/releas
 process.env.NEXUS_AUTH_INTERNAL_URL = "http://127.0.0.1:4310";
 process.env.NEXUS_CLOUD_URL = "http://127.0.0.1:8787";
 process.env.NEXUS_TERMINAL_URL = "http://127.0.0.1:3110";
+process.env.NEXUS_EMAIL_URL = "http://127.0.0.1:3140";
 const { handleRequest } = await import("../src/server");
 
 // Inferred rather than annotated: bun-types' Server is generic and the
@@ -14,6 +15,7 @@ type BunServer = ReturnType<typeof Bun.serve>;
 let auth: BunServer | null = null;
 let cloud: BunServer | null = null;
 let terminal: BunServer | null = null;
+let mail: BunServer | null = null;
 let catalogMode: "legacy" | "catalog" | "release" = "legacy";
 let cloudPaths: string[] = [];
 
@@ -102,15 +104,18 @@ beforeEach(() => {
       return Response.json({ service: "nexus-terminal", status: "ok" });
     },
   });
+  mail = Bun.serve({ port: 0, fetch: () => Response.json({ status: "ok" }) });
   process.env.NEXUS_AUTH_INTERNAL_URL = `http://127.0.0.1:${auth.port}`;
   process.env.NEXUS_CLOUD_URL = `http://127.0.0.1:${cloud.port}`;
   process.env.NEXUS_TERMINAL_URL = `http://127.0.0.1:${terminal.port}`;
+  process.env.NEXUS_EMAIL_URL = `http://127.0.0.1:${mail.port}`;
 });
 
 afterEach(() => {
   auth?.stop(true);
   cloud?.stop(true);
   terminal?.stop(true);
+  mail?.stop(true);
 });
 
 describe("dashboard server", () => {
@@ -180,14 +185,34 @@ describe("dashboard server", () => {
     expect(apps.map((app) => app.id)).not.toContain("nexus-terminal");
   });
 
-  it("keeps terminal visible but offline to admins when its health endpoint is down", async () => {
+  it("omits terminal from the launcher when its health endpoint is down", async () => {
     terminal?.stop(true);
     terminal = null;
     const res = await handleRequest(
       new Request("http://app.test/ipa/apps", { headers: { cookie: "role=admin" } }),
     );
     const { apps } = (await res.json()) as { apps: Array<{ id: string; health: string }> };
-    expect(apps.find((app) => app.id === "nexus-terminal")).toMatchObject({ health: "offline" });
+    expect(apps.find((app) => app.id === "nexus-terminal")).toBeUndefined();
+  });
+
+  it("omits offline Mail even when Cloud is down", async () => {
+    mail?.stop(true);
+    mail = null;
+    cloud?.stop(true);
+    cloud = null;
+    const res = await handleRequest(new Request("http://app.test/ipa/apps"));
+    expect(res.status).toBe(200);
+    const { apps } = (await res.json()) as { apps: Array<{ id: string }> };
+    expect(apps).toEqual([]);
+  });
+
+  it("does not revive offline native Mail from Cloud's healthy record", async () => {
+    catalogMode = "release";
+    mail?.stop(true);
+    mail = null;
+    const res = await handleRequest(new Request("http://app.test/ipa/apps"));
+    const { apps } = (await res.json()) as { apps: Array<{ id: string }> };
+    expect(apps.map((app) => app.id)).not.toContain("nexus-email");
   });
 
   it("degrades to the shell's own views rather than failing when Cloud is down", async () => {

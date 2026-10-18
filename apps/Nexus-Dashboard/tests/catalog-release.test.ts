@@ -26,6 +26,8 @@ describe("catalog release contract", () => {
       { ...releasedHealthyUserApp("nexus-video"), releaseState: "staged" },
       { ...releasedHealthyUserApp("nexus-draw"), health: "offline" },
       { ...releasedHealthyUserApp("nexus-preview"), maturity: "preview" },
+      { ...releasedHealthyUserApp("nexus-pending"), reviewStatus: "pending" },
+      { ...releasedHealthyUserApp("nexus-unreviewed"), reviewStatus: undefined },
     ] }, "auth.tnhc.dev");
 
     expect(entries.map((entry) => entry.id)).toEqual(["nexus-calendar"]);
@@ -45,6 +47,38 @@ describe("catalog release contract", () => {
       { ...releasedHealthyUserApp("retired"), releaseState: "retired" },
     ] }, "auth.tnhc.dev");
     expect(entries).toEqual([]);
+  });
+
+  it("rejects missing and unknown visibility instead of making them discoverable", () => {
+    const entries = toAppEntries({ apps: [
+      { ...releasedHealthyUserApp("missing-visibility"), visibility: undefined },
+      { ...releasedHealthyUserApp("unknown-visibility"), visibility: "unknown" },
+      { ...releasedHealthyUserApp("explicit-discoverable"), visibility: "discoverable" },
+    ] }, "auth.tnhc.dev");
+    expect(entries.map((entry) => entry.id)).toEqual(["explicit-discoverable"]);
+  });
+
+  it("rejects unsafe URLs and explicit or derived paths", () => {
+    const entries = toAppEntries({ apps: [
+      { ...releasedHealthyUserApp("bad-url"), publicUrl: "bad-url" },
+      { ...releasedHealthyUserApp("empty-url"), publicUrl: "" },
+      { ...releasedHealthyUserApp("empty-native-url"), publicUrl: "", delivery: "shell-native" },
+      { ...releasedHealthyUserApp("relative-url"), publicUrl: "/mail", delivery: "shell-native" },
+      { ...releasedHealthyUserApp("script-url"), publicUrl: "javascript:alert(1)" },
+      { ...releasedHealthyUserApp("bad-route"), path: "/bad?route" },
+      { ...releasedHealthyUserApp("root-route"), path: "/" },
+      { ...releasedHealthyUserApp(".."), path: undefined, publicUrl: "https://dotdot.tnhc.dev" },
+      releasedHealthyUserApp("valid-route"),
+    ] }, "auth.tnhc.dev");
+    expect(entries.map((entry) => entry.id)).toEqual(["valid-route"]);
+  });
+
+  it("accepts a healthy released shell-native app with a valid route and no origin", () => {
+    const entries = toAppEntries({ apps: [{
+      ...releasedHealthyUserApp("nexus-email"), publicUrl: undefined,
+      path: "/mail", delivery: "shell-native",
+    }] }, "auth.tnhc.dev");
+    expect(entries.map((entry) => entry.id)).toEqual(["nexus-email"]);
   });
 
   it("excludes Cloud and staged apps from the shared release fixture", () => {

@@ -98,7 +98,20 @@ function str(v: unknown): string {
 }
 
 function isSafeRelativePath(path: string): boolean {
-  return /^\/(?:[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*)?$/.test(path);
+  return /^\/[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*$/.test(path) &&
+    path.split("/").slice(1).every((segment) => segment !== "." && segment !== "..");
+}
+
+function safePublicUrl(value: string): URL | null {
+  if (!value || value.trim() !== value || /[\u0000-\u001f\u007f]/.test(value)) return null;
+  try {
+    const url = new URL(value);
+    if ((url.protocol !== "http:" && url.protocol !== "https:") ||
+      !url.hostname || url.username || url.password) return null;
+    return url;
+  } catch {
+    return null;
+  }
 }
 
 function deliveryFor(value: unknown): SystemsApiDelivery | undefined {
@@ -147,7 +160,8 @@ function isCatalogReleaseState(value: unknown): value is CatalogReleaseState {
 
 export function isReleasedUserApp(entry: AppEntry): boolean {
   return entry.surface === "user-app" && entry.releaseState === "released" &&
-    entry.maturity === "stable" && entry.health === "healthy";
+    entry.maturity === "stable" && entry.health === "healthy" &&
+    entry.reviewStatus === "approved";
 }
 
 /**
@@ -173,24 +187,43 @@ export function toAppEntries(payload: unknown, authHost: string, selfHost?: stri
     if (!raw || typeof raw !== "object") continue;
 
     if (!isCatalogSurface(raw.surface) || !isCatalogReleaseState(raw.releaseState)) continue;
+    if (raw.visibility !== "default" && raw.visibility !== "discoverable" &&
+      raw.visibility !== "restricted" && raw.visibility !== "hidden") continue;
 
     const id = str(raw.id);
     const placement = placementFor(raw, raw.surface);
     if (placement.visibility === "hidden") continue;
-    const publicUrl = str(raw.publicUrl) || str(raw.url);
     const explicitDelivery = deliveryFor(raw.delivery);
-    if (!id || (!publicUrl && explicitDelivery !== "shell-native")) continue;
-    const rawPath = str(raw.path);
-    const path = isSafeRelativePath(rawPath) ? rawPath : pathForApp(id);
-    // Legacy server records overloaded `url`: an absolute URL was framed and
-    // a relative URL was rendered by the shell. New records are never guessed
-    // as proxied apps; that delivery requires an explicit operator contract.
-    const delivery = explicitDelivery ?? (publicUrl.startsWith("/") ? "shell-native" : "framed");
+    if (!id) continue;
+    let publicUrl = "";
+    let nativeRoute: string | undefined;
+    if (raw.publicUrl !== undefined) {
+      if (typeof raw.publicUrl !== "string" || !raw.publicUrl) continue;
+      publicUrl = raw.publicUrl;
+    } else if (raw.url !== undefined) {
+      if (typeof raw.url !== "string" || !raw.url) continue;
+      if (raw.url.startsWith("/")) {
+        if (explicitDelivery !== "shell-native" || !isSafeRelativePath(raw.url)) continue;
+        nativeRoute = raw.url;
+      } else {
+        publicUrl = raw.url;
+      }
+    }
+    const parsedPublicUrl = publicUrl ? safePublicUrl(publicUrl) : null;
+    if (publicUrl && !parsedPublicUrl) continue;
+    if (!publicUrl && explicitDelivery !== "shell-native") continue;
+    if (raw.path !== undefined && (typeof raw.path !== "string" || !isSafeRelativePath(raw.path))) continue;
+    const path = typeof raw.path === "string" ? raw.path : nativeRoute ?? pathForApp(id);
+    if (!isSafeRelativePath(path)) continue;
+    // An absolute legacy `url` is framed by default. A relative legacy `url`
+    // needs an explicit shell-native delivery contract and a safe route.
+    // Proxied delivery is never inferred from an origin.
+    const delivery = explicitDelivery ?? "framed";
     // The identity service is not an app you open, and neither is this page:
     // a tile linking to the dashboard, shown on the dashboard, is a button
     // that goes where you already are.
-    if (publicUrl.includes(authHost)) continue;
-    if (selfHost && publicUrl.includes(selfHost)) continue;
+    if (parsedPublicUrl?.hostname === authHost) continue;
+    if (selfHost && parsedPublicUrl?.hostname === selfHost) continue;
     // One tile per destination. Several tools can legitimately share a public
     // address — a published site and the backend behind it are two records
     // pointing at one host — and the person looking at the grid does not care
@@ -204,7 +237,7 @@ export function toAppEntries(payload: unknown, authHost: string, selfHost?: stri
       name: str(raw.name) || id,
       description: str(raw.description),
       path,
-      ...(publicUrl && !publicUrl.startsWith("/") ? { publicUrl } : {}),
+      ...(publicUrl ? { publicUrl } : {}),
       delivery,
       // Unknown health is offline and therefore fails the launcher predicate.
       health: raw.health === "healthy" ? "healthy" : "offline",
