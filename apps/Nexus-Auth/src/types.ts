@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 export type IdentityRole = "founder" | "admin" | "operator" | "user" | "viewer";
 
 export type Permission =
+  | "platform:catalog:approve"
   | "auth:admin"
   | "auth:read"
   | "users:create"

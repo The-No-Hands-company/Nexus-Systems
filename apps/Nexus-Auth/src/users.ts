@@ -329,18 +329,20 @@ export function deleteUser(userId: string): boolean {
   return deleted;
 }
 
-export function userHasPermission(userId: string, permission: Permission): boolean {
+export function getUserPermissions(userId: string): Permission[] {
   const user = users.get(userId);
-  if (!user || user.status !== "active") return false;
+  if (!user || user.status !== "active") return [];
 
   const rolePermissions: Record<IdentityRole, Permission[]> = {
     founder: [
+      "platform:catalog:approve",
       "auth:admin", "auth:read", "users:create", "users:read", "users:update", "users:delete", "users:approve",
       "tokens:issue", "tokens:revoke", "tokens:validate",
       "apikeys:create", "apikeys:revoke", "apikeys:read",
       "sessions:read", "sessions:revoke", "system:health", "system:config",
     ],
     admin: [
+      "platform:catalog:approve",
       "auth:read", "users:create", "users:read", "users:update", "users:delete", "users:approve",
       "tokens:issue", "tokens:revoke", "tokens:validate",
       "apikeys:create", "apikeys:revoke", "apikeys:read",
@@ -354,7 +356,11 @@ export function userHasPermission(userId: string, permission: Permission): boole
     viewer: ["auth:read"],
   };
 
-  return (rolePermissions[user.role] || []).includes(permission);
+  return [...(rolePermissions[user.role] || [])];
+}
+
+export function userHasPermission(userId: string, permission: Permission): boolean {
+  return getUserPermissions(userId).includes(permission);
 }
 
 export function sanitizeUser(user: User): SafeUser {

@@ -11,6 +11,7 @@ import {
   changePassword,
   deleteUser,
   userHasPermission,
+  getUserPermissions,
   seedDefaultUsers,
   sanitizeUser,
   findUserByEmail,
@@ -1328,7 +1329,8 @@ export async function handleRequest(request: Request): Promise<Response> {
     if (request.method === "GET" && path === "/api/v1/auth/check") {
       if (!auth) return jsonResponse({ authorized: false }, { status: 401 });
       const user = getUser(auth.userId);
-      return jsonResponse({ authorized: true, userId: auth.userId, user });
+      if (!user || user.status !== "active") return jsonResponse({ authorized: false }, { status: 401 });
+      return jsonResponse({ authorized: true, userId: auth.userId, user, permissions: getUserPermissions(auth.userId) });
     }
 
     // ── OAuth JWKS ──
