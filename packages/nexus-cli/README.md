@@ -20,8 +20,10 @@ nexus knowledge "terminal audit"  # search the knowledge index
 ```
 
 Set `NEXUS_CLOUD_URL` and, when Cloud requires it, `NEXUS_CLOUD_API_KEY` for
-catalog reads. Set `NEXUS_AI_HUB_URL` to point knowledge queries at a specific
-AI Hub instance. Set `NEXUS_TERMINAL_URL` and either `NEXUS_AUTH_TOKEN` (a
+catalog reads. Set `NEXUS_AUTH_URL`, `NEXUS_API_URL`, and `NEXUS_TERMINAL_URL`
+when discovery or individual contract reads should target non-local services.
+Set `NEXUS_AI_HUB_URL` to point knowledge queries at a specific AI Hub instance.
+Set `NEXUS_TERMINAL_URL` and either `NEXUS_AUTH_TOKEN` (a
 Nexus-Auth Bearer credential) or `NEXUS_AUTH_COOKIE` for the read-only
 Terminal audit command. These commands only read contracts, catalog
 projections, knowledge documents, or audit records; mutating operator actions
