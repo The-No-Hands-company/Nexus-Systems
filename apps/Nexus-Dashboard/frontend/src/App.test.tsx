@@ -9,6 +9,8 @@ vi.mock("./api", () => ({
   listApps: vi.fn(async () => [
     { id: "nexus-draw", name: "Draw", description: "", publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "healthy" },
   ]),
+  getCatalogPreferences: vi.fn(async () => ({ pinnedIds: [], recentIds: [], preferredShelf: "everyday" })),
+  saveCatalogPreferences: vi.fn(async (preferences) => preferences),
   me: vi.fn(async () => ({
     id: "user-founder",
     username: "founder",
@@ -44,6 +46,12 @@ describe("shell routing", () => {
     await waitFor(() => expect(screen.getByTitle("Draw")).toBeTruthy());
     // Chrome and app together: the shell is present, not replaced.
     expect(screen.getByRole("banner")).toBeTruthy();
+  });
+
+  it("keeps the old /nexus name as a compatibility redirect to Chat", async () => {
+    window.history.pushState({}, "", "/nexus");
+    render(<App />);
+    await waitFor(() => expect(window.location.pathname).toBe("/chat"));
   });
 
   it("forwards an old /claim link to the page Nexus-Auth serves, query intact", async () => {

@@ -2,12 +2,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Grid from "./Grid";
+import { buildCatalogReleaseFixture } from "../../../../Nexus-Cloud/src/catalog/release-fixture";
 
 const APPS = [
   { id: "nexus-chat", name: "Nexus Chat", description: "Real-time messaging",
-    publicUrl: "https://chat.tnhc.dev", path: "/chat", delivery: "framed", health: "healthy" },
+    publicUrl: "https://chat.tnhc.dev", path: "/chat", delivery: "framed", health: "healthy",
+    primaryShelf: "everyday", secondaryShelves: [], audiences: ["general"], capabilities: ["messaging"], maturity: "stable", visibility: "default", reviewStatus: "approved" },
   { id: "nexus-draw", name: "Nexus Draw", description: "Whiteboard",
-    publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "offline" },
+    publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "offline",
+    primaryShelf: "create", secondaryShelves: [], audiences: ["creator"], capabilities: ["drawing"], maturity: "stable", visibility: "default", reviewStatus: "approved" },
 ];
 
 function jsonResponse(body: unknown, status = 200) {
@@ -22,6 +25,17 @@ beforeEach(() => {
 });
 
 describe("Grid", () => {
+  it("renders the shared release fixture into the right shelves and states", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(buildCatalogReleaseFixture())));
+
+    render(<MemoryRouter><Grid /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText("Nexus Calendar")).toBeTruthy());
+    expect(screen.getByText("Everyday")).toBeTruthy();
+    expect(screen.getByText("Create")).toBeTruthy();
+    expect(screen.getByText("Nexus Experimental")).toBeTruthy();
+    expect(screen.getByText(/offline/i)).toBeTruthy();
+  });
+
   it("renders a tile per app, linking to its in-shell path", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ apps: APPS })));
 

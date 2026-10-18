@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { checkRateLimit, createRateLimitResponse, resetRateLimits } from "../src/ratelimit";
 
 function reqFromIp(ip: string): Request {

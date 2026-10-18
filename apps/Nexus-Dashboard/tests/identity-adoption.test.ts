@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "bun:test";
-import { generateKeyPairSync, createSign, randomUUID } from "node:crypto";
-import { callerIdentity } from "../src/auth";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import { createSign, generateKeyPairSync, randomUUID } from "node:crypto";
 import { __resetIdentityCacheForTest } from "../../../packages/nexus-identity/src/index";
+import { callerIdentity } from "../src/auth";
 
 // Must match the other proxy tests: src/server.ts captures AUTH_INTERNAL_URL
 // into a top-level const the first time it is imported in a `bun test` run, so
@@ -34,9 +34,16 @@ function signClaims(payload: Record<string, unknown>): string {
 function identityToken(over: Record<string, unknown> = {}): string {
   const now = Math.floor(Date.now() / 1000);
   return signClaims({
-    iss: "nexus-auth", sub: "usr-alice", aud: AUDIENCE,
-    email: "alice@tnhc.dev", username: "alice", role: "user",
-    typ: "identity", iat: now - 10, exp: now + 120, jti: randomUUID(),
+    iss: "nexus-auth",
+    sub: "usr-alice",
+    aud: AUDIENCE,
+    email: "alice@tnhc.dev",
+    username: "alice",
+    role: "user",
+    typ: "identity",
+    iat: now - 10,
+    exp: now + 120,
+    jti: randomUUID(),
     ...over,
   });
 }
@@ -45,8 +52,14 @@ function identityToken(over: Record<string, unknown> = {}): string {
 function serviceToken(serviceId: string, audience: string): string {
   const now = Math.floor(Date.now() / 1000);
   return signClaims({
-    iss: "nexus-auth", sub: serviceId, aud: audience,
-    scopes: ["service:read"], role: "service", iat: now, exp: now + 3600, jti: randomUUID(),
+    iss: "nexus-auth",
+    sub: serviceId,
+    aud: audience,
+    scopes: ["service:read"],
+    role: "service",
+    iat: now,
+    exp: now + 3600,
+    jti: randomUUID(),
   });
 }
 
@@ -58,10 +71,13 @@ beforeAll(() => {
     fetch(req) {
       const p = new URL(req.url).pathname;
       if (p === "/api/v1/auth/oauth/jwks") {
-        return Response.json({ keys: [{ kty: "RSA", use: "sig", alg: "RS256", kid: KID, n: jwk.n, e: jwk.e }] });
+        return Response.json({
+          keys: [{ kty: "RSA", use: "sig", alg: "RS256", kid: KID, n: jwk.n, e: jwk.e }],
+        });
       }
       // No session: the cookie fallback must not rescue a refused token.
-      if (p === "/api/v1/auth/me") return Response.json({ error: "unauthenticated" }, { status: 401 });
+      if (p === "/api/v1/auth/me")
+        return Response.json({ error: "unauthenticated" }, { status: 401 });
       return new Response("not found", { status: 404 });
     },
   });
@@ -71,7 +87,8 @@ beforeAll(() => {
 
 afterAll(() => {
   authServer.stop(true);
-  if (savedAudience === undefined) Reflect.deleteProperty(process.env, "NEXUS_DASHBOARD_IDENTITY_AUDIENCE");
+  if (savedAudience === undefined)
+    Reflect.deleteProperty(process.env, "NEXUS_DASHBOARD_IDENTITY_AUDIENCE");
   else process.env.NEXUS_DASHBOARD_IDENTITY_AUDIENCE = savedAudience;
 });
 
@@ -103,7 +120,9 @@ describe("Dashboard refuses what the shared contract refuses", () => {
   });
 
   it("refuses a token minted for another app", async () => {
-    expect(await callerIdentity(withIdentity(identityToken({ aud: "calendar.tnhc.dev" })))).toBeNull();
+    expect(
+      await callerIdentity(withIdentity(identityToken({ aud: "calendar.tnhc.dev" }))),
+    ).toBeNull();
   });
 
   it("refuses an expired token", async () => {

@@ -47,10 +47,12 @@ afterEach(() => {
 });
 
 const call = (path: string, init?: RequestInit) =>
-  handleRequest(new Request(`http://dash.local${path}`, {
-    headers: { cookie: "nexus_session=abc" },
-    ...init,
-  }));
+  handleRequest(
+    new Request(`http://dash.local${path}`, {
+      headers: { cookie: "nexus_session=abc" },
+      ...init,
+    }),
+  );
 
 describe("notifications proxy", () => {
   it("refuses an unauthenticated caller before touching Hosting", async () => {

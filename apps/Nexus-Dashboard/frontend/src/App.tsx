@@ -199,6 +199,8 @@ export default function App() {
             this route needs no props — same pattern as every route below
             that depends on appsState instead. */}
         <Route path="/" element={<Home />} />
+        {/* `/nexus` was the original repository name, not a second product. */}
+        <Route path="/nexus" element={<Navigate to="/chat" replace />} />
         {/* Old addresses for the ways in, kept so existing links still land:
             the pages themselves are served by Nexus-Auth. See authPages.ts. */}
         <Route path="/request" element={<ForwardToAuthPage path="/request" />} />

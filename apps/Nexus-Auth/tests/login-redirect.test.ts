@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from "bun:test";
+import { saveClients } from "../src/oidc";
 import { handleRequest } from "../src/server";
 
 const BASE = "http://auth.tnhc.dev";
@@ -11,6 +12,12 @@ beforeAll(() => {
   // would pass for the wrong reason — every redirect rejected, including the
   // ones that should be honoured.
   process.env.NEXUS_AUTH_COOKIE_DOMAIN = ".tnhc.dev";
+  saveClients([
+    {
+      clientId: "nexus-hosting",
+      redirectUris: ["https://hosting.tnhc.dev/api/callback"],
+    },
+  ]);
 });
 
 async function loginPage(query: string): Promise<string> {

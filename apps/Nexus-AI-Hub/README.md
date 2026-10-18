@@ -30,6 +30,16 @@ This MVP gate focuses on:
 - `GET /health`
 - `GET /api/v1/hub/providers/status`
 - `POST /api/v1/hub/route`
+- `GET /api/v1/knowledge`
+- `GET /api/v1/knowledge/search?q=...`
+
+The knowledge endpoints expose the first ecosystem-grounded retrieval contract.
+They combine the versioned platform-surface facts in
+[`docs/ecosystem-knowledge-contract-v1.md`](docs/ecosystem-knowledge-contract-v1.md)
+with the approved public catalog returned by Nexus Cloud. Every document carries
+its source reference and trust level. If Cloud is unavailable, the platform
+contract remains available with `status: "degraded"`; no generated answer is
+treated as a source of truth.
 
 ## Local Commands
 

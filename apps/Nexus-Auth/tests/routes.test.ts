@@ -46,6 +46,28 @@ describe("identity routes", () => {
     expect(body.claimCode).toMatch(/^[0-9a-f]{32}$/);
   });
 
+  it("publishes Auth as a platform-service contract rather than an app tile", async () => {
+    const res = await get("/api/v1/auth/contract");
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      protocol: string;
+      service: { id: string; surface: string; hostedPath: string; auth: string };
+      routes: Array<{ method: string; path: string; access: string }>;
+    };
+    expect(body.protocol).toBe("nexus-auth/1");
+    expect(body.service).toMatchObject({
+      id: "nexus-auth",
+      surface: "platform-service",
+      hostedPath: "/auth",
+      auth: "Nexus Auth session or Bearer credential",
+    });
+    expect(body.routes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ method: "GET", path: "/api/v1/auth/contract", access: "public" }),
+      expect.objectContaining({ method: "GET", path: "/api/v1/auth/me", access: "session-or-bearer" }),
+      expect.objectContaining({ method: "POST", path: "/api/v1/auth/api-keys", access: "session-with-permission" }),
+    ]));
+  });
+
   it("answers a taken username and a taken email identically, naming neither", async () => {
     // Otherwise this public endpoint tells anyone whether an address has an
     // account here (reproduced against production in the 2026-10-13 audit).
@@ -63,6 +85,24 @@ describe("identity routes", () => {
   it("requires authorisation to list or approve requests", async () => {
     expect((await get("/api/v1/auth/access-requests")).status).toBe(403);
     expect((await post("/api/v1/auth/access-requests/usr-x/approve", {})).status).toBe(403);
+  });
+
+  it("keeps catalog preferences self-scoped and account-backed", async () => {
+    expect((await get("/api/v1/auth/preferences/catalog")).status).toBe(401);
+    const token = await founderToken();
+    const auth = { authorization: `Bearer ${token}` };
+    const initial = await get("/api/v1/auth/preferences/catalog", auth);
+    expect(initial.status).toBe(200);
+    expect((await initial.json()).preferences).toMatchObject({ preferredShelf: "everyday", pinnedIds: [], recentIds: [] });
+
+    const saved = await handleRequest(new Request(`${BASE}/api/v1/auth/preferences/catalog`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ pinnedIds: ["nexus-chat", "nexus-chat"], recentIds: ["nexus-mail"], preferredShelf: "work", userId: "someone-else" }),
+    }));
+    expect(saved.status).toBe(200);
+    expect((await saved.json()).preferences).toEqual({ pinnedIds: ["nexus-chat"], recentIds: ["nexus-mail"], preferredShelf: "work" });
+    expect((await get("/api/v1/auth/preferences/catalog", auth)).status).toBe(200);
   });
 
   it("walks the full request -> approve -> claim -> login path", async () => {

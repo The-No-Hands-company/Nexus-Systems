@@ -78,17 +78,25 @@ function jwkToPem(jwk: JWK): string {
   }
   function integer(buf: Buffer): Buffer {
     // Positive integers need a leading zero byte when the high bit is set.
-    const padded = buf[0]! & 0x80 ? Buffer.concat([Buffer.from([0]), buf]) : buf;
+    const padded = (buf[0] ?? 0) & 0x80 ? Buffer.concat([Buffer.from([0]), buf]) : buf;
     return Buffer.concat([Buffer.from([0x02]), len(padded.length), padded]);
   }
 
   // RSAPublicKey is itself a SEQUENCE wrapping the two integers.
-  const rsaKey = Buffer.concat([Buffer.from([0x30]), len(integer(n).length + integer(e).length), integer(n), integer(e)]);
+  const rsaKey = Buffer.concat([
+    Buffer.from([0x30]),
+    len(integer(n).length + integer(e).length),
+    integer(n),
+    integer(e),
+  ]);
   const bitString = Buffer.concat([Buffer.from([0x00]), rsaKey]);
   const algorithmId = Buffer.from([
     0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00,
   ]);
-  const spkiBody = Buffer.concat([algorithmId, Buffer.concat([Buffer.from([0x03]), len(bitString.length), bitString])]);
+  const spkiBody = Buffer.concat([
+    algorithmId,
+    Buffer.concat([Buffer.from([0x03]), len(bitString.length), bitString]),
+  ]);
   const der = Buffer.concat([Buffer.from([0x30]), len(spkiBody.length), spkiBody]);
 
   const b64 = der.toString("base64").match(/.{1,64}/g) ?? [];
@@ -96,7 +104,10 @@ function jwkToPem(jwk: JWK): string {
 }
 
 export class JWTValidationError extends Error {
-  constructor(message: string, public readonly code: string) {
+  constructor(
+    message: string,
+    public readonly code: string,
+  ) {
     super(message);
     this.name = "JWTValidationError";
   }
@@ -108,6 +119,9 @@ export async function validateJWT(token: string, expectedAudience?: string): Pro
     throw new JWTValidationError("Invalid token format", "INVALID_FORMAT");
   }
   const [encodedHeader, encodedPayload, encodedSignature] = parts;
+  if (!encodedHeader || !encodedPayload || !encodedSignature) {
+    throw new JWTValidationError("Invalid token format", "INVALID_FORMAT");
+  }
 
   let header: { alg?: string; kid?: string };
   try {
@@ -179,7 +193,10 @@ export interface AuthContext {
  * which keeps browser flows working unchanged while API clients can present
  * a JWT instead.
  */
-export async function validateRequest(req: Request, expectedAudience?: string): Promise<AuthContext | null> {
+export async function validateRequest(
+  req: Request,
+  expectedAudience?: string,
+): Promise<AuthContext | null> {
   const auth = req.headers.get("authorization");
   if (!auth?.startsWith("Bearer ")) return null;
   const token = auth.slice(7).trim();

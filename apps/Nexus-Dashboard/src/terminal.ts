@@ -193,9 +193,10 @@ function closePair(
   pair.queuedBytes = 0;
   relayPairs.delete(ws);
 
-  const safeClose = source === "upstream"
-    ? safeUpstreamClose(code)
-    : { code: relayCloseCode(code), reason: relayCloseReason(reason) };
+  const safeClose =
+    source === "upstream"
+      ? safeUpstreamClose(code)
+      : { code: relayCloseCode(code), reason: relayCloseReason(reason) };
   try {
     if (source === "browser") pair.upstream.close(safeClose.code, safeClose.reason);
     else ws.close(safeClose.code, safeClose.reason);

@@ -1,6 +1,7 @@
 /// <reference types="bun" />
 import { randomUUID } from "node:crypto";
 import { startNexusApiHeartbeat } from "./cloud";
+import { buildApiContract } from "./api-contract";
 
 interface Route {
   path: string;
@@ -41,6 +42,10 @@ export function createApiServer() {
 
       if (request.method === "GET" && path === "/health") {
         return json({ service: "nexus-api", status: "ok", version: "v2", uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }, 200);
+      }
+
+      if (request.method === "GET" && path === "/api/v1/contract") {
+        return json(buildApiContract(baseUrl), 200);
       }
 
       if (request.method === "GET" && path === "/api/v1/gateway/status") {

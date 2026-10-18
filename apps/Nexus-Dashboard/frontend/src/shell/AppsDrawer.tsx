@@ -4,14 +4,20 @@ import { Overlay } from "../../../../../packages/nexus-design/src/components/ui/
 import { Pill } from "../../../../../packages/nexus-design/src/components/ui/pill";
 import { EmptyState } from "../../../../../packages/nexus-design/src/components/ui/empty-state";
 import { cn } from "../../../../../packages/nexus-design/src/components/ui/cn";
-import { emptyQueryApps, filterApps } from "./filterApps";
+import { emptyQueryApps } from "./filterApps";
+import { appsForShelf, searchCatalog, type CatalogAudience, type CatalogShelf } from "./catalog";
+import CatalogFilters from "../components/CatalogFilters";
 import { readPinnedIds } from "./usePinnedApps";
+import { readRecentIds } from "./useRecentApps";
 import type { AppEntry } from "../api";
 
 export default function AppsDrawer({
   apps, open, onClose,
 }: { apps: AppEntry[]; open: boolean; onClose: () => void }) {
   const [query, setQuery] = useState("");
+  const [shelf, setShelf] = useState<CatalogShelf | "all">("all");
+  const [audience, setAudience] = useState<CatalogAudience | "all">("all");
+  const [capability, setCapability] = useState<string | "all">("all");
   const [highlight, setHighlight] = useState(0);
   const navigate = useNavigate();
 
@@ -19,23 +25,40 @@ export default function AppsDrawer({
   // localStorage, not shared state, and the drawer only needs today's value
   // the moment it appears.
   const pinnedIds = useMemo(() => (open ? readPinnedIds() : []), [open]);
+  const recentIds = useMemo(() => (open ? readRecentIds() : []), [open]);
 
-  const results = useMemo(
-    () => (query.trim() ? filterApps(apps, query) : emptyQueryApps(apps, { pinnedIds })),
-    [apps, query, pinnedIds],
+  const capabilities = useMemo(
+    () => [...new Set(apps.flatMap((app) => app.capabilities ?? []))].sort((a, b) => a.localeCompare(b)),
+    [apps],
   );
+  const selectedApps = useMemo(
+    () => shelf === "all" ? apps : appsForShelf(apps, shelf),
+    [apps, shelf],
+  );
+  const hasFilters = shelf !== "all" || audience !== "all" || capability !== "all";
+  const results = useMemo(() => {
+    if (!query.trim() && !hasFilters) return emptyQueryApps(apps, { pinnedIds, recentIds });
+    return searchCatalog(selectedApps, query, { shelf: "all", audience, capability });
+  }, [apps, audience, capability, hasFilters, pinnedIds, query, recentIds, selectedApps]);
 
   // A shorter result set than before can leave `highlight` pointing past the
   // end (or at the previous list's second app, now a different one) — reset
   // it whenever the results themselves change, not just when the query does.
   useEffect(() => { setHighlight(0); }, [results]);
 
-  useEffect(() => { if (!open) { setQuery(""); } }, [open]);
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      setShelf("all");
+      setAudience("all");
+      setCapability("all");
+    }
+  }, [open]);
 
   function activate(app: AppEntry | undefined) {
     // Offline entries are never activatable — the same rule the click handler
     // already enforces by rendering them as a <div>, not a <Link>.
-    if (!app || app.health !== "healthy") return;
+    if (!app || app.health !== "healthy" || app.visibility === "restricted" || app.reviewStatus === "pending" || app.reviewStatus === "deferred" || app.reviewStatus === "rejected") return;
     onClose();
     navigate(app.path);
   }
@@ -56,16 +79,18 @@ export default function AppsDrawer({
 
   return (
     <Overlay open={open} onClose={onClose} label="Apps">
-      <div className="border-b border-zinc-600 p-3">
-        <input
-          type="search"
-          role="searchbox"
-          autoFocus
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
+      <div className="border-b border-zinc-600 p-3 space-y-3">
+        <CatalogFilters
+          query={query}
+          shelf={shelf}
+          audience={audience}
+          capability={capability}
+          capabilities={capabilities}
+          onQueryChange={setQuery}
+          onShelfChange={setShelf}
+          onAudienceChange={setAudience}
+          onCapabilityChange={setCapability}
           onKeyDown={onKeyDown}
-          placeholder="Search apps…"
-          className="w-full bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
         />
       </div>
 
@@ -78,8 +103,8 @@ export default function AppsDrawer({
           results.map((a, i) => {
             const selected = i === highlight;
             return (
-              <li key={a.id} role="option" aria-selected={selected}>
-                {a.health === "healthy" ? (
+              <li key={a.id} role="option" aria-selected={selected ? "true" : "false"}>
+                {a.health === "healthy" && a.visibility !== "restricted" && (a.reviewStatus ?? "approved") === "approved" ? (
                   <Link
                     to={a.path}
                     onClick={onClose}
@@ -91,13 +116,13 @@ export default function AppsDrawer({
                     )}
                   >
                     <span>{a.name}</span>
-                    <Pill tone="success">online</Pill>
+                    <Pill tone="success">available</Pill>
                   </Link>
                 ) : (
                   <div
                     data-app-entry=""
                     aria-disabled="true"
-                    title="This app is not running"
+                    title={a.health !== "healthy" ? "This app is not running" : "This app is not available here"}
                     onMouseEnter={() => setHighlight(i)}
                     className={cn(
                       "flex cursor-default items-center justify-between rounded px-3 py-2 text-sm text-zinc-500",
@@ -105,7 +130,9 @@ export default function AppsDrawer({
                     )}
                   >
                     <span>{a.name}</span>
-                    <Pill tone="neutral">offline</Pill>
+                    <Pill tone={a.health !== "healthy" ? "neutral" : "warning"}>
+                      {a.health !== "healthy" ? "offline" : a.reviewStatus === "pending" ? "pending review" : a.reviewStatus === "deferred" ? "deferred" : a.visibility === "restricted" ? "restricted" : "unavailable"}
+                    </Pill>
                   </div>
                 )}
               </li>

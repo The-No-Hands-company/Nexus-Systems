@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { filterApps, emptyQueryApps, EMPTY_QUERY_CAP } from "../filterApps";
 import AppsDrawer from "../AppsDrawer";
@@ -145,7 +145,7 @@ describe("AppsDrawer", () => {
     open();
     const box = screen.getByRole("searchbox");
     fireEvent.keyDown(box, { key: "ArrowDown" });
-    const options = screen.getAllByRole("option");
+    const options = within(screen.getByRole("listbox")).getAllByRole("option");
     expect(options[1]!.getAttribute("aria-selected")).toBe("true");
   });
 

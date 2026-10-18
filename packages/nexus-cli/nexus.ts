@@ -78,6 +78,41 @@ const commands: Record<string, { desc: string; usage: string; run: CommandHandle
     usage: "nexus apps [category]",
     run: cmdApps,
   },
+  catalog: {
+    desc: "Read the approved Cloud app catalog",
+    usage: "nexus catalog [shelf]",
+    run: cmdCatalog,
+  },
+  cloud: {
+    desc: "Read the Nexus Cloud control-plane contract",
+    usage: "nexus cloud",
+    run: cmdCloudContract,
+  },
+  discover: {
+    desc: "Discover the public contracts for platform services",
+    usage: "nexus discover",
+    run: cmdDiscover,
+  },
+  api: {
+    desc: "Read the versioned Nexus API contract",
+    usage: "nexus api",
+    run: cmdApiContract,
+  },
+  auth: {
+    desc: "Read the Nexus Auth platform-service contract",
+    usage: "nexus auth",
+    run: cmdAuthContract,
+  },
+  terminal: {
+    desc: "Read the Terminal contract or audited sessions",
+    usage: "nexus terminal <contract|audit>",
+    run: cmdTerminal,
+  },
+  knowledge: {
+    desc: "Search the ecosystem-grounded Nexus AI knowledge index",
+    usage: "nexus knowledge [query]",
+    run: cmdKnowledge,
+  },
   ping: {
     desc: "Ping all services to check reachability",
     usage: "nexus ping",
@@ -100,21 +135,64 @@ const commands: Record<string, { desc: string; usage: string; run: CommandHandle
   },
 };
 
-async function fetchJson(url: string): Promise<Record<string, unknown> | null> {
+async function fetchJson(url: string, init?: RequestInit): Promise<Record<string, unknown> | null> {
   try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(3000) });
+    const r = await fetch(url, { ...init, signal: AbortSignal.timeout(3000) });
     if (!r.ok) return null;
     return await r.json() as Record<string, unknown>;
   } catch { return null; }
 }
 
-async function checkHealth(port: number): Promise<{ alive: boolean; service: string; uptime: number }> {
-  const data = await fetchJson(`http://localhost:${port}/health`);
+function cloudUrl(): string {
+  return (process.env.NEXUS_CLOUD_URL || "http://localhost:8787").trim().replace(/\/$/, "");
+}
+
+function cloudHeaders(): Record<string, string> {
+  return {
+    accept: "application/json",
+    ...(process.env.NEXUS_CLOUD_API_KEY ? { "x-api-key": process.env.NEXUS_CLOUD_API_KEY } : {}),
+  };
+}
+
+type HealthResult = {
+  alive: boolean;
+  service: string;
+  uptime: number;
+  status: string;
+  version: string;
+};
+
+async function checkHealth(port: number): Promise<HealthResult> {
+  return checkHealthAt(`http://localhost:${port}`);
+}
+
+async function checkHealthAt(baseUrl: string): Promise<HealthResult> {
+  const data = await fetchJson(`${baseUrl}/health`);
   return {
     alive: data !== null && data.status === "ok",
     service: (data?.service as string) || "unknown",
     uptime: (data?.uptimeSeconds as number) || 0,
+    status: (data?.status as string) || "unavailable",
+    version: (data?.version as string) || "v1",
   };
+}
+
+function serviceBaseUrl(name: string, port: number): string {
+  const configured = name === "cloud"
+    ? cloudUrl()
+    : name === "auth"
+    ? process.env.NEXUS_AUTH_URL
+    : name === "api"
+    ? process.env.NEXUS_API_URL
+    : name === "terminal"
+    ? process.env.NEXUS_TERMINAL_URL
+    : undefined;
+  return (configured || `http://localhost:${port}`).trim().replace(/\/$/, "");
+}
+
+async function checkServiceHealth(name: string, port: number) {
+  const baseUrl = serviceBaseUrl(name, port);
+  return { ...await checkHealthAt(baseUrl), baseUrl };
 }
 
 async function cmdUp(args: string[]) {
@@ -164,28 +242,30 @@ async function cmdStatus() {
   const rows: string[][] = [];
 
   for (const [name, app] of Object.entries(APPS)) {
-    const { alive, service, uptime } = await checkHealth(app.port);
+    const { alive, uptime, baseUrl } = await checkServiceHealth(name, app.port);
     if (alive) aliveCount++;
 
     const dot = alive ? color("●", GREEN) : color("○", RED);
     const status = alive ? color("healthy", GREEN) : color("down", RED);
     const uptimeStr = alive ? `${Math.floor(uptime / 60)}m ${uptime % 60}s` : "—";
-    rows.push([`  ${dot}`, bold(name.padEnd(12)), `:${app.port}`.padEnd(8), status.padEnd(10), uptimeStr.padEnd(10), DIM + app.desc + RESET]);
+    const target = baseUrl === `http://localhost:${app.port}` ? `:${app.port}` : baseUrl;
+    rows.push([`  ${dot}`, bold(name.padEnd(12)), target.padEnd(30), status.padEnd(10), uptimeStr.padEnd(10), DIM + app.desc + RESET]);
   }
 
   // Header
-  console.log(`  ${bold("SERVICE".padEnd(15))}${bold("PORT".padEnd(9))}${bold("STATUS".padEnd(11))}${bold("UPTIME".padEnd(11))}${bold("DESCRIPTION")}`);
-  console.log(`  ${"─".repeat(90)}`);
+  console.log(`  ${bold("SERVICE".padEnd(15))}${bold("TARGET".padEnd(32))}${bold("STATUS".padEnd(11))}${bold("UPTIME".padEnd(11))}${bold("DESCRIPTION")}`);
+  console.log(`  ${"─".repeat(112)}`);
 
   for (const row of rows) console.log(row.join(""));
 
-  console.log(`\n  ${color(`${aliveCount}/10 services healthy`, aliveCount === 10 ? GREEN : YELLOW)}`);
+  const totalServices = Object.keys(APPS).length;
+  console.log(`\n  ${color(`${aliveCount}/${totalServices} services healthy`, aliveCount === totalServices ? GREEN : YELLOW)}`);
 
   // Also try to get Cloud status for more detail
-  const cloudStatus = await fetchJson(`http://localhost:8787/api/v1/status`);
+  const cloudStatus = await fetchJson(`${serviceBaseUrl("cloud", 8787)}/api/v1/status`, { headers: cloudHeaders() });
   if (cloudStatus) {
     const s = cloudStatus as Record<string, unknown>;
-    console.log(`\n  ${CYAN}Cloud Dashboard:${RESET} http://localhost:8787`);
+    console.log(`\n  ${CYAN}Cloud Dashboard:${RESET} ${serviceBaseUrl("cloud", 8787)}`);
     console.log(`  Tools registered: ${s.toolCount || 0}  Healthy: ${s.healthyToolCount || 0}`);
   }
 }
@@ -218,19 +298,23 @@ async function cmdTopology() {
 
 async function cmdHealth(args: string[]) {
   const name = args[0];
-  if (!name || !APPS[name]) { console.log(color("Usage: nexus health <service>", YELLOW)); return; }
+  const app = name ? APPS[name] : undefined;
+  const platformService = name === "terminal"
+    ? { port: 3110, desc: "Audited operator and developer terminal" }
+    : undefined;
+  if (!name || (!app && !platformService)) { console.log(color("Usage: nexus health <service>", YELLOW)); return; }
 
-  const app = APPS[name]!;
-  const data = await fetchJson(`http://localhost:${app.port}/health`);
-  if (!data) { console.log(color(`${name} is not running on :${app.port}`, RED)); return; }
+  const target = app || platformService!;
+  const result = await checkServiceHealth(name, target.port);
+  if (!result.alive) { console.log(color(`${name} health unavailable at ${result.baseUrl}/health`, RED)); return; }
 
   console.log(bold(`\n${name} Health`));
-  console.log(`  Status:    ${color(data.status as string, data.status === "ok" ? GREEN : RED)}`);
-  console.log(`  Service:   ${data.service}`);
-  console.log(`  Version:   ${data.version || "v1"}`);
-  console.log(`  Uptime:    ${data.uptimeSeconds}s`);
-  console.log(`  Port:      ${app.port}`);
-  console.log(`  Desc:      ${app.desc}`);
+  console.log(`  Status:    ${color(result.status, result.status === "ok" ? GREEN : RED)}`);
+  console.log(`  Service:   ${result.service}`);
+  console.log(`  Version:   ${result.version}`);
+  console.log(`  Uptime:    ${result.uptime}s`);
+  console.log(`  Endpoint:  ${result.baseUrl}/health`);
+  console.log(`  Desc:      ${target.desc}`);
 }
 
 async function cmdDetect(args: string[]) {
@@ -337,6 +421,218 @@ async function cmdApps(args: string[]) {
 
   console.log(`  ${color("● running  ○ scaffolded", DIM)}`);
   console.log(`  Total: 81 apps across ${Object.keys(categories).length} categories`);
+}
+
+async function cmdCatalog(args: string[]) {
+  const requestedShelf = args[0]?.trim().toLowerCase();
+  const payload = await fetchJson(`${cloudUrl()}/api/v1/catalog`, { headers: cloudHeaders() });
+  if (!payload || !Array.isArray(payload.apps)) {
+    console.log(color("Cloud catalog unavailable — check NEXUS_CLOUD_URL and authentication", RED));
+    return;
+  }
+
+  const apps = (payload.apps as Array<Record<string, unknown>>)
+    .filter((app) => {
+      if (!requestedShelf) return true;
+      return app.primaryShelf === requestedShelf ||
+        (Array.isArray(app.secondaryShelves) && app.secondaryShelves.includes(requestedShelf));
+    })
+    .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
+
+  console.log(BANNER);
+  console.log(color(`Cloud Catalog${requestedShelf ? ` — ${requestedShelf}` : ""}\n`, CYAN));
+  for (const app of apps) {
+    const health = app.health === "healthy" ? color("●", GREEN) : color("○", RED);
+    const path = typeof app.path === "string" ? app.path : "—";
+    const status = typeof app.reviewStatus === "string" ? app.reviewStatus : "unknown";
+    console.log(`  ${health} ${bold(String(app.name || app.id))} ${DIM}${path} · ${status}${RESET}`);
+  }
+  console.log(`\n  ${apps.length} catalog entr${apps.length === 1 ? "y" : "ies"}`);
+}
+
+async function cmdCloudContract() {
+  const payload = await fetchJson(`${cloudUrl()}/api/v1/contract`, { headers: cloudHeaders() });
+  if (!payload || !payload.service || !Array.isArray(payload.routes)) {
+    console.log(color("Nexus Cloud contract unavailable — check NEXUS_CLOUD_URL and authentication", RED));
+    return;
+  }
+
+  const service = payload.service as Record<string, unknown>;
+  console.log(BANNER);
+  console.log(color("Nexus Cloud Control Plane\n", CYAN));
+  console.log(`  ${bold(String(service.name || service.id))}`);
+  console.log(`  Surface: ${String(service.surface || "admin-console")} · Hosted path: ${String(service.hostedPath || "/cloud")}`);
+  console.log(`  Auth: ${String(service.auth || "unspecified")}\n`);
+  for (const route of payload.routes as Array<Record<string, unknown>>) {
+    const access = route.access === "public" ? color("public", GREEN) : color(String(route.access), YELLOW);
+    console.log(`  ${String(route.method).padEnd(6)} ${String(route.path).padEnd(54)} ${access}`);
+  }
+  console.log(`\n  ${(payload.routes as unknown[]).length} declared Cloud route${(payload.routes as unknown[]).length === 1 ? "" : "s"}`);
+}
+
+async function cmdDiscover() {
+  const services: Array<{ id: string; name: string; url: string; init?: RequestInit }> = [
+    {
+      id: "cloud",
+      name: "Nexus Cloud",
+      url: `${cloudUrl()}/api/v1/contract`,
+      init: { headers: cloudHeaders() },
+    },
+    {
+      id: "auth",
+      name: "Nexus Auth",
+      url: `${(process.env.NEXUS_AUTH_URL || "http://localhost:4310").trim().replace(/\/$/, "")}/api/v1/auth/contract`,
+    },
+    {
+      id: "api",
+      name: "Nexus API",
+      url: `${(process.env.NEXUS_API_URL || "http://localhost:3036").trim().replace(/\/$/, "")}/api/v1/contract`,
+    },
+    {
+      id: "terminal",
+      name: "Nexus Terminal",
+      url: `${(process.env.NEXUS_TERMINAL_URL || "http://localhost:3110").trim().replace(/\/$/, "")}/api/v1/terminal/contract`,
+    },
+  ];
+
+  const results = await Promise.all(services.map(async (service) => ({
+    ...service,
+    payload: await fetchJson(service.url, service.init),
+  })));
+
+  console.log(BANNER);
+  console.log(color("Nexus Platform Discovery\n", CYAN));
+  console.log(`  ${DIM}Public versioned contracts; this command does not grant access or mutate state.${RESET}\n`);
+  console.log(`  ${bold("SERVICE".padEnd(18))}${bold("SURFACE".padEnd(20))}${bold("HOSTED PATH".padEnd(16))}${bold("STATUS".padEnd(12))}${bold("ROUTES")}`);
+  console.log(`  ${"─".repeat(78)}`);
+
+  for (const result of results) {
+    const service = result.payload?.service as Record<string, unknown> | undefined;
+    const routes = Array.isArray(result.payload?.routes) ? result.payload.routes.length : 0;
+    const available = Boolean(service && Array.isArray(result.payload?.routes));
+    const surface = String(service?.surface || (result.id === "api" ? "api-service" : "—"));
+    const hostedPath = String(service?.hostedPath || (result.id === "api" ? "—" : "—"));
+    const status = available ? color("available", GREEN) : color("offline", RED);
+    console.log(`  ${result.name.padEnd(18)}${surface.padEnd(20)}${hostedPath.padEnd(16)}${status.padEnd(21)}${available ? String(routes) : "—"}`);
+  }
+
+  const available = results.filter((result) => result.payload?.service && Array.isArray(result.payload.routes)).length;
+  console.log(`\n  ${available}/${services.length} public platform contracts available`);
+}
+
+async function cmdApiContract() {
+  const base = (process.env.NEXUS_API_URL || "http://localhost:3036").trim().replace(/\/$/, "");
+  const payload = await fetchJson(`${base}/api/v1/contract`);
+  if (!payload || !payload.service || !Array.isArray(payload.routes)) {
+    console.log(color("Nexus API contract unavailable — check NEXUS_API_URL", RED));
+    return;
+  }
+
+  const service = payload.service as Record<string, unknown>;
+  console.log(BANNER);
+  console.log(color("Nexus API Contract\n", CYAN));
+  console.log(`  ${bold(String(service.name || service.id))} ${DIM}${String(service.version || "")}${RESET}`);
+  console.log(`  Base URL: ${String(service.baseUrl || base)}`);
+  console.log(`  Auth: ${String(service.auth || "unspecified")}\n`);
+  for (const route of payload.routes as Array<Record<string, unknown>>) {
+    const access = route.access === "operator" ? color("operator", YELLOW) : color("public", GREEN);
+    console.log(`  ${String(route.method).padEnd(6)} ${String(route.path).padEnd(38)} ${access}`);
+  }
+}
+
+async function cmdAuthContract() {
+  const base = (process.env.NEXUS_AUTH_URL || "http://localhost:4310").trim().replace(/\/$/, "");
+  const payload = await fetchJson(`${base}/api/v1/auth/contract`);
+  if (!payload || !payload.service || !Array.isArray(payload.routes)) {
+    console.log(color("Nexus Auth contract unavailable — check NEXUS_AUTH_URL", RED));
+    return;
+  }
+
+  const service = payload.service as Record<string, unknown>;
+  console.log(BANNER);
+  console.log(color("Nexus Auth Platform Service\n", CYAN));
+  console.log(`  ${bold(String(service.name || service.id))}`);
+  console.log(`  Surface: ${String(service.surface || "platform-service")} · Hosted path: ${String(service.hostedPath || "/auth")}`);
+  console.log(`  Auth: ${String(service.auth || "unspecified")}\n`);
+  for (const route of payload.routes as Array<Record<string, unknown>>) {
+    const access = route.access === "public" ? color("public", GREEN) : color(String(route.access), YELLOW);
+    console.log(`  ${String(route.method).padEnd(6)} ${String(route.path).padEnd(46)} ${access}`);
+  }
+}
+
+async function cmdTerminal(args: string[]) {
+  if (args[0] === "contract") {
+    await cmdTerminalContract();
+    return;
+  }
+  if (args[0] !== "audit") {
+    console.log(color("Usage: nexus terminal <contract|audit>", YELLOW));
+    return;
+  }
+  const token = process.env.NEXUS_AUTH_TOKEN?.trim();
+  const cookie = process.env.NEXUS_AUTH_COOKIE?.trim();
+  if (!token && !cookie) {
+    console.log(color("NEXUS_AUTH_TOKEN or NEXUS_AUTH_COOKIE is required for the Terminal audit read", YELLOW));
+    return;
+  }
+  const base = (process.env.NEXUS_TERMINAL_URL || "http://localhost:3110").trim().replace(/\/$/, "");
+  const headers = token ? { authorization: `Bearer ${token}` } : { cookie: cookie! };
+  const payload = await fetchJson(`${base}/api/v1/terminal/audit`, { headers });
+  if (!payload || !Array.isArray(payload.sessions)) {
+    console.log(color("Nexus Terminal audit unavailable — check NEXUS_TERMINAL_URL and Auth session", RED));
+    return;
+  }
+  console.log(BANNER);
+  console.log(color("Nexus Terminal Audit\n", CYAN));
+  for (const session of payload.sessions as Array<Record<string, unknown>>) {
+    console.log(`  ${bold(String(session.id || "unknown"))} ${DIM}${String(session.subject || "unknown subject")}${RESET}`);
+    console.log(`  started ${String(session.started_at || "unknown")} · ended ${String(session.ended_at || "active")} · exit ${String(session.exit_code ?? "—")}`);
+  }
+  console.log(`\n  ${(payload.sessions as unknown[]).length} audited session${(payload.sessions as unknown[]).length === 1 ? "" : "s"}`);
+}
+
+async function cmdTerminalContract() {
+  const base = (process.env.NEXUS_TERMINAL_URL || "http://localhost:3110").trim().replace(/\/$/, "");
+  const payload = await fetchJson(`${base}/api/v1/terminal/contract`);
+  if (!payload || !payload.service || !Array.isArray(payload.routes)) {
+    console.log(color("Nexus Terminal contract unavailable — check NEXUS_TERMINAL_URL", RED));
+    return;
+  }
+
+  const service = payload.service as Record<string, unknown>;
+  console.log(BANNER);
+  console.log(color("Nexus Terminal Contract\n", CYAN));
+  console.log(`  ${bold(String(service.name || service.id))}`);
+  console.log(`  Auth: ${String(service.auth || "unspecified")} · Enabled by default: ${String(service.enabledByDefault ?? "unspecified")}\n`);
+  for (const route of payload.routes as Array<Record<string, unknown>>) {
+    const access = route.access === "public" ? color("public", GREEN) : color(String(route.access), YELLOW);
+    console.log(`  ${String(route.method).padEnd(10)} ${String(route.path).padEnd(46)} ${access}`);
+  }
+  console.log(`\n  ${(payload.routes as unknown[]).length} declared Terminal route${(payload.routes as unknown[]).length === 1 ? "" : "s"}`);
+}
+
+async function cmdKnowledge(args: string[]) {
+  const query = args.join(" ").trim();
+  const base = (process.env.NEXUS_AI_HUB_URL || "http://localhost:3114").trim().replace(/\/$/, "");
+  const path = query
+    ? `/api/v1/knowledge/search?q=${encodeURIComponent(query)}`
+    : "/api/v1/knowledge";
+  const payload = await fetchJson(`${base}${path}`);
+  if (!payload || !Array.isArray(payload.documents)) {
+    console.log(color("Nexus AI knowledge index unavailable — check NEXUS_AI_HUB_URL", RED));
+    return;
+  }
+
+  console.log(BANNER);
+  console.log(color(`Ecosystem Knowledge${query ? ` — ${query}` : ""}\n`, CYAN));
+  console.log(`  Status: ${payload.status === "ready" ? color("ready", GREEN) : color("degraded", YELLOW)}`);
+  for (const document of payload.documents as Array<Record<string, unknown>>) {
+    const source = document.source as Record<string, unknown> | undefined;
+    console.log(`\n  ${bold(String(document.title || document.id))}`);
+    console.log(`  ${String(document.summary || "")}`);
+    console.log(`  ${DIM}source: ${String(source?.ref || "unknown")} · trust: ${String(document.trust || "unknown")}${RESET}`);
+  }
+  console.log(`\n  ${(payload.documents as unknown[]).length} document${(payload.documents as unknown[]).length === 1 ? "" : "s"}`);
 }
 
 async function cmdPing() {
@@ -577,7 +873,11 @@ async function cmdDemo() {
     });
     if (upload.ok) {
       const fileData = await upload.json() as Record<string, unknown>;
-      ok(`File uploaded: ${fileData.id} — "${fileData.file?.name || "nexus-architecture.md"}"`);
+      const file = fileData.file;
+      const fileName = file && typeof file === "object" && "name" in file && typeof file.name === "string"
+        ? file.name
+        : "nexus-architecture.md";
+      ok(`File uploaded: ${String(fileData.id)} — "${fileName}"`);
       info("File automatically indexed in Nexus Search via SDK");
 
       await wait(1000);

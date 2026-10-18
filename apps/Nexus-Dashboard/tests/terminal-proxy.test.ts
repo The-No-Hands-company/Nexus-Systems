@@ -79,6 +79,7 @@ function transcript(messages: MessageEvent[]): string {
 }
 
 function visibleTranscript(messages: MessageEvent[]): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: this intentionally strips ANSI terminal escape sequences.
   return transcript(messages).replaceAll(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
 }
 
@@ -87,7 +88,9 @@ async function waitForActiveShells(
   expected: number,
   label: string,
 ): Promise<void> {
-  const deadline = Date.now() + 5_000;
+  // A real pty is spawned for every relay, and slower CI hosts can need more
+  // than five seconds to bring all eight shells online.
+  const deadline = Date.now() + 15_000;
   let observed: unknown = null;
   while (Date.now() < deadline) {
     try {
@@ -426,7 +429,7 @@ describe("terminal frame relay", () => {
     expect(close?.code).toBe(4002);
     // Either the browser's reason or nothing — never a substitute of the
     // relay's own devising, which is what would actually be a bug here.
-    expect(["", "tab closed"]).toContain(close?.reason);
+    expect(["", "tab closed"]).toContain(close?.reason ?? "");
   });
 
   it("does not leave an upstream socket when the browser closes during its handshake", async () => {
@@ -505,13 +508,14 @@ describe("terminal frame relay", () => {
     await mkdir(smokeData);
     const previousCwd = process.cwd();
     let realTerminal: Awaited<
-      ReturnType<(typeof import("../../Nexus-Terminal/src/server"))["createServer"]>
+      ReturnType<typeof import("../../Nexus-Terminal/src/server")["createServer"]>
     > | null = null;
     let first: ReturnType<typeof openClient> | null = null;
     let second: ReturnType<typeof openClient> | null = null;
     const extraClients: ReturnType<typeof openClient>[] = [];
 
     process.env.PORT = "0";
+    // biome-ignore lint/performance/noDelete: deleting this variable matches the server's unset semantics.
     delete process.env.NEXUS_BIND_HOST;
     process.env.NEXUS_DATA_DIR = smokeData;
     process.env.NEXUS_TERMINAL_ENABLED = "false";

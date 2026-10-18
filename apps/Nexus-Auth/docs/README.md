@@ -11,14 +11,16 @@ Current modules:
 - `src/contracts.ts`: Nexus-Cloud registration payload contract helper
 - `src/server.ts`: HTTP routes and JSON API behavior
 
-## MVP API contract
+## API contract
 
 - `GET /health`
 - `GET /api/v1/auth/readiness`
-- `POST /api/v1/auth/seed`
-- `POST /api/v1/auth/token/issue`
-- `POST /api/v1/auth/token/validate`
-- `GET /api/v1/auth/contracts/systems-api-registration`
+- `GET /api/v1/auth/contract`
+- `POST /api/v1/auth/tokens/issue`
+- `POST /api/v1/auth/tokens/validate`
+- `GET /api/v1/auth/contracts/registration`
+- `GET|POST /api/v1/auth/api-keys`
+- `POST /api/v1/auth/api-keys/:id/revoke`
 
 ## Integration guidance
 
@@ -29,5 +31,6 @@ Current modules:
 ## Known limitations
 
 - Persistence is in-memory only.
-- No password login flow in this MVP.
-- Token revocation list is not implemented yet.
+- The hosted session and API-key stores are still in-memory in this MVP.
+- API-key scope enforcement remains an Auth policy task; current service
+  permissions derive from the owning account role.

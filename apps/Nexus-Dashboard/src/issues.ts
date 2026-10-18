@@ -52,7 +52,8 @@ export function validateReport(input: unknown): { report: IssueReport } | { erro
   if (!title) return { error: "title is required" };
   if (title.length > MAX_TITLE) return { error: `title must be ${MAX_TITLE} characters or fewer` };
   if (!body) return { error: "description is required" };
-  if (body.length > MAX_BODY) return { error: `description must be ${MAX_BODY} characters or fewer` };
+  if (body.length > MAX_BODY)
+    return { error: `description must be ${MAX_BODY} characters or fewer` };
 
   const app = typeof r.app === "string" && r.app.trim() ? r.app.trim().slice(0, 60) : undefined;
   const url = typeof r.url === "string" && r.url.trim() ? r.url.trim().slice(0, 300) : undefined;
@@ -150,10 +151,18 @@ export async function fileIssue(
 
     const created = (await res.json()) as { number?: number; html_url?: string };
     if (typeof created.number !== "number" || typeof created.html_url !== "string") {
-      return { ok: false, status: 502, error: "GitHub accepted the issue but returned an unexpected response." };
+      return {
+        ok: false,
+        status: 502,
+        error: "GitHub accepted the issue but returned an unexpected response.",
+      };
     }
     return { ok: true, number: created.number, url: created.html_url };
   } catch {
-    return { ok: false, status: 504, error: "Could not reach the issue tracker. Please try again." };
+    return {
+      ok: false,
+      status: 504,
+      error: "Could not reach the issue tracker. Please try again.",
+    };
   }
 }

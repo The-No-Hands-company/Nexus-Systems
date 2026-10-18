@@ -1,7 +1,4 @@
-import {
-  verifyIdentityToken,
-  IDENTITY_HEADER,
-} from "../../../packages/nexus-identity/src/index";
+import { IDENTITY_HEADER, verifyIdentityToken } from "../../../packages/nexus-identity/src/index";
 
 /** Shared interpretation of the authenticated Dashboard caller. */
 export type Caller = {
@@ -97,7 +94,10 @@ export async function callerIdentity(req: Request): Promise<Caller | null> {
 
   if (req.headers.get("authorization")?.startsWith("Bearer ")) {
     const { validateRequest } = await import("./jwt");
-    const fromJwt = await validateRequest(req, process.env.NEXUS_DASHBOARD_JWT_AUDIENCE || "nexus-dashboard");
+    const fromJwt = await validateRequest(
+      req,
+      process.env.NEXUS_DASHBOARD_JWT_AUDIENCE || "nexus-dashboard",
+    );
     if (fromJwt) return fromJwt;
   }
   return sessionIdentity(req);

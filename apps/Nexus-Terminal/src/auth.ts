@@ -21,12 +21,18 @@ export function canUseTerminal(caller: Caller | null): caller is Caller {
 
 export async function callerIdentity(req: Request): Promise<Caller | null> {
   const cookie = req.headers.get("cookie");
-  // No cookie is not an error worth a round trip: it cannot be authenticated.
-  if (!cookie) return null;
+  const authorization = req.headers.get("authorization");
+  // A browser carries the shared session cookie. A CLI or service may carry a
+  // scoped Nexus-Auth API key as Bearer. If neither is present, there is no
+  // identity worth sending to Auth.
+  if (!cookie && !authorization) return null;
 
   try {
+    const headers: Record<string, string> = {};
+    if (cookie) headers.cookie = cookie;
+    if (authorization) headers.authorization = authorization;
     const res = await fetch(`${AUTH_URL()}/api/v1/auth/me`, {
-      headers: { cookie },
+      headers,
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return null;

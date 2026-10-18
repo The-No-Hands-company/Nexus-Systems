@@ -39,7 +39,7 @@ function getBucket(key: string): Bucket {
   return bucket;
 }
 
-function getClientKey(req: Request, prefix: string = "default"): string {
+function getClientKey(req: Request, prefix = "default"): string {
   // Keyed on the proxy's opaque client tag; the address never reaches us.
   const tag = req.headers.get("x-nexus-client-tag") || "unknown";
   return `${prefix}:${tag}`;
@@ -51,10 +51,7 @@ export interface RateLimitResult {
   resetMs: number;
 }
 
-export function checkRateLimit(
-  req: Request,
-  config?: Partial<RateLimitConfig>
-): RateLimitResult {
+export function checkRateLimit(req: Request, config?: Partial<RateLimitConfig>): RateLimitResult {
   const cfg = { ...DEFAULT_CONFIG, ...config };
   const key = getClientKey(req, cfg.keyPrefix);
   const bucket = getBucket(key);
@@ -64,11 +61,13 @@ export function checkRateLimit(
     return {
       allowed: true,
       remaining: Math.floor(bucket.tokens),
-      resetMs: Math.ceil((DEFAULT_CONFIG.maxTokens - bucket.tokens) / DEFAULT_CONFIG.refillRatePerSecond * 1000),
+      resetMs: Math.ceil(
+        ((DEFAULT_CONFIG.maxTokens - bucket.tokens) / DEFAULT_CONFIG.refillRatePerSecond) * 1000,
+      ),
     };
   }
 
-  const resetMs = Math.ceil((1 - bucket.tokens) / DEFAULT_CONFIG.refillRatePerSecond * 1000);
+  const resetMs = Math.ceil(((1 - bucket.tokens) / DEFAULT_CONFIG.refillRatePerSecond) * 1000);
   return {
     allowed: false,
     remaining: 0,
@@ -90,9 +89,7 @@ export function createRateLimitResponse(result: RateLimitResult): Response {
   });
 }
 
-export function rateLimitMiddleware(
-  config?: Partial<RateLimitConfig>
-) {
+export function rateLimitMiddleware(config?: Partial<RateLimitConfig>) {
   return async (req: Request, next: () => Promise<Response>): Promise<Response> => {
     const result = checkRateLimit(req, config);
     if (!result.allowed) {

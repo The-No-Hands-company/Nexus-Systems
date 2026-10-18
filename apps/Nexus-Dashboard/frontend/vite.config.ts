@@ -10,14 +10,6 @@ export default defineConfig({
       { find: "react/jsx-runtime", replacement: fileURLToPath(new URL("./node_modules/react/jsx-runtime.js", import.meta.url)) },
       { find: "react", replacement: fileURLToPath(new URL("./node_modules/react/index.js", import.meta.url)) },
     ],
-  },
-  server: {
-    port: 5175,
-    // Same-origin in dev too, so the app never learns to make cross-origin
-    // auth calls that would not work in production.
-    proxy: { "/api": { target: "http://localhost:3132", changeOrigin: true } },
-  },
-  resolve: {
     // @nexus/design declares react as a peerDependency, but a stray copy
     // (currently 19.x) lives in its own node_modules, and this app imports
     // its components from there by relative path — so without deduping,
@@ -25,6 +17,12 @@ export default defineConfig({
     // 18.3.1 for others, shipping two React instances and breaking hooks
     // at runtime in dev, build and preview alike.
     dedupe: ["react", "react-dom"],
+  },
+  server: {
+    port: 5175,
+    // Same-origin in dev too, so the app never learns to make cross-origin
+    // auth calls that would not work in production.
+    proxy: { "/api": { target: "http://localhost:3132", changeOrigin: true } },
   },
   build: { target: "esnext" },
 });
