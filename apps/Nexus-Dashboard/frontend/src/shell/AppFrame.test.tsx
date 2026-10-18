@@ -3,9 +3,9 @@ import { render, screen } from "@testing-library/react";
 import AppFrame, { embedUrl } from "./AppFrame";
 
 const apps = [
-  { id: "nexus-draw", name: "Draw", description: "", publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed" as const, health: "healthy" as const },
-  { id: "nexus-edge", name: "Nexus Edge", description: "Gateway orchestration", publicUrl: undefined, path: "/edge", delivery: "shell-native" as const, health: "offline" as const },
-  { id: "nexus-network", name: "Nexus Network", description: "Network topology", publicUrl: undefined, path: "/network", delivery: "shell-native" as const, health: "healthy" as const },
+  { id: "nexus-draw", name: "Draw", description: "", publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed" as const, health: "healthy" as const, surface: "user-app" as const, releaseState: "released" as const },
+  { id: "nexus-edge", name: "Nexus Edge", description: "Gateway orchestration", publicUrl: undefined, path: "/edge", delivery: "shell-native" as const, health: "offline" as const, surface: "platform-service" as const, releaseState: "released" as const },
+  { id: "nexus-network", name: "Nexus Network", description: "Network topology", publicUrl: undefined, path: "/network", delivery: "shell-native" as const, health: "healthy" as const, surface: "platform-service" as const, releaseState: "released" as const },
 ];
 
 describe("embedUrl", () => {
