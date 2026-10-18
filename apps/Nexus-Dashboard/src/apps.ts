@@ -1,15 +1,16 @@
 /**
  * Turns Cloud's tool registry into the grid the dashboard renders.
  *
- * The grid is data, never a hardcoded list: a new app appears by registering
- * with Cloud, and a second node's apps appear with no code change here.
+ * The grid is data: Cloud supplies released user apps and the shell supplies
+ * its own native views.
  */
 
 export type SystemsApiDelivery = "shell-native" | "proxied-app" | "framed" | "external";
 export type CatalogSurface = "user-app" | "admin-console" | "platform-service" | "developer-tool";
+export type CatalogReleaseState = "staged" | "released" | "retired";
 
 export type CatalogPlacement = {
-  surface?: CatalogSurface;
+  surface: CatalogSurface;
   primaryShelf: string;
   secondaryShelves: string[];
   audiences: string[];
@@ -31,6 +32,7 @@ const EXPLORE_DEFAULTS: CatalogPlacement = {
 };
 
 export type AppEntry = CatalogPlacement & {
+  releaseState: CatalogReleaseState;
   id: string;
   name: string;
   description: string;
@@ -88,6 +90,7 @@ type RawTool = {
   visibility?: unknown;
   reviewStatus?: unknown;
   surface?: unknown;
+  releaseState?: unknown;
 };
 
 function str(v: unknown): string {
@@ -111,23 +114,9 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string") ? [...value] : [];
 }
 
-function placementFor(raw: RawTool): CatalogPlacement {
-  const inferredSurface: CatalogSurface =
-    raw.id === "nexus-auth"
-      ? "platform-service"
-      : raw.id === "nexus-cloud"
-        ? "admin-console"
-        : raw.id === "nexus-terminal" || raw.id === "nexus-forge" || raw.id === "nexus-deploy"
-          ? "developer-tool"
-          : "user-app";
+function placementFor(raw: RawTool, surface: CatalogSurface): CatalogPlacement {
   return {
-    surface:
-      raw.surface === "admin-console" ||
-      raw.surface === "platform-service" ||
-      raw.surface === "developer-tool" ||
-      raw.surface === "user-app"
-        ? raw.surface
-        : inferredSurface,
+    surface,
     primaryShelf: str(raw.primaryShelf) || EXPLORE_DEFAULTS.primaryShelf,
     secondaryShelves: stringArray(raw.secondaryShelves),
     audiences: stringArray(raw.audiences),
@@ -147,14 +136,28 @@ function placementFor(raw: RawTool): CatalogPlacement {
   };
 }
 
+function isCatalogSurface(value: unknown): value is CatalogSurface {
+  return value === "user-app" || value === "admin-console" ||
+    value === "platform-service" || value === "developer-tool";
+}
+
+function isCatalogReleaseState(value: unknown): value is CatalogReleaseState {
+  return value === "staged" || value === "released" || value === "retired";
+}
+
+export function isReleasedUserApp(entry: AppEntry): boolean {
+  return entry.surface === "user-app" && entry.releaseState === "released" &&
+    entry.maturity === "stable" && entry.health === "healthy";
+}
+
 /**
  * `authHost` is excluded deliberately. Auth is where you sign in, not an app
  * you open, and a tile leading to the login page from inside the dashboard is
  * a dead end for someone already signed in.
  *
- * Tools without a publicUrl are dropped: most of the registry is empty
- * scaffolds — 82 of 85 at the time of writing — and a tile that cannot be
- * clicked is worse than no tile.
+ * Tools without a publicUrl are dropped unless they are explicitly native.
+ * Records need explicit release metadata, and only stable, healthy, released
+ * user apps enter the launcher.
  *
  * A malformed payload yields an empty grid rather than throwing. Cloud is a
  * separate service that can be mid-restart or mid-deploy, and that must cost
@@ -169,8 +172,10 @@ export function toAppEntries(payload: unknown, authHost: string, selfHost?: stri
   for (const raw of tools as RawTool[]) {
     if (!raw || typeof raw !== "object") continue;
 
+    if (!isCatalogSurface(raw.surface) || !isCatalogReleaseState(raw.releaseState)) continue;
+
     const id = str(raw.id);
-    const placement = placementFor(raw);
+    const placement = placementFor(raw, raw.surface);
     if (placement.visibility === "hidden") continue;
     const publicUrl = str(raw.publicUrl) || str(raw.url);
     const explicitDelivery = deliveryFor(raw.delivery);
@@ -192,19 +197,19 @@ export function toAppEntries(payload: unknown, authHost: string, selfHost?: stri
     // which internal record won, only that the app appears once.
     if (entries.some((e) => e.path === path || (publicUrl && e.publicUrl === publicUrl))) continue;
 
-    entries.push({
+    const entry: AppEntry = {
       ...placement,
+      releaseState: raw.releaseState,
       id,
       name: str(raw.name) || id,
       description: str(raw.description),
       path,
       ...(publicUrl && !publicUrl.startsWith("/") ? { publicUrl } : {}),
       delivery,
-      // Anything that is not explicitly healthy is treated as offline, so a
-      // missing or unexpected value fails safe: the tile renders unlinked
-      // rather than inviting a click that goes nowhere.
+      // Unknown health is offline and therefore fails the launcher predicate.
       health: raw.health === "healthy" ? "healthy" : "offline",
-    });
+    };
+    if (isReleasedUserApp(entry)) entries.push(entry);
   }
 
   return entries.sort((a, b) => a.name.localeCompare(b.name));
@@ -232,6 +237,12 @@ export function shellNativeEntries(opts: {
   const entries: AppEntry[] = [
     {
       ...EXPLORE_DEFAULTS,
+      surface: "user-app",
+      releaseState: "released",
+      maturity: "stable",
+      visibility: "default",
+      reviewStatus: "approved",
+      primaryShelf: "everyday",
       id: "nexus-email",
       name: "Nexus Mail",
       description: "Sovereign mail — read, compose and search your Nexus mailbox",
@@ -243,6 +254,12 @@ export function shellNativeEntries(opts: {
   if (opts.includeTerminal) {
     entries.push({
       ...EXPLORE_DEFAULTS,
+      surface: "developer-tool",
+      releaseState: "released",
+      maturity: "stable",
+      visibility: "restricted",
+      reviewStatus: "approved",
+      primaryShelf: "develop",
       id: "nexus-terminal",
       name: "Nexus Terminal",
       description: "Audited host shell for Nexus operators",

@@ -57,6 +57,8 @@ beforeEach(() => {
               name: "Nexus Chat",
               publicUrl: "https://chat.tnhc.dev",
               health: "healthy",
+              surface: "user-app",
+              releaseState: "released",
               primaryShelf: "work",
               secondaryShelves: [],
               audiences: ["general"],
@@ -112,7 +114,7 @@ afterEach(() => {
 });
 
 describe("dashboard server", () => {
-  it("serves the shared release fixture through the production catalog endpoint", async () => {
+  it("serves only released user apps from the shared fixture", async () => {
     catalogMode = "release";
     const res = await handleRequest(new Request("http://app.test/ipa/apps"));
     expect(res.status).toBe(200);
@@ -120,19 +122,7 @@ describe("dashboard server", () => {
       apps: Array<{ id: string; primaryShelf: string; reviewStatus: string; health: string }>;
     };
     expect(cloudPaths).toEqual(["/api/v1/catalog"]);
-    expect(apps.find((app) => app.id === "nexus-calendar")).toMatchObject({
-      primaryShelf: "everyday",
-      reviewStatus: "approved",
-      health: "healthy",
-    });
-    expect(apps.find((app) => app.id === "nexus-experimental")).toMatchObject({
-      primaryShelf: "explore",
-      reviewStatus: "pending",
-    });
-    expect(apps.find((app) => app.id === "nexus-video")).toMatchObject({
-      primaryShelf: "create",
-      health: "offline",
-    });
+    expect(apps.map((app) => app.id)).toEqual(["nexus-email"]);
   });
 
   it("requests catalog first and serves approved metadata while hiding hidden entries", async () => {
@@ -149,11 +139,11 @@ describe("dashboard server", () => {
     expect(apps.some((app) => app.id === "nexus-hidden")).toBe(false);
   });
 
-  it("falls back to old Cloud tools only on catalog 404", async () => {
+  it("requests old Cloud tools on catalog 404 but excludes unclassified records", async () => {
     const res = await handleRequest(new Request("http://app.test/ipa/apps"));
     const { apps } = (await res.json()) as { apps: Array<{ id: string; primaryShelf: string }> };
     expect(cloudPaths).toEqual(["/api/v1/catalog", "/api/v1/tools"]);
-    expect(apps.find((app) => app.id === "nexus-chat")?.primaryShelf).toBe("explore");
+    expect(apps.map((app) => app.id)).toEqual(["nexus-email"]);
   });
   it("reports health", async () => {
     const res = await handleRequest(new Request("http://app.test/health"));
@@ -172,7 +162,7 @@ describe("dashboard server", () => {
     // Mail is served by this app at /mail and has no public host, so it never
     // appears in Cloud's registry — the shell contributes it.
     expect(apps.map((a) => a.id).sort()).toEqual(
-      expect.arrayContaining(["nexus-chat", "nexus-email", "nexus-terminal"]),
+      expect.arrayContaining(["nexus-email", "nexus-terminal"]),
     );
     expect(apps.map((a) => a.id)).not.toContain("nexus-calendar");
     expect(apps.find((app) => app.id === "nexus-terminal")).toMatchObject({

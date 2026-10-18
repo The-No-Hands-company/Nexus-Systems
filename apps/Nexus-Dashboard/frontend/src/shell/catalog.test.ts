@@ -24,6 +24,8 @@ const app = (overrides: Partial<AppEntry> = {}): AppEntry => ({
   maturity: "stable",
   visibility: "default",
   reviewStatus: "approved",
+  surface: "user-app",
+  releaseState: "released",
   ...overrides,
 });
 
@@ -35,6 +37,14 @@ describe("normalizeCatalogEntry", () => {
       maturity: "experimental",
       visibility: "discoverable",
       reviewStatus: "pending",
+      surface: "platform-service",
+      releaseState: "staged",
+    });
+  });
+
+  it("preserves explicit release metadata", () => {
+    expect(normalizeCatalogEntry({ id: "nexus-chat", surface: "user-app", releaseState: "released" })).toMatchObject({
+      surface: "user-app", releaseState: "released",
     });
   });
 

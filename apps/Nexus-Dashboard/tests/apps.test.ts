@@ -9,7 +9,16 @@ import {
 } from "../src/apps";
 
 const AUTH = "auth.tnhc.dev";
+const RELEASED = {
+  surface: "user-app" as const,
+  releaseState: "released" as const,
+  maturity: "stable" as const,
+  visibility: "default" as const,
+  reviewStatus: "approved" as const,
+};
 const EXPLORE = {
+  surface: "user-app" as const,
+  releaseState: "released" as const,
   primaryShelf: "explore",
   secondaryShelves: [],
   audiences: [],
@@ -38,6 +47,7 @@ const TOOLS = {
       registrationStatus: "active",
     },
     {
+      ...RELEASED,
       id: "nexus-chat",
       name: "Nexus Chat",
       description: "Chat",
@@ -58,43 +68,16 @@ const TOOLS = {
 describe("app grid entries", () => {
   it("projects the shared Cloud release fixture without losing state", () => {
     const entries = toAppEntries(buildCatalogReleaseFixture(), AUTH);
-    expect(entries.find((entry) => entry.id === "nexus-calendar")).toMatchObject({
-      path: "/calendar",
-      primaryShelf: "everyday",
-      reviewStatus: "approved",
-      delivery: "proxied-app",
-    });
-    expect(entries.find((entry) => entry.id === "nexus-design")).toMatchObject({
-      primaryShelf: "create",
-      reviewStatus: "approved",
-    });
-    expect(entries.find((entry) => entry.id === "nexus-forge")).toMatchObject({
-      primaryShelf: "develop",
-      reviewStatus: "approved",
-    });
-    expect(entries.find((entry) => entry.id === "nexus-cloud")).toMatchObject({
-      primaryShelf: "operate",
-      delivery: "shell-native",
-    });
-    expect(entries.find((entry) => entry.id === "nexus-experimental")).toMatchObject({
-      primaryShelf: "explore",
-      reviewStatus: "pending",
-    });
-    expect(entries.find((entry) => entry.id === "nexus-video")).toMatchObject({
-      primaryShelf: "create",
-      health: "offline",
-    });
-    expect(entries.find((entry) => entry.id === "legacy-notes")).toMatchObject({
-      primaryShelf: "explore",
-      reviewStatus: "pending",
-    });
+    expect(entries.map((entry) => entry.id)).toEqual(["nexus-email"]);
+    expect(entries[0]).toMatchObject({ surface: "user-app", releaseState: "released" });
   });
 
-  it("normalizes catalog entries and old tools into stable placement fields", () => {
+  it("keeps approved placement and excludes old tools", () => {
     const entries = toAppEntries(
       {
         apps: [
           {
+            ...RELEASED,
             id: "approved",
             name: "Approved",
             publicUrl: "https://approved.example",
@@ -109,6 +92,7 @@ describe("app grid entries", () => {
           },
           { id: "old", name: "Old", publicUrl: "https://old.example", health: "offline" },
           {
+            ...RELEASED,
             id: "hidden",
             name: "Hidden",
             publicUrl: "https://hidden.example",
@@ -119,7 +103,7 @@ describe("app grid entries", () => {
       },
       AUTH,
     );
-    expect(entries.map((entry) => entry.id)).toEqual(["approved", "old"]);
+    expect(entries.map((entry) => entry.id)).toEqual(["approved"]);
     expect(entries[0]).toMatchObject({
       primaryShelf: "work",
       secondaryShelves: ["everyday"],
@@ -129,22 +113,13 @@ describe("app grid entries", () => {
       visibility: "restricted",
       reviewStatus: "approved",
     });
-    expect(entries[1]).toMatchObject({
-      primaryShelf: "explore",
-      secondaryShelves: [],
-      audiences: [],
-      capabilities: [],
-      maturity: "experimental",
-      visibility: "discoverable",
-      reviewStatus: "pending",
-      health: "offline",
-    });
   });
   it("keeps Calendar's shell path separate from its proxied delivery origin", () => {
     const entries = toAppEntries(
       {
         tools: [
           {
+            ...RELEASED,
             id: "nexus-calendar",
             name: "Nexus Calendar",
             description: "Shared calendars",
@@ -165,11 +140,13 @@ describe("app grid entries", () => {
     });
   });
 
-  it("uses an explicit shell-native delivery for Cloud", () => {
+  it("does not project Cloud's admin console", () => {
     const entries = toAppEntries(
       {
         tools: [
           {
+            ...RELEASED,
+            surface: "admin-console",
             id: "nexus-cloud",
             name: "Nexus Cloud",
             description: "Control panel",
@@ -183,10 +160,10 @@ describe("app grid entries", () => {
       AUTH,
     );
 
-    expect(entries[0]).toMatchObject({ path: "/cloud", delivery: "shell-native" });
+    expect(entries).toEqual([]);
   });
 
-  it("normalizes a legacy absolute URL to framed without changing its shell path", () => {
+  it("does not project a legacy absolute URL without release metadata", () => {
     const entries = toAppEntries(
       {
         tools: [
@@ -203,16 +180,12 @@ describe("app grid entries", () => {
       AUTH,
     );
 
-    expect(entries[0]).toMatchObject({
-      path: "/legacy",
-      publicUrl: "https://legacy.tnhc.dev",
-      delivery: "framed",
-    });
+    expect(entries).toEqual([]);
   });
 
   it("keeps only tools a user can actually open", () => {
     const entries = toAppEntries(TOOLS, AUTH);
-    expect(entries.map((e) => e.id).sort()).toEqual(["nexus-chat", "nexus-cloud"]);
+    expect(entries.map((e) => e.id)).toEqual(["nexus-chat"]);
   });
 
   it("drops the auth host — it is the sign-in provider, not a destination", () => {
@@ -223,22 +196,22 @@ describe("app grid entries", () => {
     expect(toAppEntries(TOOLS, AUTH).some((e) => e.id === "nexus-video")).toBe(false);
   });
 
-  it("carries health through so a down app shows as down rather than a dead link", () => {
+  it("drops an offline app rather than offering a dead link", () => {
     const entries = toAppEntries(
       {
-        tools: [{ id: "x", name: "X", publicUrl: "https://x.tnhc.dev", health: "offline" }],
+        tools: [{ ...RELEASED, id: "x", name: "X", publicUrl: "https://x.tnhc.dev", health: "offline" }],
       },
       AUTH,
     );
-    expect(entries[0]!.health).toBe("offline");
+    expect(entries).toEqual([]);
   });
 
   it("sorts by name so the grid does not reshuffle between polls", () => {
     const entries = toAppEntries(
       {
         tools: [
-          { id: "b", name: "Zeta", publicUrl: "https://z.tnhc.dev", health: "healthy" },
-          { id: "a", name: "Alpha", publicUrl: "https://a.tnhc.dev", health: "healthy" },
+          { ...RELEASED, id: "b", name: "Zeta", publicUrl: "https://z.tnhc.dev", health: "healthy" },
+          { ...RELEASED, id: "a", name: "Alpha", publicUrl: "https://a.tnhc.dev", health: "healthy" },
         ],
       },
       AUTH,
@@ -249,7 +222,7 @@ describe("app grid entries", () => {
   it("falls back to the id when a tool has no name", () => {
     const entries = toAppEntries(
       {
-        tools: [{ id: "nexus-thing", publicUrl: "https://t.tnhc.dev", health: "healthy" }],
+        tools: [{ ...RELEASED, id: "nexus-thing", publicUrl: "https://t.tnhc.dev", health: "healthy" }],
       },
       AUTH,
     );
@@ -268,18 +241,22 @@ describe("the dashboard does not list itself", () => {
   const payload = {
     tools: [
       {
+        ...RELEASED,
         id: "nexus-dashboard",
         name: "Nexus Dashboard",
         publicUrl: "https://app.tnhc.dev",
         health: "healthy",
       },
       {
+        ...RELEASED,
         id: "nexus-draw",
         name: "Nexus-Draw",
         publicUrl: "https://draw.tnhc.dev",
         health: "healthy",
       },
       {
+        ...RELEASED,
+        surface: "platform-service",
         id: "nexus-auth",
         name: "Nexus Auth",
         publicUrl: "https://auth.tnhc.dev",
@@ -308,6 +285,8 @@ describe("explicit delivery", () => {
   const payload = {
     tools: [
       {
+        ...RELEASED,
+        surface: "admin-console",
         id: "nexus-cloud",
         name: "Nexus Cloud",
         description: "Control panel",
@@ -317,6 +296,7 @@ describe("explicit delivery", () => {
         health: "healthy",
       },
       {
+        ...RELEASED,
         id: "nexus-draw",
         name: "Nexus-Draw",
         publicUrl: "https://draw.tnhc.dev",
@@ -327,12 +307,9 @@ describe("explicit delivery", () => {
     ],
   };
 
-  it("uses Cloud's explicit shell-native route", () => {
+  it("does not put Cloud's shell-native console in the launcher", () => {
     const entries = toAppEntries(payload, AUTH, "app.tnhc.dev");
-    expect(entries.find((e) => e.id === "nexus-cloud")).toMatchObject({
-      path: "/cloud",
-      delivery: "shell-native",
-    });
+    expect(entries.find((e) => e.id === "nexus-cloud")).toBeUndefined();
   });
 
   it("keeps a framed app origin separate from its shell path", () => {
@@ -346,7 +323,7 @@ describe("explicit delivery", () => {
 
   it("does not infer proxied delivery from a public origin", () => {
     const entries = toAppEntries(
-      { tools: [{ id: "nexus-legacy", publicUrl: "https://legacy.tnhc.dev", health: "healthy" }] },
+      { tools: [{ ...RELEASED, id: "nexus-legacy", publicUrl: "https://legacy.tnhc.dev", health: "healthy" }] },
       AUTH,
     );
     expect(entries[0]?.delivery).toBe("framed");
@@ -361,12 +338,14 @@ describe("one tile per destination", () => {
       {
         tools: [
           {
+            ...RELEASED,
             id: "nexus-draw",
             name: "Nexus-Draw",
             publicUrl: "https://draw.tnhc.dev",
             health: "healthy",
           },
           {
+            ...RELEASED,
             id: "nexus-draw-site",
             name: "Nexus-Draw (site)",
             publicUrl: "https://draw.tnhc.dev",
@@ -507,9 +486,9 @@ describe("flat app paths", () => {
     expect(entries.find((e) => e.id === "nexus-chat")!.path).toBe("/chat");
   });
 
-  it("keeps Cloud's console on its shell-native path", () => {
+  it("omits Cloud's console from the launcher", () => {
     const entries = toAppEntries(TOOLS, AUTH);
-    expect(entries.find((e) => e.id === "nexus-cloud")!.path).toBe("/cloud");
+    expect(entries.find((e) => e.id === "nexus-cloud")).toBeUndefined();
   });
 
   it("dedupes a registry app that lands on a shell-native path", () => {

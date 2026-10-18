@@ -1,4 +1,4 @@
-import type { AppEntry } from "../api";
+import type { AppEntry, CatalogReleaseState } from "../api";
 
 export const CATALOG_SHELVES = ["everyday", "work", "create", "develop", "operate", "personal", "explore"] as const;
 export type CatalogShelf = typeof CATALOG_SHELVES[number];
@@ -26,16 +26,14 @@ export function normalizeCatalogEntry(raw: unknown): AppEntry {
   const maturity: CatalogMaturity = source.maturity === "stable" || source.maturity === "preview" ? source.maturity : "experimental";
   const visibility: CatalogVisibility = source.visibility === "default" || source.visibility === "restricted" || source.visibility === "hidden" ? source.visibility : "discoverable";
   const reviewStatus: CatalogReviewStatus = source.reviewStatus === "approved" || source.reviewStatus === "deferred" || source.reviewStatus === "rejected" ? source.reviewStatus : "pending";
-  const inferredSurface: CatalogSurface = id === "nexus-auth"
-    ? "platform-service"
-    : id === "nexus-cloud"
-      ? "admin-console"
-      : id === "nexus-terminal" || id === "nexus-forge" || id === "nexus-deploy"
-        ? "developer-tool"
-        : "user-app";
+  // Missing wire metadata cannot turn a legacy record into a released app.
+  const inferredSurface: CatalogSurface = "platform-service";
   const surface: CatalogSurface = source.surface === "admin-console" || source.surface === "platform-service" || source.surface === "developer-tool" || source.surface === "user-app"
     ? source.surface
     : inferredSurface;
+  const releaseState: CatalogReleaseState = source.releaseState === "released" || source.releaseState === "retired"
+    ? source.releaseState
+    : "staged";
   const delivery = source.delivery === "shell-native" || source.delivery === "proxied-app" || source.delivery === "framed" || source.delivery === "external" ? source.delivery : "framed";
   return {
     id,
@@ -53,6 +51,7 @@ export function normalizeCatalogEntry(raw: unknown): AppEntry {
     visibility,
     reviewStatus,
     surface,
+    releaseState,
   };
 }
 

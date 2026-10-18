@@ -16,6 +16,7 @@ export type CatalogMaturity = "stable" | "preview" | "experimental";
 export type CatalogVisibility = "default" | "discoverable" | "restricted" | "hidden";
 export type CatalogReviewStatus = "approved" | "pending" | "deferred" | "rejected";
 export type CatalogSurface = "user-app" | "admin-console" | "platform-service" | "developer-tool";
+export type CatalogReleaseState = "staged" | "released" | "retired";
 
 export type CatalogPreferences = {
   pinnedIds: string[];
@@ -45,7 +46,8 @@ export type AppEntry = {
   maturity?: CatalogMaturity;
   visibility?: CatalogVisibility;
   reviewStatus?: CatalogReviewStatus;
-  surface?: CatalogSurface;
+  surface: CatalogSurface;
+  releaseState: CatalogReleaseState;
 };
 
 export type Me = { id: string; username: string; email: string; role: string };
@@ -119,6 +121,7 @@ type WireAppEntry = {
   visibility?: unknown;
   reviewStatus?: unknown;
   surface?: unknown;
+  releaseState?: unknown;
 };
 
 function pathFor(app: WireAppEntry): string {

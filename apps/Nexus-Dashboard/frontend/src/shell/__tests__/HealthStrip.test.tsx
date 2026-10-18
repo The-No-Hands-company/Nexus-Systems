@@ -5,7 +5,7 @@ import HealthStrip from "../HealthStrip";
 import type { AppEntry } from "../../api";
 
 function app(id: string, health: AppEntry["health"]): AppEntry {
-  return { id, name: id, description: "", path: `/${id}`, delivery: "framed", health };
+  return { id, name: id, description: "", path: `/${id}`, delivery: "framed", health, surface: "user-app", releaseState: "released" };
 }
 
 describe("HealthStrip", () => {

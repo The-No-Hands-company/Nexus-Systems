@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { mergeApps, shellNativeEntries, toAppEntries } from "./apps";
+import { isReleasedUserApp, mergeApps, shellNativeEntries, toAppEntries } from "./apps";
 import { callerIdentity, isAdminRole } from "./auth";
 import { cloudBaseUrl, cloudHeaders } from "./cloud";
 import { listDevTools, runDevTool } from "./devtools";
@@ -325,9 +325,7 @@ async function fetchApps(req: Request): Promise<Response> {
     let res = await fetch(`${cloudBase}/api/v1/catalog`, options);
     if (res.status === 404) res = await fetch(`${cloudBase}/api/v1/tools`, options);
     if (!res.ok) return Response.json({ apps: native });
-    const registry = toAppEntries(await res.json(), AUTH_HOST, SELF_HOST).filter(
-      (entry) => includeTerminal || entry.id !== "nexus-terminal",
-    );
+    const registry = toAppEntries(await res.json(), AUTH_HOST, SELF_HOST).filter(isReleasedUserApp);
     return Response.json({ apps: mergeApps(registry, native) });
   } catch {
     // Cloud being down must degrade to the shell's own views, not a broken
