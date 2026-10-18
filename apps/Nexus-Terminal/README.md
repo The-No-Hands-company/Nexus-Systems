@@ -23,6 +23,7 @@ healthy and registers with Cloud, but every shell attach returns `403`.
 |--------|------|---------|
 | GET | /health | Health check |
 | GET | /api/v1/status | Service status and contracts |
+| GET | /api/v1/terminal/contract | Versioned Terminal route and access contract |
 | WebSocket | `/api/v1/terminal/attach?cols=80&rows=24` | Attach a new host shell |
 | GET | `/api/v1/terminal/audit` | List recent audited shell sessions |
 

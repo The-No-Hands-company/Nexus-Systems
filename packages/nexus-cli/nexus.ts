@@ -88,6 +88,11 @@ const commands: Record<string, { desc: string; usage: string; run: CommandHandle
     usage: "nexus api",
     run: cmdApiContract,
   },
+  terminal: {
+    desc: "Read audited Nexus Terminal sessions",
+    usage: "nexus terminal audit",
+    run: cmdTerminal,
+  },
   knowledge: {
     desc: "Search the ecosystem-grounded Nexus AI knowledge index",
     usage: "nexus knowledge [query]",
@@ -410,6 +415,31 @@ async function cmdApiContract() {
     const access = route.access === "operator" ? color("operator", YELLOW) : color("public", GREEN);
     console.log(`  ${String(route.method).padEnd(6)} ${String(route.path).padEnd(38)} ${access}`);
   }
+}
+
+async function cmdTerminal(args: string[]) {
+  if (args[0] !== "audit") {
+    console.log(color("Usage: nexus terminal audit", YELLOW));
+    return;
+  }
+  const cookie = process.env.NEXUS_AUTH_COOKIE?.trim();
+  if (!cookie) {
+    console.log(color("NEXUS_AUTH_COOKIE is required for the Terminal audit read", YELLOW));
+    return;
+  }
+  const base = (process.env.NEXUS_TERMINAL_URL || "http://localhost:3110").trim().replace(/\/$/, "");
+  const payload = await fetchJson(`${base}/api/v1/terminal/audit`, { headers: { cookie } });
+  if (!payload || !Array.isArray(payload.sessions)) {
+    console.log(color("Nexus Terminal audit unavailable — check NEXUS_TERMINAL_URL and Auth session", RED));
+    return;
+  }
+  console.log(BANNER);
+  console.log(color("Nexus Terminal Audit\n", CYAN));
+  for (const session of payload.sessions as Array<Record<string, unknown>>) {
+    console.log(`  ${bold(String(session.id || "unknown"))} ${DIM}${String(session.subject || "unknown subject")}${RESET}`);
+    console.log(`  started ${String(session.started_at || "unknown")} · ended ${String(session.ended_at || "active")} · exit ${String(session.exit_code ?? "—")}`);
+  }
+  console.log(`\n  ${(payload.sessions as unknown[]).length} audited session${(payload.sessions as unknown[]).length === 1 ? "" : "s"}`);
 }
 
 async function cmdKnowledge(args: string[]) {

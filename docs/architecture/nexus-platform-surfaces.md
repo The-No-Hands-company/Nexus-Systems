@@ -58,9 +58,18 @@ shown only where the caller's role permits them.
   turning them into globally approved applications.
 - `/api/v1/auth/preferences/catalog` is the self-scoped account preference
   contract for pins, recents, and preferred shelf. It changes presentation only.
-- Dashboard `/ipa/apps` is the browser-facing projection. It combines Cloud's
+- Dashboard `/apps` is the browser-facing projection. It combines Cloud's
   catalog with shell-native Mail and Terminal entries and never exposes Cloud
   credentials to the browser.
+- AI Hub `/api/v1/knowledge` is the ecosystem-grounded retrieval contract. It
+  carries source and trust metadata and falls back to its local platform index
+  when Cloud catalog reads are unavailable.
+- Nexus API `/api/v1/contract` is the versioned service manifest for clients
+  that need the stable API boundary. It describes authentication and routes;
+  it does not grant access by itself.
+- Terminal `/api/v1/terminal/contract` is a separate guarded-shell manifest.
+  It is public metadata, while attach and audit remain founder/admin-only and
+  the shell stays disabled by default.
 
 ## Nexus AI starting point
 

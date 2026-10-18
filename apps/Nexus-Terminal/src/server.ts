@@ -4,6 +4,7 @@ import { NexusDiscovery } from "../../../packages/nexus-discovery/src/index"; im
 import { spawnShell, getSession, sessionCount, reapIdle, killAll } from "./pty";
 import { callerIdentity, canUseTerminal, terminalEnabled } from "./auth";
 import { TerminalAudit } from "./audit";
+import { buildTerminalContract } from "./terminal-contract";
 
 /**
  * What travels with an upgraded socket.
@@ -92,6 +93,10 @@ export async function createServer(options: { auditPath?: string } = {}) { const
       },
     },
     async fetch(request, srv) { const url = new URL(request.url); const path = url.pathname || "";
+
+    if (request.method === "GET" && path === "/api/v1/terminal/contract") {
+      return json(buildTerminalContract(), 200);
+    }
 
     // ── The shell ────────────────────────────────────────────────────────
     //

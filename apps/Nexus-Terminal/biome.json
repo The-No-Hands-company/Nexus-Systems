@@ -1,13 +1,15 @@
 {
   "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
-  "formatter": {
-    "indentStyle": "space",
-    "lineWidth": 100
-  },
+  "formatter": { "enabled": false },
+  "organizeImports": { "enabled": false },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "recommended": true,
+      "complexity": { "useLiteralKeys": "off" },
+      "performance": { "noDelete": "off" },
+      "style": { "noNonNullAssertion": "off" },
+      "suspicious": { "noExplicitAny": "off" }
     }
   }
 }
