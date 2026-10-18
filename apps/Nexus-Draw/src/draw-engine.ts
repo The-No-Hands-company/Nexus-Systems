@@ -2,19 +2,47 @@ import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 
 export interface Whiteboard {
-  id: string; name: string; description: string;
+  id: string;
+  name: string;
+  description: string;
   ownerSubject: string;
-  width: number; height: number; background: string; isPublic: boolean;
-  defaultStyleMode: "clean" | "sketch"; gridSnap: boolean;
-  elements: unknown[]; collaborators: string[];
-  createdAt: string; updatedAt: string;
+  width: number;
+  height: number;
+  background: string;
+  isPublic: boolean;
+  defaultStyleMode: "clean" | "sketch";
+  gridSnap: boolean;
+  elements: unknown[];
+  collaborators: string[];
+  createdAt: string;
+  updatedAt: string;
 }
+
+type BoardRow = {
+  id: string;
+  name: string;
+  description?: string | null;
+  owner_subject?: string | null;
+  width?: number | null;
+  height?: number | null;
+  background?: string | null;
+  is_public?: number | null;
+  default_style_mode?: "clean" | "sketch" | null;
+  grid_snap?: number | null;
+  elements: string;
+  collaborators: string;
+  created_at: string;
+  updated_at: string;
+  [key: string]: unknown;
+};
 
 function migrate(db: Database): void {
   db.exec(`CREATE TABLE IF NOT EXISTS boards (
     id TEXT PRIMARY KEY, name TEXT, elements TEXT DEFAULT '[]',
     collaborators TEXT DEFAULT '[]', created_at TEXT, updated_at TEXT)`);
-  const cols = new Set((db.prepare("PRAGMA table_info(boards)").all() as any[]).map((c) => c.name));
+  const cols = new Set(
+    (db.prepare("PRAGMA table_info(boards)").all() as Array<{ name: string }>).map((c) => c.name),
+  );
   const add = (name: string, decl: string) => {
     if (!cols.has(name)) db.exec(`ALTER TABLE boards ADD COLUMN ${name} ${decl}`);
   };
@@ -30,40 +58,95 @@ function migrate(db: Database): void {
   db.exec("CREATE INDEX IF NOT EXISTS idx_boards_owner ON boards(owner_subject)");
 }
 
-function rowToBoard(r: any): Whiteboard {
+function rowToBoard(r: BoardRow): Whiteboard {
   return {
-    id: r.id, name: r.name, description: r.description ?? "",
+    id: r.id,
+    name: r.name,
+    description: r.description ?? "",
     ownerSubject: r.owner_subject ?? "",
-    width: r.width ?? 1920, height: r.height ?? 1080,
-    background: r.background ?? "#1a1a2e", isPublic: !!r.is_public,
-    defaultStyleMode: r.default_style_mode ?? "clean", gridSnap: !!r.grid_snap,
-    elements: JSON.parse(r.elements), collaborators: JSON.parse(r.collaborators),
-    createdAt: r.created_at, updatedAt: r.updated_at,
+    width: r.width ?? 1920,
+    height: r.height ?? 1080,
+    background: r.background ?? "#1a1a2e",
+    isPublic: !!r.is_public,
+    defaultStyleMode: r.default_style_mode ?? "clean",
+    gridSnap: !!r.grid_snap,
+    elements: JSON.parse(r.elements),
+    collaborators: JSON.parse(r.collaborators),
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
   };
 }
 
 export class DrawEngine {
   db: Database;
-  constructor(p = ":memory:") { this.db = new Database(p); migrate(this.db); }
+  constructor(p = ":memory:") {
+    this.db = new Database(p);
+    migrate(this.db);
+  }
 
   createBoard(name: string, ownerSubject: string): Whiteboard {
     const now = new Date().toISOString();
-    const b: Whiteboard = { id: randomUUID(), name, description: "", ownerSubject, width: 1920, height: 1080, background: "#1a1a2e", isPublic: false, defaultStyleMode: "clean", gridSnap: false, elements: [], collaborators: [], createdAt: now, updatedAt: now };
-    this.db.prepare("INSERT INTO boards (id,name,description,owner_subject,width,height,background,is_public,default_style_mode,grid_snap,elements,collaborators,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-      .run(b.id, b.name, b.description, b.ownerSubject, b.width, b.height, b.background, b.isPublic ? 1 : 0, b.defaultStyleMode, b.gridSnap ? 1 : 0, JSON.stringify(b.elements), JSON.stringify(b.collaborators), b.createdAt, b.updatedAt);
+    const b: Whiteboard = {
+      id: randomUUID(),
+      name,
+      description: "",
+      ownerSubject,
+      width: 1920,
+      height: 1080,
+      background: "#1a1a2e",
+      isPublic: false,
+      defaultStyleMode: "clean",
+      gridSnap: false,
+      elements: [],
+      collaborators: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.db
+      .prepare(
+        "INSERT INTO boards (id,name,description,owner_subject,width,height,background,is_public,default_style_mode,grid_snap,elements,collaborators,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      )
+      .run(
+        b.id,
+        b.name,
+        b.description,
+        b.ownerSubject,
+        b.width,
+        b.height,
+        b.background,
+        b.isPublic ? 1 : 0,
+        b.defaultStyleMode,
+        b.gridSnap ? 1 : 0,
+        JSON.stringify(b.elements),
+        JSON.stringify(b.collaborators),
+        b.createdAt,
+        b.updatedAt,
+      );
     return b;
   }
 
   listBoards(ownerSubject: string): Whiteboard[] {
-    return (this.db.prepare("SELECT * FROM boards WHERE owner_subject = ? OR is_public = 1 ORDER BY updated_at DESC").all(ownerSubject) as any[]).map(rowToBoard);
+    return (
+      this.db
+        .prepare(
+          "SELECT * FROM boards WHERE owner_subject = ? OR is_public = 1 ORDER BY updated_at DESC",
+        )
+        .all(ownerSubject) as BoardRow[]
+    ).map(rowToBoard);
   }
 
   getBoard(id: string): Whiteboard | undefined {
-    const r = this.db.prepare("SELECT * FROM boards WHERE id = ?").get(id) as any | null;
+    const r = this.db.prepare("SELECT * FROM boards WHERE id = ?").get(id) as BoardRow | null;
     return r ? rowToBoard(r) : undefined;
   }
 
-  updateBoardMeta(id: string, ownerSubject: string, meta: Partial<Omit<Whiteboard, "id" | "ownerSubject" | "createdAt" | "elements" | "collaborators">>): boolean {
+  updateBoardMeta(
+    id: string,
+    ownerSubject: string,
+    meta: Partial<
+      Omit<Whiteboard, "id" | "ownerSubject" | "createdAt" | "elements" | "collaborators">
+    >,
+  ): boolean {
     const fields: Record<string, SQLQueryBindings> = {};
     if (meta.name !== undefined) fields.name = meta.name;
     if (meta.description !== undefined) fields.description = meta.description;
@@ -74,21 +157,29 @@ export class DrawEngine {
     if (meta.defaultStyleMode !== undefined) fields.default_style_mode = meta.defaultStyleMode;
     if (meta.gridSnap !== undefined) fields.grid_snap = meta.gridSnap ? 1 : 0;
     const keys = Object.keys(fields);
-    if (keys.length === 0) return this.db.prepare("SELECT id FROM boards WHERE id = ? AND owner_subject = ?").get(id, ownerSubject) !== null;
+    if (keys.length === 0)
+      return (
+        this.db
+          .prepare("SELECT id FROM boards WHERE id = ? AND owner_subject = ?")
+          .get(id, ownerSubject) !== null
+      );
     fields.updated_at = new Date().toISOString();
     keys.push("updated_at");
     const sql = `UPDATE boards SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ? AND owner_subject = ?`;
-    const res = this.db.prepare(sql).run(...keys.map((k) => fields[k]!), id, ownerSubject);
+    const res = this.db.prepare(sql).run(...keys.map((k) => fields[k] ?? null), id, ownerSubject);
     return res.changes > 0;
   }
 
   deleteBoard(id: string, ownerSubject: string): boolean {
-    const res = this.db.prepare("DELETE FROM boards WHERE id = ? AND owner_subject = ?").run(id, ownerSubject);
+    const res = this.db
+      .prepare("DELETE FROM boards WHERE id = ? AND owner_subject = ?")
+      .run(id, ownerSubject);
     return res.changes > 0;
   }
 
   updateElements(id: string, elements: unknown[]): void {
-    this.db.prepare("UPDATE boards SET elements = ?, updated_at = ? WHERE id = ?")
+    this.db
+      .prepare("UPDATE boards SET elements = ?, updated_at = ? WHERE id = ?")
       .run(JSON.stringify(elements), new Date().toISOString(), id);
   }
 }

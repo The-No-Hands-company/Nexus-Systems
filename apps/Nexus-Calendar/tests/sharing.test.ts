@@ -35,19 +35,29 @@ describe("nexus-calendar internal event sharing", () => {
   }
 
   async function createFor(subject: string, title: string): Promise<Record<string, unknown>> {
-    const response = await fetch(`${base}/api/v1/calendar/events`, as(subject, {
-      method: "POST",
-      body: JSON.stringify({ title, ...SEPT }),
-    }));
+    const response = await fetch(
+      `${base}/api/v1/calendar/events`,
+      as(subject, {
+        method: "POST",
+        body: JSON.stringify({ title, ...SEPT }),
+      }),
+    );
     expect(response.status).toBe(201);
-    return await response.json() as Record<string, unknown>;
+    return (await response.json()) as Record<string, unknown>;
   }
 
-  async function grant(eventId: string, subject: string, permission: "viewer" | "editor"): Promise<Response> {
-    return fetch(`${base}/api/v1/calendar/events/${eventId}/shares/${subject}`, as(ALICE, {
-      method: "PUT",
-      body: JSON.stringify({ permission }),
-    }));
+  async function grant(
+    eventId: string,
+    subject: string,
+    permission: "viewer" | "editor",
+  ): Promise<Response> {
+    return fetch(
+      `${base}/api/v1/calendar/events/${eventId}/shares/${subject}`,
+      as(ALICE, {
+        method: "PUT",
+        body: JSON.stringify({ permission }),
+      }),
+    );
   }
 
   it("requires a trusted caller for share routes", async () => {
@@ -74,19 +84,31 @@ describe("nexus-calendar internal event sharing", () => {
 
     const viewerShares = await fetch(`${base}/api/v1/calendar/events/${eventId}/shares`, as(BOB));
     expect(viewerShares.status).toBe(404);
-    const editorGrant = await fetch(`${base}/api/v1/calendar/events/${eventId}/shares/${DAVE}`, as(CAROL, {
-      method: "PUT",
-      body: JSON.stringify({ permission: "viewer" }),
-    }));
+    const editorGrant = await fetch(
+      `${base}/api/v1/calendar/events/${eventId}/shares/${DAVE}`,
+      as(CAROL, {
+        method: "PUT",
+        body: JSON.stringify({ permission: "viewer" }),
+      }),
+    );
     expect(editorGrant.status).toBe(404);
-    const strangerRevoke = await fetch(`${base}/api/v1/calendar/events/${eventId}/shares/${BOB}`, as(DAVE, { method: "DELETE" }));
+    const strangerRevoke = await fetch(
+      `${base}/api/v1/calendar/events/${eventId}/shares/${BOB}`,
+      as(DAVE, { method: "DELETE" }),
+    );
     expect(strangerRevoke.status).toBe(404);
 
-    const revoke = await fetch(`${base}/api/v1/calendar/events/${eventId}/shares/${BOB}`, as(ALICE, { method: "DELETE" }));
+    const revoke = await fetch(
+      `${base}/api/v1/calendar/events/${eventId}/shares/${BOB}`,
+      as(ALICE, { method: "DELETE" }),
+    );
     expect(revoke.status).toBe(200);
     const revokedViewer = await fetch(`${base}/api/v1/calendar/events/${eventId}`, as(BOB));
     expect(revokedViewer.status).toBe(404);
-    const repeatedRevoke = await fetch(`${base}/api/v1/calendar/events/${eventId}/shares/${BOB}`, as(ALICE, { method: "DELETE" }));
+    const repeatedRevoke = await fetch(
+      `${base}/api/v1/calendar/events/${eventId}/shares/${BOB}`,
+      as(ALICE, { method: "DELETE" }),
+    );
     expect(repeatedRevoke.status).toBe(200);
   });
 
@@ -99,26 +121,43 @@ describe("nexus-calendar internal event sharing", () => {
     const viewerRead = await fetch(`${base}/api/v1/calendar/events/${eventId}`, as(BOB));
     expect(viewerRead.status).toBe(200);
     expect(await viewerRead.json()).toMatchObject({ access: "viewer" });
-    const viewerPatch = await fetch(`${base}/api/v1/calendar/events/${eventId}`, as(BOB, {
-      method: "PATCH", body: JSON.stringify({ title: "Viewer edit" }),
-    }));
+    const viewerPatch = await fetch(
+      `${base}/api/v1/calendar/events/${eventId}`,
+      as(BOB, {
+        method: "PATCH",
+        body: JSON.stringify({ title: "Viewer edit" }),
+      }),
+    );
     expect(viewerPatch.status).toBe(404);
-    const viewerDelete = await fetch(`${base}/api/v1/calendar/events/${eventId}`, as(BOB, { method: "DELETE" }));
+    const viewerDelete = await fetch(
+      `${base}/api/v1/calendar/events/${eventId}`,
+      as(BOB, { method: "DELETE" }),
+    );
     expect(viewerDelete.status).toBe(404);
 
     const editorRead = await fetch(`${base}/api/v1/calendar/events/${eventId}`, as(CAROL));
     expect(editorRead.status).toBe(200);
     expect(await editorRead.json()).toMatchObject({ access: "editor" });
-    const editorPatch = await fetch(`${base}/api/v1/calendar/events/${eventId}`, as(CAROL, {
-      method: "PATCH", body: JSON.stringify({ title: "Editor edit" }),
-    }));
+    const editorPatch = await fetch(
+      `${base}/api/v1/calendar/events/${eventId}`,
+      as(CAROL, {
+        method: "PATCH",
+        body: JSON.stringify({ title: "Editor edit" }),
+      }),
+    );
     expect(editorPatch.status).toBe(200);
-    const editorDelete = await fetch(`${base}/api/v1/calendar/events/${eventId}`, as(CAROL, { method: "DELETE" }));
+    const editorDelete = await fetch(
+      `${base}/api/v1/calendar/events/${eventId}`,
+      as(CAROL, { method: "DELETE" }),
+    );
     expect(editorDelete.status).toBe(404);
 
     const ownerRead = await fetch(`${base}/api/v1/calendar/events/${eventId}`, as(ALICE));
     expect(ownerRead.status).toBe(200);
-    const ownerDelete = await fetch(`${base}/api/v1/calendar/events/${eventId}`, as(ALICE, { method: "DELETE" }));
+    const ownerDelete = await fetch(
+      `${base}/api/v1/calendar/events/${eventId}`,
+      as(ALICE, { method: "DELETE" }),
+    );
     expect(ownerDelete.status).toBe(200);
 
     const strangerRead = await fetch(`${base}/api/v1/calendar/events/${eventId}`, as(DAVE));
@@ -133,28 +172,45 @@ describe("nexus-calendar internal event sharing", () => {
     await grant(sharedId, BOB, "viewer");
     await grant(sharedId, BOB, "editor");
 
-    const response = await fetch(`${base}/api/v1/calendar/events?from=2026-09-01&to=2026-09-02`, as(BOB));
+    const response = await fetch(
+      `${base}/api/v1/calendar/events?from=2026-09-01&to=2026-09-02`,
+      as(BOB),
+    );
     expect(response.status).toBe(200);
-    const body = await response.json() as { events: { id: string; access: string }[] };
+    const body = (await response.json()) as { events: { id: string; access: string }[] };
     expect(body.events.filter((event) => event.id === owned.id)).toHaveLength(1);
-    expect(body.events.filter((event) => event.id === sharedId)).toMatchObject([{ id: sharedId, access: "editor" }]);
+    expect(body.events.filter((event) => event.id === sharedId)).toMatchObject([
+      { id: sharedId, access: "editor" },
+    ]);
   });
 
   it("rejects owner self-sharing and malformed grant bodies", async () => {
     const event = await createFor(ALICE, "Grant validation");
     const eventId = event.id as string;
 
-    const selfShare = await fetch(`${base}/api/v1/calendar/events/${eventId}/shares/${ALICE}`, as(ALICE, {
-      method: "PUT", body: JSON.stringify({ permission: "viewer" }),
-    }));
+    const selfShare = await fetch(
+      `${base}/api/v1/calendar/events/${eventId}/shares/${ALICE}`,
+      as(ALICE, {
+        method: "PUT",
+        body: JSON.stringify({ permission: "viewer" }),
+      }),
+    );
     expect(selfShare.status).toBe(400);
-    const unknownField = await fetch(`${base}/api/v1/calendar/events/${eventId}/shares/${BOB}`, as(ALICE, {
-      method: "PUT", body: JSON.stringify({ permission: "viewer", extra: true }),
-    }));
+    const unknownField = await fetch(
+      `${base}/api/v1/calendar/events/${eventId}/shares/${BOB}`,
+      as(ALICE, {
+        method: "PUT",
+        body: JSON.stringify({ permission: "viewer", extra: true }),
+      }),
+    );
     expect(unknownField.status).toBe(400);
-    const invalidPermission = await fetch(`${base}/api/v1/calendar/events/${eventId}/shares/${BOB}`, as(ALICE, {
-      method: "PUT", body: JSON.stringify({ permission: "owner" }),
-    }));
+    const invalidPermission = await fetch(
+      `${base}/api/v1/calendar/events/${eventId}/shares/${BOB}`,
+      as(ALICE, {
+        method: "PUT",
+        body: JSON.stringify({ permission: "owner" }),
+      }),
+    );
     expect(invalidPermission.status).toBe(400);
   });
 });

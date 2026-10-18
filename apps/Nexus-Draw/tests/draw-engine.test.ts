@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { DrawEngine } from "../src/draw-engine";
 
 describe("DrawEngine board metadata", () => {
   let engine: DrawEngine;
-  beforeEach(() => { engine = new DrawEngine(":memory:"); });
+  beforeEach(() => {
+    engine = new DrawEngine(":memory:");
+  });
 
   it("createBoard fills metadata defaults", () => {
     const b = engine.createBoard("Hello", "user:alice");
@@ -22,18 +24,19 @@ describe("DrawEngine board metadata", () => {
     engine.createBoard("Bob private", "user:bob");
     const aliceBoards = engine.listBoards("user:alice");
     const bobBoards = engine.listBoards("user:bob");
-    expect(aliceBoards.map(b => b.name)).toContain("Alice private");
-    expect(aliceBoards.map(b => b.name)).toContain("Public");
-    expect(aliceBoards.map(b => b.name)).not.toContain("Bob private");
+    expect(aliceBoards.map((b) => b.name)).toContain("Alice private");
+    expect(aliceBoards.map((b) => b.name)).toContain("Public");
+    expect(aliceBoards.map((b) => b.name)).not.toContain("Bob private");
     // Bob sees only Public (owned by Alice but is_public=1)
-    expect(bobBoards.map(b => b.name)).toContain("Public");
-    expect(bobBoards.map(b => b.name)).not.toContain("Alice private");
+    expect(bobBoards.map((b) => b.name)).toContain("Public");
+    expect(bobBoards.map((b) => b.name)).not.toContain("Alice private");
   });
 
   it("updateBoardMeta patches only given fields and bumps updatedAt", () => {
     const b = engine.createBoard("Shapes", "user:alice");
     engine.updateBoardMeta(b.id, "user:alice", { gridSnap: true, background: "#0f0f0f" });
-    const after = engine.getBoard(b.id)!;
+    const after = engine.getBoard(b.id);
+    if (!after) throw new Error("updated board was not found");
     expect(after.gridSnap).toBe(true);
     expect(after.background).toBe("#0f0f0f");
     expect(after.name).toBe("Shapes"); // untouched
@@ -43,7 +46,7 @@ describe("DrawEngine board metadata", () => {
     const b = engine.createBoard("Private", "user:alice");
     const ok = engine.updateBoardMeta(b.id, "user:bob", { gridSnap: true });
     expect(ok).toBe(false);
-    expect(engine.getBoard(b.id)!.gridSnap).toBe(false);
+    expect(engine.getBoard(b.id)?.gridSnap).toBe(false);
   });
 
   it("deleteBoard removes the board", () => {
@@ -62,6 +65,6 @@ describe("DrawEngine board metadata", () => {
   it("elements survive create→updateElements→get round-trip", () => {
     const b = engine.createBoard("Doc", "user:alice");
     engine.updateElements(b.id, [{ id: "e1", order: 0 }]);
-    expect(engine.getBoard(b.id)!.elements).toEqual([{ id: "e1", order: 0 }]);
+    expect(engine.getBoard(b.id)?.elements).toEqual([{ id: "e1", order: 0 }]);
   });
 });

@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "bun:test";
 import { Database } from "bun:sqlite";
+import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,7 +8,9 @@ import { CalendarEngine } from "../src/calendar-engine";
 const cleanupPaths: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(cleanupPaths.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+  await Promise.all(
+    cleanupPaths.splice(0).map((path) => rm(path, { recursive: true, force: true })),
+  );
 });
 
 async function temporaryDatabasePath(): Promise<string> {
@@ -198,7 +200,7 @@ describe("CalendarEngine owned-event migration", () => {
       expect(engine.db.query("PRAGMA user_version").get()).toMatchObject({ user_version: 2 });
       engine.close();
     } finally {
-      if (previous === undefined) delete process.env.NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT;
+      if (previous === undefined) process.env.NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT = undefined;
       else process.env.NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT = previous;
     }
   });

@@ -1,25 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
 import * as decoding from "lib0/decoding";
 import * as encoding from "lib0/encoding";
 import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
 import { createServer } from "../src/server";
-import { tmpdir } from "node:os";
-import { randomUUID } from "node:crypto";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+type DrawServerHandle = Awaited<ReturnType<typeof createServer>>;
 
 describe("collab websocket", () => {
-  let server: any;
-  let close: any;
+  let server: DrawServerHandle["server"];
+  let close: DrawServerHandle["close"];
   let boardId: string;
 
   beforeEach(async () => {
     // A dedicated test port and private database keep this suite isolated from
     // the live nexus-draw service and real boards.
-    process.env["PORT"] = "43155";
-    process.env["NEXUS_DRAW_ENABLE_CLOUD_INTEGRATION"] = "false";
-    process.env["NEXUS_DRAW_DB"] = `${tmpdir()}/nexus-draw-collab-${randomUUID()}.sqlite`;
+    process.env.PORT = "43155";
+    process.env.NEXUS_DRAW_ENABLE_CLOUD_INTEGRATION = "false";
+    process.env.NEXUS_DRAW_DB = `${tmpdir()}/nexus-draw-collab-${randomUUID()}.sqlite`;
 
     const { server: s, close: c } = await createServer();
     server = s;

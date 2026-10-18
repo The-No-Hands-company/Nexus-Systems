@@ -21,16 +21,20 @@ describe("Calendar request validation", () => {
   it("rejects malformed and non-increasing event times", () => {
     expect(parseEventCreate({ ...event, startTime: "not-a-date" })).toMatchObject({ ok: false });
     expect(parseEventCreate({ ...event, startTime: "09/01/2026" })).toMatchObject({ ok: false });
-    expect(parseEventCreate({ ...event, startTime: "2026-02-29T10:00:00.000Z" })).toMatchObject({ ok: false });
+    expect(parseEventCreate({ ...event, startTime: "2026-02-29T10:00:00.000Z" })).toMatchObject({
+      ok: false,
+    });
     expect(parseEventCreate({ ...event, endTime: event.startTime })).toMatchObject({ ok: false });
   });
 
   it("normalizes accepted offset timestamps to UTC ISO strings", () => {
-    expect(parseEventCreate({
-      ...event,
-      startTime: "2026-09-01T10:00:00-05:00",
-      endTime: "2026-09-01T11:00:00-05:00",
-    })).toEqual({
+    expect(
+      parseEventCreate({
+        ...event,
+        startTime: "2026-09-01T10:00:00-05:00",
+        endTime: "2026-09-01T11:00:00-05:00",
+      }),
+    ).toEqual({
       ok: true,
       value: {
         ...event,
@@ -52,23 +56,35 @@ describe("Calendar request validation", () => {
   });
 
   it("rejects malformed and oversized date windows", () => {
-    expect(parseRange(new URL("http://calendar.test/events?from=nope&to=2026-09-01"))).toMatchObject({ ok: false });
-    expect(parseRange(new URL("http://calendar.test/events?from=2026-01-01&to=2027-02-02"))).toMatchObject({ ok: false });
+    expect(
+      parseRange(new URL("http://calendar.test/events?from=nope&to=2026-09-01")),
+    ).toMatchObject({ ok: false });
+    expect(
+      parseRange(new URL("http://calendar.test/events?from=2026-01-01&to=2027-02-02")),
+    ).toMatchObject({ ok: false });
   });
 
   it("treats a date-only `to` as the whole of that day", () => {
     // "1st to the 24th" includes the 24th. Mapping `to` to the start of the
     // 24th silently dropped every event on the last day of the window.
-    expect(parseRange(new URL("http://calendar.test/events?from=2026-09-01&to=2026-09-24"))).toEqual({
+    expect(
+      parseRange(new URL("http://calendar.test/events?from=2026-09-01&to=2026-09-24")),
+    ).toEqual({
       ok: true,
       value: { from: "2026-09-01T00:00:00.000Z", to: "2026-09-25T00:00:00.000Z" },
     });
-    expect(parseRange(new URL("http://calendar.test/events?from=2026-09-24&to=2026-09-24"))).toMatchObject({
+    expect(
+      parseRange(new URL("http://calendar.test/events?from=2026-09-24&to=2026-09-24")),
+    ).toMatchObject({
       ok: true,
       value: { to: "2026-09-25T00:00:00.000Z" },
     });
     // A full timestamp is an exact instant and is left alone.
-    expect(parseRange(new URL("http://calendar.test/events?from=2026-09-01T00:00:00Z&to=2026-09-24T12:00:00Z"))).toMatchObject({
+    expect(
+      parseRange(
+        new URL("http://calendar.test/events?from=2026-09-01T00:00:00Z&to=2026-09-24T12:00:00Z"),
+      ),
+    ).toMatchObject({
       ok: true,
       value: { to: "2026-09-24T12:00:00.000Z" },
     });

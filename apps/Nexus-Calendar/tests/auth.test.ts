@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "bun:test";
-import { generateKeyPairSync, createSign, randomUUID } from "node:crypto";
-import { resolveCaller, __resetAuthCacheForTest } from "../src/auth";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import { createSign, generateKeyPairSync, randomUUID } from "node:crypto";
+import { __resetAuthCacheForTest, resolveCaller } from "../src/auth";
 
 const AUDIENCE = "calendar.tnhc.dev";
 const SECRET = "s".repeat(64);
@@ -13,9 +13,16 @@ function b64url(input: Buffer | string): string {
 }
 
 /** Mints a token the way Auth does, with knobs for each thing that must fail. */
-function mintToken(over: {
-  sub?: string; aud?: string; exp?: number; alg?: string; kid?: string; tamper?: boolean;
-} = {}): string {
+function mintToken(
+  over: {
+    sub?: string;
+    aud?: string;
+    exp?: number;
+    alg?: string;
+    kid?: string;
+    tamper?: boolean;
+  } = {},
+): string {
   const header = { alg: over.alg ?? "RS256", kid: over.kid ?? KID, typ: "JWT" };
   // Mirrors buildIdentityClaims() in apps/Nexus-Auth/src/identity.ts. The
   // issuer and typ matter: Auth signs service tokens with the same key, so
@@ -37,7 +44,11 @@ function mintToken(over: {
   signer.update(signingInput);
   signer.end();
   let sig = signer.sign(privateKey);
-  if (over.tamper) sig = Buffer.concat([sig.subarray(0, sig.length - 1), Buffer.from([sig[sig.length - 1]! ^ 0xff])]);
+  if (over.tamper) {
+    const last = sig.at(-1);
+    if (last === undefined) throw new Error("signature was empty");
+    sig = Buffer.concat([sig.subarray(0, sig.length - 1), Buffer.from([last ^ 0xff])]);
+  }
   return `${signingInput}.${sig.toString("base64url")}`;
 }
 
@@ -51,7 +62,9 @@ beforeAll(() => {
     hostname: "127.0.0.1",
     fetch(req) {
       if (new URL(req.url).pathname === "/api/v1/auth/oauth/jwks") {
-        return Response.json({ keys: [{ kty: "RSA", use: "sig", alg: "RS256", kid: KID, n: jwk.n, e: jwk.e }] });
+        return Response.json({
+          keys: [{ kty: "RSA", use: "sig", alg: "RS256", kid: KID, n: jwk.n, e: jwk.e }],
+        });
       }
       return new Response("not found", { status: 404 });
     },
@@ -78,26 +91,38 @@ describe("the browser is never a source of identity", () => {
   });
 
   it("ignores x-nexus-subject with a wrong hop secret", async () => {
-    expect(await resolveCaller(req({
-      "x-nexus-subject": "usr-victim",
-      "x-nexus-dashboard-secret": "w".repeat(64),
-    }))).toBeNull();
+    expect(
+      await resolveCaller(
+        req({
+          "x-nexus-subject": "usr-victim",
+          "x-nexus-dashboard-secret": "w".repeat(64),
+        }),
+      ),
+    ).toBeNull();
   });
 
   it("ignores x-nexus-subject when the secret is a prefix of the real one", async () => {
-    expect(await resolveCaller(req({
-      "x-nexus-subject": "usr-victim",
-      "x-nexus-dashboard-secret": SECRET.slice(0, 32),
-    }))).toBeNull();
+    expect(
+      await resolveCaller(
+        req({
+          "x-nexus-subject": "usr-victim",
+          "x-nexus-dashboard-secret": SECRET.slice(0, 32),
+        }),
+      ),
+    ).toBeNull();
   });
 
   it("refuses the hop entirely when no secret is configured", async () => {
     // Otherwise an unset variable turns into "" and an attacker sending "" wins.
-    delete process.env.NEXUS_CALENDAR_DASHBOARD_SECRET;
-    expect(await resolveCaller(req({
-      "x-nexus-subject": "usr-victim",
-      "x-nexus-dashboard-secret": "",
-    }))).toBeNull();
+    process.env.NEXUS_CALENDAR_DASHBOARD_SECRET = undefined;
+    expect(
+      await resolveCaller(
+        req({
+          "x-nexus-subject": "usr-victim",
+          "x-nexus-dashboard-secret": "",
+        }),
+      ),
+    ).toBeNull();
   });
 
   it("returns null for a request carrying nothing", async () => {
@@ -107,18 +132,24 @@ describe("the browser is never a source of identity", () => {
 
 describe("the trusted Dashboard hop", () => {
   it("accepts a subject presented with the correct secret", async () => {
-    const who = await resolveCaller(req({
-      "x-nexus-subject": "usr-alice",
-      "x-nexus-dashboard-secret": SECRET,
-    }));
+    const who = await resolveCaller(
+      req({
+        "x-nexus-subject": "usr-alice",
+        "x-nexus-dashboard-secret": SECRET,
+      }),
+    );
     expect(who).toEqual({ subject: "usr-alice" });
   });
 
   it("rejects a blank subject even with the correct secret", async () => {
-    expect(await resolveCaller(req({
-      "x-nexus-subject": "   ",
-      "x-nexus-dashboard-secret": SECRET,
-    }))).toBeNull();
+    expect(
+      await resolveCaller(
+        req({
+          "x-nexus-subject": "   ",
+          "x-nexus-dashboard-secret": SECRET,
+        }),
+      ),
+    ).toBeNull();
   });
 });
 
@@ -129,13 +160,19 @@ describe("the proxy identity token", () => {
   });
 
   it("rejects a token minted for another audience", async () => {
-    expect(await resolveCaller(req({ "x-nexus-identity": mintToken({ aud: "chat.tnhc.dev" }) }))).toBeNull();
+    expect(
+      await resolveCaller(req({ "x-nexus-identity": mintToken({ aud: "chat.tnhc.dev" }) })),
+    ).toBeNull();
   });
 
   it("rejects an expired token", async () => {
-    expect(await resolveCaller(req({
-      "x-nexus-identity": mintToken({ exp: Math.floor(Date.now() / 1000) - 5 }),
-    }))).toBeNull();
+    expect(
+      await resolveCaller(
+        req({
+          "x-nexus-identity": mintToken({ exp: Math.floor(Date.now() / 1000) - 5 }),
+        }),
+      ),
+    ).toBeNull();
   });
 
   it("rejects alg:none — the classic downgrade", async () => {
@@ -143,15 +180,21 @@ describe("the proxy identity token", () => {
   });
 
   it("rejects a symmetric algorithm claim", async () => {
-    expect(await resolveCaller(req({ "x-nexus-identity": mintToken({ alg: "HS256" }) }))).toBeNull();
+    expect(
+      await resolveCaller(req({ "x-nexus-identity": mintToken({ alg: "HS256" }) })),
+    ).toBeNull();
   });
 
   it("rejects a tampered signature", async () => {
-    expect(await resolveCaller(req({ "x-nexus-identity": mintToken({ tamper: true }) }))).toBeNull();
+    expect(
+      await resolveCaller(req({ "x-nexus-identity": mintToken({ tamper: true }) })),
+    ).toBeNull();
   });
 
   it("rejects a token signed by a key the JWKS does not publish", async () => {
-    expect(await resolveCaller(req({ "x-nexus-identity": mintToken({ kid: "unknown-kid" }) }))).toBeNull();
+    expect(
+      await resolveCaller(req({ "x-nexus-identity": mintToken({ kid: "unknown-kid" }) })),
+    ).toBeNull();
   });
 
   it("rejects a service token aimed at this audience", async () => {
@@ -161,8 +204,14 @@ describe("the proxy identity token", () => {
     const now = Math.floor(Date.now() / 1000);
     const header = { alg: "RS256", kid: KID, typ: "JWT" };
     const payload = {
-      iss: "nexus-auth", sub: "usr-victim", aud: AUDIENCE,
-      scopes: ["service:read"], role: "service", iat: now, exp: now + 3600, jti: randomUUID(),
+      iss: "nexus-auth",
+      sub: "usr-victim",
+      aud: AUDIENCE,
+      scopes: ["service:read"],
+      role: "service",
+      iat: now,
+      exp: now + 3600,
+      jti: randomUUID(),
     };
     const signingInput = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(payload))}`;
     const signer = createSign("RSA-SHA256");

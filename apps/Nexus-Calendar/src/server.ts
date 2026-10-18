@@ -1,8 +1,14 @@
-import { calendarToolId } from "./contracts";
-import { startHeartbeat } from "./cloud";
-import { CalendarEngine, type EventCreate } from "./calendar-engine";
 import { resolveCaller } from "./auth";
-import { isEventId, parseEventCreate, parseEventPatch, parseEventShare, parseRange } from "./validation";
+import { CalendarEngine, type EventCreate } from "./calendar-engine";
+import { startHeartbeat } from "./cloud";
+import { calendarToolId } from "./contracts";
+import {
+  isEventId,
+  parseEventCreate,
+  parseEventPatch,
+  parseEventShare,
+  parseRange,
+} from "./validation";
 
 const PUBLIC_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 
@@ -24,7 +30,9 @@ function json(p: unknown, s = 200): Response {
 
 export async function createServer() {
   const port = Number(process.env.PORT || "3068");
-  const packageInfo = await Bun.file(new URL("../package.json", import.meta.url)).json() as { version?: unknown };
+  const packageInfo = (await Bun.file(new URL("../package.json", import.meta.url)).json()) as {
+    version?: unknown;
+  };
   const version = typeof packageInfo.version === "string" ? packageInfo.version : "unknown";
   // NEXUS_NEXUS_CALENDAR_BASE_URL is the doubled-prefix name the scaffolding
   // generated and deploy.sh has been setting. Both are read so renaming it in
@@ -51,55 +59,73 @@ export async function createServer() {
       const p = url.pathname;
 
       if (req.method === "GET" && p === "/health")
-        return json({ service, ready: true, status: "ok", version, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) });
+        return json({
+          service,
+          ready: true,
+          status: "ok",
+          version,
+          uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
+        });
 
       if (req.method === "GET" && p === "/api/v1/status")
-        return json({ service, ready: true, status: "ready", version, capabilities: ["calendar", "events"] });
+        return json({
+          service,
+          ready: true,
+          status: "ready",
+          version,
+          capabilities: ["calendar", "events"],
+        });
 
       const publicMatch = p.match(/^\/api\/v1\/calendar\/public\/([^/]+)$/);
       if (publicMatch) {
         if (req.method !== "GET") return json({ error: "method not allowed" }, 405);
-        const token = publicMatch[1]!;
+        const token = publicMatch[1];
+        if (!token) return json({ error: "not found" }, 404);
         if (!PUBLIC_TOKEN.test(token)) return json({ error: "not found" }, 404);
         const event = engine.getPublicEvent(token);
         return event ? json(event) : json({ error: "not found" }, 404);
       }
 
-      const isEventsRoute = p === "/api/v1/calendar/events"
-        || /^\/api\/v1\/calendar\/events\/[^/]+(?:\/shares(?:\/[^/]+)?|\/public-share)?$/.test(p);
+      const isEventsRoute =
+        p === "/api/v1/calendar/events" ||
+        /^\/api\/v1\/calendar\/events\/[^/]+(?:\/shares(?:\/[^/]+)?|\/public-share)?$/.test(p);
       const caller = isEventsRoute ? await resolveCaller(req) : null;
-      if (isEventsRoute && !caller) return json({ error: "not authenticated" }, 401);
+      if (!isEventsRoute) return json({ error: "not found" }, 404);
+      if (!caller) return json({ error: "not authenticated" }, 401);
+      const callerSubject = caller.subject;
 
       // List events by date range
       if (req.method === "GET" && p === "/api/v1/calendar/events") {
         const range = parseRange(url);
         if (!range.ok) return json({ error: range.error }, 400);
-        return json({ events: engine.listEvents(caller!.subject, range.value) });
+        return json({ events: engine.listEvents(callerSubject, range.value) });
       }
 
       // Create event
       if (req.method === "POST" && p === "/api/v1/calendar/events") {
         const input = parseEventCreate(await req.json().catch(() => null));
         if (!input.ok) return json({ error: input.error }, 400);
-        return json(engine.createEvent(caller!.subject, input.value), 201);
+        return json(engine.createEvent(callerSubject, input.value), 201);
       }
 
       const publicShareMatch = p.match(/^\/api\/v1\/calendar\/events\/([^/]+)\/public-share$/);
       if (publicShareMatch) {
         let id: string;
         try {
-          id = decodeURIComponent(publicShareMatch[1]!);
+          const rawId = publicShareMatch[1];
+          if (!rawId) return json({ error: "invalid event id" }, 400);
+          id = decodeURIComponent(rawId);
         } catch {
           return json({ error: "invalid event id" }, 400);
         }
         if (!isEventId(id)) return json({ error: "invalid event id" }, 400);
 
         if (req.method === "POST") {
-          const share = engine.createPublicShare(caller!.subject, id);
+          const share = engine.createPublicShare(callerSubject, id);
           return share ? json(share, 201) : json({ error: "not found" }, 404);
         }
         if (req.method === "DELETE") {
-          const deleted = engine.revokePublicShare(caller!.subject, id);
+          const deleted = engine.revokePublicShare(callerSubject, id);
           return deleted === undefined ? json({ error: "not found" }, 404) : json({ deleted });
         }
         return json({ error: "method not allowed" }, 405);
@@ -110,32 +136,39 @@ export async function createServer() {
       if (shareMatch) {
         let id: string;
         try {
-          id = decodeURIComponent(shareMatch[1]!);
+          const rawId = shareMatch[1];
+          if (!rawId) return json({ error: "invalid event id" }, 400);
+          id = decodeURIComponent(rawId);
         } catch {
           return json({ error: "invalid event id" }, 400);
         }
         if (!isEventId(id)) return json({ error: "invalid event id" }, 400);
 
         if (req.method === "GET" && shareMatch[2] === undefined) {
-          const shares = engine.listShares(caller!.subject, id);
+          const shares = engine.listShares(callerSubject, id);
           return shares ? json({ shares }) : json({ error: "not found" }, 404);
         }
 
         if ((req.method === "PUT" || req.method === "DELETE") && shareMatch[2] !== undefined) {
           let subject: string;
           try {
-            subject = decodeURIComponent(shareMatch[2]!).trim();
+            const rawSubject = shareMatch[2];
+            if (!rawSubject) return json({ error: "invalid share subject" }, 400);
+            subject = decodeURIComponent(rawSubject).trim();
           } catch {
             return json({ error: "invalid share subject" }, 400);
           }
           if (!subject) return json({ error: "invalid share subject" }, 400);
-          if (engine.listShares(caller!.subject, id) === undefined) return json({ error: "not found" }, 404);
-          if (req.method === "DELETE") return json({ deleted: engine.deleteShare(caller!.subject, id, subject) });
+          if (engine.listShares(callerSubject, id) === undefined)
+            return json({ error: "not found" }, 404);
+          if (req.method === "DELETE")
+            return json({ deleted: engine.deleteShare(callerSubject, id, subject) });
 
           const permission = parseEventShare(await req.json().catch(() => null));
           if (!permission.ok) return json({ error: permission.error }, 400);
-          if (subject === caller!.subject) return json({ error: "cannot share an event with its owner" }, 400);
-          const share = engine.upsertShare(caller!.subject, id, subject, permission.value);
+          if (subject === callerSubject)
+            return json({ error: "cannot share an event with its owner" }, 400);
+          const share = engine.upsertShare(callerSubject, id, subject, permission.value);
           return share ? json(share) : json({ error: "not found" }, 404);
         }
       }
@@ -145,19 +178,21 @@ export async function createServer() {
       if (evMatch) {
         let id: string;
         try {
-          id = decodeURIComponent(evMatch[1]!);
+          const rawId = evMatch[1];
+          if (!rawId) return json({ error: "invalid event id" }, 400);
+          id = decodeURIComponent(rawId);
         } catch {
           return json({ error: "invalid event id" }, 400);
         }
         if (!isEventId(id)) return json({ error: "invalid event id" }, 400);
         if (req.method === "GET") {
-          const ev = engine.getEvent(caller!.subject, id);
+          const ev = engine.getEvent(callerSubject, id);
           return ev ? json(ev) : json({ error: "not found" }, 404);
         }
         if (req.method === "PATCH") {
           const patch = parseEventPatch(await req.json().catch(() => null));
           if (!patch.ok) return json({ error: patch.error }, 400);
-          const existing = engine.getEvent(caller!.subject, id);
+          const existing = engine.getEvent(callerSubject, id);
           if (!existing) return json({ error: "not found" }, 404);
           const validMergedEvent = parseEventCreate({
             title: existing.title,
@@ -170,11 +205,17 @@ export async function createServer() {
             ...patch.value,
           });
           if (!validMergedEvent.ok) return json({ error: validMergedEvent.error }, 400);
-          const updated = engine.updateEvent(caller!.subject, id, patch.value as Partial<EventCreate>);
+          const updated = engine.updateEvent(
+            callerSubject,
+            id,
+            patch.value as Partial<EventCreate>,
+          );
           return updated ? json(updated) : json({ error: "not found" }, 404);
         }
         if (req.method === "DELETE") {
-          return engine.deleteEvent(caller!.subject, id) ? json({ deleted: true }) : json({ error: "not found" }, 404);
+          return engine.deleteEvent(callerSubject, id)
+            ? json({ deleted: true })
+            : json({ error: "not found" }, 404);
         }
       }
 

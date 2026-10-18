@@ -21,9 +21,9 @@
 
 import { timingSafeEqual } from "node:crypto";
 import {
-  verifyIdentityToken,
   IDENTITY_HEADER,
   __resetIdentityCacheForTest,
+  verifyIdentityToken,
 } from "../../../packages/nexus-identity/src/index";
 
 export interface Caller {

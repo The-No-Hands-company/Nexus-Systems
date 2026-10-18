@@ -13,16 +13,20 @@ function cloudHeaders(): Record<string, string> {
 }
 
 function hbMs(): number {
-  return Math.max(5000, Number(process.env["NEXUS_CALENDAR_CLOUD_HEARTBEAT_INTERVAL_MS"] || "30000"));
+  return Math.max(5000, Number(process.env.NEXUS_CALENDAR_CLOUD_HEARTBEAT_INTERVAL_MS || "30000"));
 }
 
 function enabled(): boolean {
-  return (process.env["NEXUS_CALENDAR_ENABLE_CLOUD_INTEGRATION"] || "true").trim().toLowerCase() !== "false";
+  return (
+    (process.env.NEXUS_CALENDAR_ENABLE_CLOUD_INTEGRATION || "true").trim().toLowerCase() !== "false"
+  );
 }
 
 function healthTimeoutMs(): number {
   const value = Number(process.env.NEXUS_CALENDAR_HEALTH_TIMEOUT_MS || "2000");
-  return Number.isFinite(value) && value > 0 ? Math.min(10000, Math.max(1, Math.floor(value))) : 2000;
+  return Number.isFinite(value) && value > 0
+    ? Math.min(10000, Math.max(1, Math.floor(value)))
+    : 2000;
 }
 
 async function observedHealth(baseUrl: string): Promise<"healthy" | "degraded"> {
@@ -34,10 +38,12 @@ async function observedHealth(baseUrl: string): Promise<"healthy" | "degraded"> 
     });
     if (!response.ok) return "degraded";
     const payload: unknown = await response.json();
-    if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return "degraded";
+    if (typeof payload !== "object" || payload === null || Array.isArray(payload))
+      return "degraded";
     const health = payload as Record<string, unknown>;
     return health.service === calendarToolId() && health.status === "ok" && health.ready === true
-      ? "healthy" : "degraded";
+      ? "healthy"
+      : "degraded";
   } catch {
     return "degraded";
   }
@@ -57,11 +63,14 @@ export async function registerWithCloud(baseUrl: string): Promise<void> {
 export async function heartbeatWithCloud(baseUrl: string): Promise<void> {
   if (!enabled()) return;
   const health = await observedHealth(baseUrl);
-  const r = await fetch(`${cloudBaseUrl()}/api/v1/tools/${encodeURIComponent(calendarToolId())}/heartbeat`, {
-    method: "POST",
-    headers: cloudHeaders(),
-    body: JSON.stringify({ health, upstreamUrl: baseUrl }),
-  });
+  const r = await fetch(
+    `${cloudBaseUrl()}/api/v1/tools/${encodeURIComponent(calendarToolId())}/heartbeat`,
+    {
+      method: "POST",
+      headers: cloudHeaders(),
+      body: JSON.stringify({ health, upstreamUrl: baseUrl }),
+    },
+  );
   if (!r.ok) throw new Error(`Nexus-Calendar heartbeat failed: ${r.status}`);
 }
 

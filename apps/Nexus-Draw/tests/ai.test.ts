@@ -1,5 +1,16 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { aiElementsToServerElements, synthesizeDiagram } from "../src/ai";
+
+type NumericData = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+};
 
 describe("synthesizeDiagram", () => {
   it("is deterministic for the same prompt", () => {
@@ -29,13 +40,17 @@ describe("synthesizeDiagram", () => {
     expect(boxes.length).toBeGreaterThanOrEqual(2);
     expect(arrows.length).toBeGreaterThanOrEqual(1);
     for (let i = 0; i < Math.min(arrows.length, boxes.length - 1); i++) {
-      const arrow = arrows[i]!;
-      const from = boxes[i]!;
-      const to = boxes[i + 1]!;
-      expect(arrow.data.x1).toBe(from.data.x + from.data.width / 2);
-      expect(arrow.data.y1).toBe(from.data.y + from.data.height);
-      expect(arrow.data.x2).toBe(to.data.x + to.data.width / 2);
-      expect(arrow.data.y2).toBe(to.data.y);
+      const arrow = arrows[i];
+      const from = boxes[i];
+      const to = boxes[i + 1];
+      if (!arrow || !from || !to) throw new Error("synthesizeDiagram returned incomplete links");
+      const arrowData = arrow.data as NumericData;
+      const fromData = from.data as NumericData;
+      const toData = to.data as NumericData;
+      expect(arrowData.x1).toBe(fromData.x + fromData.width / 2);
+      expect(arrowData.y1).toBe(fromData.y + fromData.height);
+      expect(arrowData.x2).toBe(toData.x + toData.width / 2);
+      expect(arrowData.y2).toBe(toData.y);
     }
   });
 });

@@ -19,7 +19,7 @@ export function buildSystemsApiRegistrationPayload(baseUrl: string): SystemsApiR
     exposed: false,
     health: "healthy",
     upstreamUrl: baseUrl,
-    capabilities: ["whiteboard","diagramming","collaboration"],
+    capabilities: ["whiteboard", "diagramming", "collaboration"],
     metadata: {
       version: "v1",
       defaultPort: 3075,
