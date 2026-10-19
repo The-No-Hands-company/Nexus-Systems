@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "types": [],
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "isolatedModules": true
+  },
+  "include": [
+    "src/api-contract.ts",
+    "src/bun-runtime.d.ts",
+    "src/node-runtime.d.ts",
+    "src/cloud.ts",
+    "src/contracts.ts",
+    "src/gateway-index.ts",
+    "src/openapi.ts",
+    "src/server.ts",
+    "tests/public-api.test.ts",
+    "tests/server.test.ts"
+  ]
+}

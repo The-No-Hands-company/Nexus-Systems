@@ -55,6 +55,7 @@ service_identity() {
         nexus-chat)     SERVICE_DIR="$ROOT/apps/Nexus"; SERVICE_EXEC_PATTERN="./target/debug/nexus serve --port 8180" ;;
         nexus-chat-web) SERVICE_DIR="$ROOT"; SERVICE_EXEC_PATTERN="caddy run --config $ROOT/deploy/production/nexus-chat.Caddyfile" ;;
         dashboard)      SERVICE_DIR="$ROOT/apps/Nexus-Dashboard"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        nexus-api)      SERVICE_DIR="$ROOT/apps/Nexus-API"; SERVICE_EXEC_PATTERN="bun run src/gateway-index.ts" ;;
         draw)           SERVICE_DIR="$ROOT/apps/Nexus-Draw"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         proxy)          SERVICE_DIR="$ROOT/deploy/production"; SERVICE_EXEC_PATTERN="bun run proxy.ts" ;;
         calendar)       SERVICE_DIR="$ROOT/apps/Nexus-Calendar"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
@@ -77,6 +78,7 @@ service_port() {
         nexus-chat) printf '%s\n' 8180 ;;
         nexus-chat-web) printf '%s\n' 8095 ;;
         dashboard) printf '%s\n' 3132 ;;
+        nexus-api) printf '%s\n' 3036 ;;
         draw) printf '%s\n' 3075 ;;
         proxy) printf '%s\n' 8080 ;;
         calendar) printf '%s\n' 3068 ;;
@@ -354,6 +356,18 @@ start_nexus_chat_service() {
     )
 }
 
+start_nexus_api_service() {
+    start_service "nexus-api" "$ROOT/apps/Nexus-API" 3036 \
+        PORT=3036 \
+        NEXUS_API_BIND_HOST=127.0.0.1 \
+        NEXUS_API_BASE_URL="https://api.$DOMAIN" \
+        NEXUS_API_AUTH_URL=http://127.0.0.1:4310 \
+        NEXUS_API_CLOUD_URL=http://127.0.0.1:8787 \
+        NEXUS_API_MAIL_URL=http://127.0.0.1:3140 \
+        NEXUS_API_ENABLE_CLOUD_INTEGRATION=false \
+        bun run src/gateway-index.ts
+}
+
 start_nexus_chat_web_service() {
     validate_nexus_chat_caddy || return 1
     start_service "nexus-chat-web" "$ROOT" 8095 \
@@ -363,6 +377,7 @@ start_nexus_chat_web_service() {
 preflight_service_start() {
     case "$1" in
         cloud) validate_cloud_environment ;;
+        nexus-api) : ;;
         nexus-chat) validate_nexus_chat_environment ;;
         nexus-chat-web) validate_nexus_chat_caddy ;;
         *) warn "Per-service recovery is limited to cloud, nexus-chat, and nexus-chat-web"; return 1 ;;
@@ -372,6 +387,7 @@ preflight_service_start() {
 start_named_service() {
     case "$1" in
         cloud) start_cloud_service ;;
+        nexus-api) start_nexus_api_service ;;
         nexus-chat) start_nexus_chat_service ;;
         nexus-chat-web) start_nexus_chat_web_service ;;
         *) warn "Per-service recovery is limited to cloud, nexus-chat, and nexus-chat-web"; return 1 ;;
@@ -692,6 +708,10 @@ cmd_start() {
         NEXUS_TERMINAL_ENABLED="${NEXUS_TERMINAL_ENABLED:-false}" \
         bun run src/index.ts
 
+    # Nexus-API must be available before Dashboard starts so catalog and
+    # identity requests use the stable facade from the first request.
+    start_nexus_api_service
+
     # 4e. Nexus-Dashboard — app.$DOMAIN, the ecosystem front door.
     #
     # PUBLIC, deliberately: it carries request-access and claim, which people
@@ -715,6 +735,7 @@ cmd_start() {
         start_service "dashboard" "$ROOT/apps/Nexus-Dashboard" 3132 \
             PORT=3132 DOMAIN="$DOMAIN" \
             NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
+            NEXUS_API_INTERNAL_URL=http://127.0.0.1:3036 \
             NEXUS_CLOUD_URL=http://localhost:8787 \
             NEXUS_TERMINAL_URL=http://127.0.0.1:3110 \
             NEXUS_ISSUES_TOKEN="$NEXUS_ISSUES_TOKEN" \
@@ -753,8 +774,6 @@ cmd_start() {
         PHANTOM_REQUIRE_REAL=1 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
         bun run src/index.ts
-
-    # Nexus-API retired 2026-10-07 — see docs/superpowers plans; revive via its own design project
 
     # 4g. Nexus-Email API — the mail store behind app.$DOMAIN/mail.
     #
@@ -851,9 +870,9 @@ cmd_start() {
     # to 404 unmatched hosts instead (a node not running the Hosting site-proxy).
     start_service "proxy" "$ROOT/deploy/production" 8080 \
         PROXY_PORT=8080 DOMAIN="$DOMAIN" CLOUD_URL=http://localhost:8787 \
+        API_UPSTREAM=http://127.0.0.1:3036 \
         DASHBOARD_UPSTREAM=http://127.0.0.1:3132 \
         HOSTING_SITE_UPSTREAM="${HOSTING_SITE_UPSTREAM:-http://127.0.0.1:8090}" \
-        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         bun run proxy.ts
 
     install_log_rotation
@@ -980,7 +999,7 @@ cmd_stop() {
     local svc
 
     log "Stopping all Nexus services..."
-    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
         stop_service "$svc" || true
     done
     cd "$ROOT"
@@ -990,7 +1009,7 @@ cmd_stop() {
 
 cmd_service_status() {
     echo "Service Status:"
-    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
         service_identity "$svc" || continue
         local pid port
         port="$(service_port "$svc")"

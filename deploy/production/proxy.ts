@@ -3,7 +3,7 @@
 // and uses it to route subdomains to appropriate services.
 // Falls back to static configuration if Nexus-Cloud is unavailable.
 
-import { gate } from "./gate";
+import { API_HOST, gate } from "./gate";
 import { privacyStatusBody } from "./privacy-status";
 import { canaryStatusBody } from "./warrant-canary";
 import { stripAddressHeaders, tagFromRequestHeaders, CLIENT_TAG_HEADER } from "./client-tag";
@@ -69,6 +69,7 @@ const FALLBACK_CHAT_UPSTREAM = process.env.CHAT_UPSTREAM || "http://127.0.0.1:80
 // browser to https://auth.<DOMAIN>/login?redirect=..., so this is the one that
 // has to resolve or single sign-on has nowhere to happen.
 const FALLBACK_AUTH_UPSTREAM = process.env.AUTH_UPSTREAM || "http://127.0.0.1:4310";
+const FALLBACK_API_UPSTREAM = process.env.API_UPSTREAM || "http://127.0.0.1:3036";
 // Paths Nexus-Auth serves itself; everything else on auth.<DOMAIN> belongs to
 // the Supabase gateway. /request, /claim and /join are the ways in for someone
 // without an account, and /recover the way back in after a lost password
@@ -218,6 +219,10 @@ export interface WsProxyData {
 
 function dashboardUpstream(): string | null {
   return loopbackUpstream(process.env.DASHBOARD_UPSTREAM || "http://127.0.0.1:3132");
+}
+
+function apiUpstream(): string | null {
+  return loopbackUpstream(FALLBACK_API_UPSTREAM);
 }
 
 // Cloudflare Email Routing -> Email Worker -> this one path on Nexus-Email's
@@ -463,26 +468,6 @@ async function handleRequestInner(
       return new Response(`Host ${host} not served by this proxy`, { status: 404 });
     }
 
-    // api.<DOMAIN> is an alias for the API directory on the marketing site.
-    //
-    // It resolves here rather than to Pages because *.tnhc.dev is a wildcard
-    // CNAME to the tunnel, and only the apex has its own record pointing at
-    // tnhc-dev.pages.dev. Without this branch the host falls through to the
-    // Hosting site-proxy and answers 404, which is what it did before.
-    //
-    // A redirect, not a proxy. The docs live at one canonical URL; proxying
-    // Pages content under a second hostname would duplicate the page, split
-    // its cache, and hide the real address from anyone who bookmarks it.
-    //
-    // 302, matching the reasoning in tnhc.dev/frontend/public/_redirects: a
-    // permanent redirect is cached by browsers effectively forever, and this
-    // one is meant to be replaceable — if api.<DOMAIN> is ever added as a
-    // Pages custom domain it will stop reaching this proxy at all, and a
-    // sticky 301 would keep sending people away from it.
-    if (host === `api.${DOMAIN}` || host === `www.api.${DOMAIN}`) {
-      return Response.redirect(`https://${DOMAIN}/api`, 302);
-    }
-
     // The daily privacy check's verdict, published for anyone (tnhc.dev/privacy
     // reads it). Answered here, ungated, from a fixed file — no request input
     // reaches the filesystem.
@@ -537,6 +522,12 @@ async function handleRequestInner(
       host === `app.${DOMAIN}` &&
       url.pathname === DASHBOARD_TERMINAL_PATH;
 
+    const apiRequest = host === API_HOST || host === `www.${API_HOST}`;
+    const fixedApi = apiRequest ? apiUpstream() : null;
+    if (apiRequest && !fixedApi) {
+      return new Response("Nexus API upstream unavailable", { status: 503 });
+    }
+
     // The one credential-bearing WebSocket route never trusts Cloud's dynamic
     // route table. Cookie and Origin are useful only to Dashboard's own Auth
     // and same-origin checks, so pin this exact host/path to its loopback
@@ -548,7 +539,7 @@ async function handleRequestInner(
 
     // Get current routing configuration. The pinned Terminal hop does not
     // depend on Cloud availability or on a mutable upstream entry.
-    const routes = dashboardTerminalRequest ? {} : await getRoutes();
+    const routes = dashboardTerminalRequest || apiRequest ? {} : await getRoutes();
     
     // Find matching route
     let upstreamUrl: string | null = null;
@@ -567,6 +558,8 @@ async function handleRequestInner(
     // exact lookup covers every route Cloud can hand us.
     if (fixedDashboard) {
       upstreamUrl = fixedDashboard;
+    } else if (fixedApi) {
+      upstreamUrl = fixedApi;
     } else {
       const normalizedHost = host.replace(/^www\./, "");
       const matched = routes[normalizedHost];
@@ -585,12 +578,12 @@ async function handleRequestInner(
     // cover it.
     let preserveHost = false;
     let fixedKind: RouteTarget["kind"] | null = null;
-    if (!fixedDashboard && host === `storage.${DOMAIN}`) {
+    if (!fixedDashboard && !fixedApi && host === `storage.${DOMAIN}`) {
       upstreamUrl = storageUpstream();
       requiresAuth = false;
       fixedKind = "site";
       preserveHost = true;
-    } else if (!fixedDashboard && host === `auth.${DOMAIN}`) {
+    } else if (!fixedDashboard && !fixedApi && host === `auth.${DOMAIN}`) {
       if (AUTH_OWN_PATHS.test(url.pathname)) upstreamUrl = authUpstream();
       else if (SUPABASE_PUBLIC_PATHS.test(url.pathname)) upstreamUrl = supabaseUpstream();
       else return new Response("Not found", { status: 404 });

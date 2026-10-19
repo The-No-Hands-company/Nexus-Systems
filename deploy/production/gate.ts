@@ -18,6 +18,9 @@ const DOMAIN = process.env.DOMAIN || "tnhc.dev";
  */
 export const AUTH_HOST = process.env.NEXUS_AUTH_HOST || `auth.${DOMAIN}`;
 
+/** The stable platform facade has its own host and enforces endpoint auth. */
+export const API_HOST = process.env.NEXUS_API_HOST || `api.${DOMAIN}`;
+
 /**
  * Where the proxy reaches Auth internally. Never a public URL — that would
  * send the request back out through Cloudflare and into this proxy again,
@@ -269,7 +272,7 @@ export async function resolveIdentity(cookie: string | null, audience: string): 
  */
 const DRAW_HOST = `draw.${DOMAIN}`;
 
-const PUBLIC_HOSTS = new Set([AUTH_HOST, DRAW_HOST]);
+const PUBLIC_HOSTS = new Set([AUTH_HOST, DRAW_HOST, API_HOST]);
 
 /** Paths exempt from the auth gate on ANY host (deploy.sh probes these). */
 const PUBLIC_PATHS = new Set(["/health", "/health/live", "/health/ready"]);

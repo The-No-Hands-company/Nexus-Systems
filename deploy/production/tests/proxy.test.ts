@@ -43,6 +43,28 @@ describe("route policy", () => {
   });
 });
 
+describe("stable platform API host", () => {
+  it("pins api.tnhc.dev to the loopback Nexus-API service", async () => {
+    const { handleRequest } = await import("../proxy");
+    let seenUrl = "";
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = Object.assign(
+      async (input: Parameters<typeof fetch>[0]) => {
+        seenUrl = input instanceof Request ? input.url : String(input);
+        return Response.json({ service: "nexus-api" });
+      },
+      { preconnect: realFetch.preconnect },
+    );
+    try {
+      const response = await handleRequest(new Request("http://api.tnhc.dev/api/v1/contract"));
+      expect(response.status).toBe(200);
+      expect(seenUrl).toBe("http://127.0.0.1:3036/api/v1/contract");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+});
+
 describe("identity header is proxy-controlled", () => {
   it("strips a client-supplied x-nexus-identity before forwarding", async () => {
     const { handleRequest, __setRoutesForTest } = await import("../proxy");

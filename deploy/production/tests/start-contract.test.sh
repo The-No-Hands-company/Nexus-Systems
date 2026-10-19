@@ -18,6 +18,7 @@ trap cleanup EXIT
 mkdir -p \
     "$FIXTURE_ROOT/apps/Nexus-Dashboard/frontend/dist" \
     "$FIXTURE_ROOT/apps/Nexus-Dashboard/src" \
+    "$FIXTURE_ROOT/apps/Nexus-API" \
     "$FIXTURE_ROOT/apps/Nexus-Calendar/frontend/dist" \
     "$FIXTURE_ROOT/packages/phantom-sdk/wasm/target/release"
 touch "$FIXTURE_ROOT/apps/Nexus-Dashboard/frontend/dist/index.html"
@@ -117,19 +118,28 @@ unset NEXUS_TERMINAL_ENABLED
 run_start
 
 terminal_args="$(service_args terminal)"
+nexus_api_args="$(service_args nexus-api)"
 dashboard_args="$(service_args dashboard)"
 proxy_args="$(service_args proxy)"
 calendar_args="$(service_args calendar)"
 calendar_web_args="$(service_args nexus-calendar-web)"
 
 assert_service_order terminal dashboard
+assert_service_order nexus-api dashboard
+assert_contains $'nexus-api\t' "$nexus_api_args" "production launch did not start Nexus-API"
+assert_contains $'\t3036\t' "$nexus_api_args" "Nexus-API did not use port 3036"
+assert_contains $'\tNEXUS_API_BIND_HOST=127.0.0.1' "$nexus_api_args" "Nexus-API was not bound to loopback"
+assert_contains $'\tNEXUS_API_AUTH_URL=http://127.0.0.1:4310' "$nexus_api_args" "Nexus-API did not receive the loopback Auth URL"
+assert_contains $'\tNEXUS_API_CLOUD_URL=http://127.0.0.1:8787' "$nexus_api_args" "Nexus-API did not receive the loopback Cloud URL"
 assert_contains $'terminal\t' "$terminal_args" "production launch did not start Nexus-Terminal"
 assert_contains $'calendar\t' "$calendar_args" "production launch did not start Nexus-Calendar"
 assert_contains $'nexus-calendar-web\t' "$calendar_web_args" "production launch did not start the Calendar web front door"
 assert_contains $'\tNEXUS_CALENDAR_DB=/var/lib/nexus-calendar/calendar.sqlite' "$calendar_args" "Nexus-Calendar did not receive its persistent database path"
 assert_contains $'\tNEXUS_CALENDAR_LEGACY_OWNER_SUBJECT=usr-founder' "$calendar_args" "Nexus-Calendar did not receive the explicit legacy owner" # pragma: allowlist secret
 assert_contains $'\tNEXUS_CALENDAR_JWT_AUDIENCE=calendar.test.example' "$calendar_args" "Nexus-Calendar did not receive its JWT audience"
-assert_contains $'\tNEXUS_CALENDAR_DASHBOARD_SECRET=' "$calendar_args" "Nexus-Calendar did not receive the Dashboard hop secret"
+# Calendar's production path uses the proxy-minted identity token. A private
+# Dashboard hop secret is optional for isolated integrations and is not passed
+# on a launcher command line.
 assert_contains $'\tNEXUS_CALENDAR_WEB_ROOT=' "$calendar_web_args" "Calendar web front door did not receive the shared built artifact root"
 assert_contains $'\t3110\t' "$terminal_args" "Nexus-Terminal did not use port 3110"
 assert_contains $'\tPORT=3110' "$terminal_args" "Nexus-Terminal did not receive its port"
@@ -146,7 +156,9 @@ fi
 assert_contains $'\tNEXUS_NEXUS_TERMINAL_BASE_URL=http://127.0.0.1:3110' "$terminal_args" "Nexus-Terminal did not register its loopback base URL"
 assert_contains $'\tNEXUS_TERMINAL_ENABLED=false' "$terminal_args" "Nexus-Terminal was not explicitly disabled by default"
 assert_contains $'\tNEXUS_TERMINAL_URL=http://127.0.0.1:3110' "$dashboard_args" "Dashboard did not receive the loopback Terminal URL"
+assert_contains $'\tNEXUS_API_INTERNAL_URL=http://127.0.0.1:3036' "$dashboard_args" "Dashboard did not receive the loopback Nexus-API URL"
 assert_contains $'\tDASHBOARD_UPSTREAM=http://127.0.0.1:3132' "$proxy_args" "production proxy did not receive the fixed loopback Dashboard upstream"
+assert_contains $'\tAPI_UPSTREAM=http://127.0.0.1:3036' "$proxy_args" "production proxy did not receive the fixed loopback Nexus-API upstream"
 assert_contains 'http://127.0.0.1:3110/health' "$(<"$CURL_RECORD")" "production status did not health-check Nexus-Terminal"
 
 # The real start_service refuses any service without an ownership identity, so

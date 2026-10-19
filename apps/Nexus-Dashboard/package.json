@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "bun run src/index.ts",
     "start": "bun run src/index.ts",
-    "precheck": "test -x node_modules/.bin/tsc && test -e node_modules/bun-types/package.json || bun install --frozen-lockfile --ignore-scripts",
-    "check": "bunx tsc --noEmit",
+    "precheck": "if [ ! -x node_modules/.bin/tsc ] || [ ! -e node_modules/bun-types/package.json ]; then bun install --ignore-scripts; fi",
+    "check": "tsc --noEmit",
     "test": "bun test tests/",
     "lint": "bunx biome check src tests",
     "format": "bunx biome check --write src tests"

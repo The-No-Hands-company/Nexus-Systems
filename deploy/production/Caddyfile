@@ -36,7 +36,7 @@
 # issued at startup: the Bun proxy serves them from its own fallback rather than
 # Cloud's routing table, so tls-ask would not vouch for them — and it rejects
 # the apex outright, since it only allows names *under* the cloud domain.
-tnhc.dev, cloud.tnhc.dev, chat.tnhc.dev {
+tnhc.dev, cloud.tnhc.dev, chat.tnhc.dev, api.tnhc.dev {
 	import nexus_common
 }
 

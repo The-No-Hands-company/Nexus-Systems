@@ -118,7 +118,8 @@ describe("Cloud trust transition sync", () => {
       trustSummary.updatedAt = new Date("2026-04-27T00:05:00.000Z").toISOString();
 
       await vi.advanceTimersByTime(10_000);
-      await flushAsyncWork();
+      vi.useRealTimers();
+      await new Promise((resolve) => setTimeout(resolve, 25));
 
       const updated = await waitForJsonFile<{
         trust: MutableTrustSummary;

@@ -5,6 +5,7 @@ import { cloudBaseUrl, cloudHeaders } from "./cloud";
 import { listDevTools, runDevTool } from "./devtools";
 import { fileIssue, validateReport } from "./issues";
 import { validateJWT, validateRequest } from "./jwt";
+import { platformApiHeaders, platformApiUrl } from "./platform-api";
 import { checkRateLimit, createRateLimitResponse, rateLimitMiddleware } from "./ratelimit";
 import { checkAllServices } from "./servicehealth";
 import {
@@ -168,8 +169,9 @@ function terminalUrl(): string {
 }
 
 async function proxyToMail(req: Request, rest: string, search: string): Promise<Response> {
-  const who = await callerIdentity(req);
-  if (!who) return Response.json({ error: "not_authenticated" }, { status: 401 });
+  const platform = platformApiUrl();
+  const who = platform ? null : await callerIdentity(req);
+  if (!platform && !who) return Response.json({ error: "not_authenticated" }, { status: 401 });
 
   // Only the mail API's own surface, and only the methods it serves.
   if (!/^(folders|messages|search|threads)(\/|$)/.test(rest)) {
@@ -179,12 +181,21 @@ async function proxyToMail(req: Request, rest: string, search: string): Promise<
     return Response.json({ error: "method_not_allowed" }, { status: 405 });
   }
 
-  const headers = new Headers();
-  headers.set("content-type", req.headers.get("content-type") ?? "application/json");
-  headers.set("x-nexus-subject", who.subject);
+  const headers = platform
+    ? platformApiHeaders(req)
+    : new Headers({
+        "content-type": req.headers.get("content-type") ?? "application/json",
+        "x-nexus-subject": who?.subject ?? "",
+      });
+  if (req.method === "POST" && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
 
   try {
-    const res = await fetch(`${mailUrl()}/api/v1/${rest}${search}`, {
+    const target = platform
+      ? `${platform}/api/v1/mail/${rest}${search}`
+      : `${mailUrl()}/api/v1/${rest}${search}`;
+    const res = await fetch(target, {
       method: req.method,
       headers,
       body: req.method === "POST" ? await req.text() : undefined,
@@ -317,6 +328,27 @@ async function fetchApps(req: Request): Promise<Response> {
     includeTerminal,
   });
   const healthyNative = native.filter((entry) => entry.health === "healthy");
+
+  const platform = platformApiUrl();
+  if (platform) {
+    try {
+      const res = await fetch(`${platform}/api/v1/apps`, {
+        headers: platformApiHeaders(req),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) {
+        const registry = toAppEntries(await res.json(), AUTH_HOST, SELF_HOST).filter(
+          isReleasedUserApp,
+        );
+        return Response.json({
+          apps: mergeApps(registry, native).filter((entry) => entry.health === "healthy"),
+        });
+      }
+    } catch {
+      // A rolling deployment may have Dashboard before Nexus API. Fall through
+      // to the direct Cloud compatibility path until the facade is available.
+    }
+  }
 
   try {
     const cloudBase = cloudUrl();

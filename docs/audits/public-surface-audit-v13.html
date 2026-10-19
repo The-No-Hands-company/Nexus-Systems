@@ -1,0 +1,481 @@
+<title>Public Surface Audit, October 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #f6f7f4; --surface: #ffffff; --fg: #1b1e1a; --muted: #5d6459; --line: #dde1d8;
+  --accent: #3d6b1f; --crit: #b3261e; --high: #c2410c; --med: #a16207; --low: #4b5d7a;
+  --ok: #2f7a3b; --code-bg: #eef0ea;
+  --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121411; --surface: #1a1d18; --fg: #e7eae3; --muted: #9aa294; --line: #2c3129;
+    --accent: #9fd16b; --crit: #f2867f; --high: #f4a06a; --med: #e7c25c; --low: #9fb3d6; --ok: #7fcf8a;
+    --code-bg: #23271f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121411; --surface: #1a1d18; --fg: #e7eae3; --muted: #9aa294; --line: #2c3129;
+  --accent: #9fd16b; --crit: #f2867f; --high: #f4a06a; --med: #e7c25c; --low: #9fb3d6; --ok: #7fcf8a;
+  --code-bg: #23271f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.6 var(--font-body); padding-inline: 16px; padding-block: 40px 64px; }
+.wrap { max-width: 860px; margin: 0 auto; display: grid; gap: 40px; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.2; margin: 0; }
+h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.3rem; font-weight: 700; }
+h3 { font-size: 1.05rem; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font: 500 .75rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+header { display: grid; gap: 12px; }
+.lede { color: var(--muted); font-size: 1.05rem; }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+section { display: grid; gap: 16px; }
+.counts { display: flex; flex-wrap: wrap; gap: 10px; }
+.count { display: flex; align-items: baseline; gap: 8px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.count b { font: 600 1.4rem/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.count span { color: var(--muted); font-size: .88rem; }
+.ledger { display: grid; gap: 12px; }
+.finding { display: grid; grid-template-columns: 4px 1fr; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.finding > .stripe { background: var(--sev); }
+.finding > .body { padding: 16px 18px; display: grid; gap: 8px; min-width: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tag { font: 500 .72rem/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; padding: 4px 7px; border-radius: 4px; border: 1px solid var(--sev); color: var(--sev); }
+.state { font: 500 .72rem/1 var(--font-mono); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.state.done { color: var(--ok); }
+.state.mitigated { color: var(--med); }
+.id { font: 500 .8rem/1 var(--font-mono); color: var(--muted); }
+.crit { --sev: var(--crit); } .high { --sev: var(--high); } .med { --sev: var(--med); } .low { --sev: var(--low); } .info { --sev: var(--low); }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; font-size: .93rem; }
+dt { color: var(--muted); }
+dd { margin: 0; min-width: 0; }
+ul.plain { margin: 0; padding-left: 1.1em; display: grid; gap: 6px; max-width: 70ch; }
+.held { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.held div { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--surface); font-size: .93rem; }
+.held b { display: block; color: var(--ok); font-weight: 600; margin-bottom: 2px; }
+.held b.warn { color: var(--med); }
+.held b.err { color: var(--crit); }
+ol.order { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; max-width: 70ch; }
+footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); padding-top: 16px; }
+.updated-note { font-size: .88rem; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+.section-divider { border: none; border-top: 2px solid var(--line); margin: 0; }
+.exempt-table { width: 100%; border-collapse: collapse; font-size: .88rem; font-family: var(--font-mono); }
+.exempt-table th { text-align: left; padding: 6px 10px; background: var(--code-bg); color: var(--muted); font-weight: 500; font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; border-bottom: 1px solid var(--line); }
+.exempt-table td { padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.exempt-table tr:last-child td { border-bottom: none; }
+.exempt-table .reason { color: var(--muted); font-size: .82rem; }
+/* rubric table */
+.rubric-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.rubric-table th { text-align: left; padding: 8px 10px; background: var(--code-bg); color: var(--muted); font-weight: 500; font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; border-bottom: 1px solid var(--line); }
+.rubric-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; font-variant-numeric: tabular-nums; }
+.rubric-table tr:last-child td { border-bottom: none; }
+.rubric-table .app-name { font-weight: 600; }
+.badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font: 500 .75rem/1 var(--font-mono); letter-spacing: .04em; }
+.badge.green { background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--ok); }
+.badge.yellow { background: color-mix(in srgb, var(--med) 12%, transparent); color: var(--med); }
+.badge.red { background: color-mix(in srgb, var(--crit) 12%, transparent); color: var(--crit); }
+.badge.na { background: var(--code-bg); color: var(--muted); }
+.score-bar { display: flex; align-items: center; gap: 8px; }
+.bar { height: 6px; background: var(--line); border-radius: 3px; flex: 1; min-width: 60px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 3px; }
+.bar-fill.green { background: var(--ok); }
+.bar-fill.yellow { background: var(--med); }
+.bar-fill.red { background: var(--high); }
+.bar-fill.na { background: var(--muted); }
+@media (max-width: 520px) {
+  dl { grid-template-columns: 1fr; } dt { margin-top: 6px; }
+  .exempt-table, .rubric-table { display: block; overflow-x: auto; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Nexus Systems · tnhc.dev · 13–17 October 2026</div>
+    <h1>Surface audit</h1>
+    <p class="lede">Five passes: public surface, authenticated surface (IDOR), dependency vulnerability scan, file upload integrity, and UI quality rubric. Every finding was reproduced against the live stack or verified with tooling.</p>
+    <p class="updated-note">Updated 17 October 2026 (v13): Five Green passes — Chat (<code>b4c8c62</code>): skip link, document.title, accent tokens, header landmark, canvas aria-label bug fix (O=ellipse, not E); Auth (<code>dce165d0</code>): brand mark, nav landmark, fieldset for password group, safe-area insets, 44px touch targets; Calendar (<code>5b2b7e3c</code>): event chips and day items as proper <code>&lt;button&gt;</code> elements, focus rings on form inputs, document.title, close button touch target; Project (<code>0f723564</code>): skip link, document.title, task cards as <code>&lt;button&gt;</code>, complete tabpanel ARIA, sr-only Timeline list, TaskDrawer 44px touch target; Draw (<code>e82728e4</code>): skip link, document.title, full accent token pass (replacing hardcoded <code>blue-500/600</code>), header landmark, toolbar 44px, reactive board status, aria-label fix. <strong>All 6 scored UI apps are now Green ✅</strong></p>
+  </header>
+
+  <!-- PART 1 -->
+  <section>
+    <h2>Part 1 — Public surface</h2>
+    <p class="lede" style="font-size:.95rem">Everything reachable as an anonymous visitor on 13 October 2026.</p>
+    <div class="counts">
+      <div class="count"><b>3</b><span>fixed on audit day</span></div>
+      <div class="count"><b>9</b><span>fixed after</span></div>
+      <div class="count"><b>1</b><span>high, mitigated</span></div>
+      <div class="count"><b>0</b><span>open</span></div>
+    </div>
+    <p>The core holds. The sign-in gate refused every anonymous probe on every app host. All traffic enters through one proxy. The serious problems were at the edges: user-deployed websites shared the sign-in domain, and nobody new could get into the platform. Both are fixed; the architectural same-site problem is mitigated with <code>Sec-Fetch-Site</code> enforcement while a PSL submission runs in the background.</p>
+  </section>
+
+  <section>
+    <h2>Fixed on audit day (13 Oct)</h2>
+    <div class="ledger">
+      <article class="finding crit"><div class="stripe"></div><div class="body">
+        <div class="meta"><span class="id">F-1</span><span class="tag">Critical</span><span class="state done">Fixed · 4531da9f</span></div>
+        <h3>User-deployed sites received every visitor's sign-in session</h3>
+        <dl>
+          <dt>Found</dt><dd>Sites on <code>*.tnhc.dev</code> share the parent domain with the session cookie (<code>Domain=.tnhc.dev</code>). The proxy forwarded the visitor's whole <code>Cookie</code> header to Hosting. Any signed-in user with a dynamic site could collect the session of every signed-in visitor.</dd>
+          <dt>Fix</dt><dd>User sites get no <code>Cookie</code> or <code>Authorization</code> from the request, and any <code>Set-Cookie</code> with a <code>Domain</code> attribute is stripped from the response.</dd>
+        </dl>
+      </div></article>
+      <article class="finding high"><div class="stripe"></div><div class="body">
+        <div class="meta"><span class="id">F-2</span><span class="tag">High</span><span class="state done">Fixed · 7872c42f, d80a2b58</span></div>
+        <h3>Nobody without an account could get in</h3>
+        <dl>
+          <dt>Found</dt><dd>Request-access and claim pages were behind the sign-in gate. Invites had an API and no page.</dd>
+          <dt>Fix</dt><dd><code>auth.tnhc.dev/request</code>, <code>/claim</code> and <code>/join</code>: script-free forms, strict CSP, no caching, length caps, rate limits.</dd>
+        </dl>
+      </div></article>
+      <article class="finding med"><div class="stripe"></div><div class="body">
+        <div class="meta"><span class="id">F-3</span><span class="tag">Medium</span><span class="state done">Fixed · 8e511a37</span></div>
+        <h3>The proxy weakened stricter referrer policies</h3>
+        <dl><dt>Fix</dt><dd>The proxy policy is now a floor; upstreams that chose something stricter keep it.</dd></dl>
+      </div></article>
+    </div>
+  </section>
+
+  <section>
+    <h2>Fixed after the audit</h2>
+    <div class="ledger">
+      <article class="finding high"><div class="stripe"></div><div class="body">
+        <div class="meta"><span class="id">O-1</span><span class="tag">High</span><span class="state mitigated">Mitigated · 2171f91b · PSL pending</span></div>
+        <h3>User sites are "same site" as every app</h3>
+        <dl>
+          <dt>Found</dt><dd>JavaScript on any user site can forge credentialed requests to app hosts because they share the same eTLD+1.</dd>
+          <dt>Mitigation</dt><dd>Proxy checks <code>Sec-Fetch-Site</code>: any <code>same-site</code> mutation to an app host is rejected 403. PSL submission is the architectural fix.</dd>
+        </dl>
+      </div></article>
+      <article class="finding med"><div class="stripe"></div><div class="body">
+        <div class="meta"><span class="id">O-2</span><span class="tag">Medium</span><span class="state done">Fixed · 511aebf3</span></div>
+        <h3>Supabase Studio's login was on the public sign-in host</h3>
+        <dl><dt>Fix</dt><dd>Only the five API path prefixes the Community app uses reach the Supabase gateway.</dd></dl>
+      </div></article>
+      <article class="finding med"><div class="stripe"></div><div class="body">
+        <div class="meta"><span class="id">O-3</span><span class="tag">Medium</span><span class="state done">Fixed · 5fba706</span></div>
+        <h3>tnhc.dev sent no security headers</h3>
+        <dl><dt>Fix</dt><dd>CSP, HSTS (1 yr, includeSubDomains), framing and permissions policy added to <code>_headers</code>.</dd></dl>
+      </div></article>
+      <article class="finding med"><div class="stripe"></div><div class="body">
+        <div class="meta"><span class="id">O-4</span><span class="tag">Medium</span><span class="state done">Fixed · 518d0fec</span></div>
+        <h3>Cloud's public health check described the machine</h3>
+        <dl><dt>Fix</dt><dd>All <code>/health</code> paths intercepted at the proxy; only <code>{"status":"ok"}</code> or <code>{"status":"unavailable"}</code> returned.</dd></dl>
+      </div></article>
+      <article class="finding med"><div class="stripe"></div><div class="body">
+        <div class="meta"><span class="id">O-5</span><span class="tag">Medium</span><span class="state done">Fixed · 4d6c0e27</span></div>
+        <h3>The access-request API revealed whether an email has an account</h3>
+        <dl><dt>Fix</dt><dd>One generic message for both "already has account" and "request already pending".</dd></dl>
+      </div></article>
+      <article class="finding low"><div class="stripe"></div><div class="body">
+        <div class="meta"><span class="id">O-6</span><span class="tag">Low</span><span class="state done">Fixed · 5fba706</span></div>
+        <h3>Cloudflare injected a bot-detection script into every tnhc.dev page</h3>
+        <dl><dt>Fix</dt><dd>CSP <code>script-src 'self'</code> blocks the injected inline script.</dd></dl>
+      </div></article>
+      <article class="finding low"><div class="stripe"></div><div class="body">
+        <div class="meta"><span class="id">O-7</span><span class="tag">Low</span><span class="state done">Fixed · 9591f769</span></div>
+        <h3>Privacy status could say "fail" for up to a day after an outage</h3>
+        <dl><dt>Fix</dt><dd><code>deploy.sh bg</code> now runs the privacy canary once after every deploy.</dd></dl>
+      </div></article>
+      <article class="finding low"><div class="stripe"></div><div class="body">
+        <div class="meta"><span class="id">O-8</span><span class="tag">Low</span><span class="state done">Fixed · 66bda1fb</span></div>
+        <h3>The gate sent API calls to the login page</h3>
+        <dl><dt>Fix</dt><dd><code>Accept: application/json</code> or <code>/api/</code> path gets 401 + JSON body; browser pages still get the 302.</dd></dl>
+      </div></article>
+      <article class="finding low"><div class="stripe"></div><div class="body">
+        <div class="meta"><span class="id">O-9</span><span class="tag">Low</span><span class="state done">Fixed · bcbacb8 (Cloud)</span></div>
+        <h3>Cloud's registry showed live services as offline</h3>
+        <dl><dt>Fix</dt><dd><code>probeExposedToolsHealth()</code> added to Cloud's 30-second loop. All 8 tools now healthy.</dd></dl>
+      </div></article>
+      <article class="finding low"><div class="stripe"></div><div class="body">
+        <div class="meta"><span class="id">O-10</span><span class="tag">Low</span><span class="state done">Fixed · 1394da7, 1afc716b</span></div>
+        <h3>The app catalog overstated Phantom</h3>
+        <dl><dt>Fix</dt><dd>Catalog and STATUS.md aligned: ZK path proof is a placeholder.</dd></dl>
+      </div></article>
+    </div>
+  </section>
+
+  <hr class="section-divider">
+
+  <!-- PART 2 -->
+  <section>
+    <h2>Part 2 — Authenticated surface</h2>
+    <p class="lede" style="font-size:.95rem">Whether each app stops one signed-in user reading another user's data. 16 October 2026.</p>
+    <div class="counts">
+      <div class="count"><b>10</b><span>apps reviewed</span></div>
+      <div class="count"><b>0</b><span>IDOR findings</span></div>
+      <div class="count"><b>1</b><span>infra note fixed</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Apps reviewed</h2>
+    <div class="held">
+      <div><b>Nexus Chat (Rust API)</b>All routes require proxy-minted RS256 token. Channel/DM: membership checked in DB. Admin: <code>INSTANCE_ADMIN</code> flag in DB, not a JWT claim. WebSocket auth on HTTP upgrade; unauthenticated sockets time out.</div>
+      <div><b>Nexus-Dashboard</b>Identity from proxy token. Admin paths require <code>isAdminRole</code>. Cloud users list is additionally <code>adminOnly</code>.</div>
+      <div><b>Nexus-Forge</b>Single <code>authorize(db, principal, repo, action)</code> gate. Private repos return 404 (not 403). Git smart-HTTP returns 401 then 403 before any pack data.</div>
+      <div><b>Nexus-Hosting (notifications)</b>Every query binds <code>userId = req.user.id</code>. <code>POST /notifications/:id/read</code> adds <code>AND userId = req.user.id</code>.</div>
+      <div><b>Nexus-Project</b>All workspace/task ops pass <code>subject</code> into store functions. <code>listWorkspaces</code> returns only the caller's workspaces.</div>
+      <div><b>Nexus-Calendar · Email · Auth</b>Clean per prior audit (Oct 2026).</div>
+      <div><b>Nexus-Cloud</b>Fixed (fef2ebc). No per-user data stored in Cloud itself.</div>
+      <div><b>Nexus-Draw</b>Proxy strips <code>x-nexus-subject</code> before forwarding to user sites (5257bbdb).</div>
+    </div>
+  </section>
+
+  <hr class="section-divider">
+
+  <!-- PART 3 -->
+  <section>
+    <h2>Part 3 — Dependency vulnerability scan</h2>
+    <p class="lede" style="font-size:.95rem">cargo audit, npm audit, pip-audit across all active apps. 16 October 2026.</p>
+    <div class="counts">
+      <div class="count"><b>0</b><span>unfixed / unaddressed</span></div>
+      <div class="count"><b>24</b><span>fixed by update</span></div>
+      <div class="count"><b>21</b><span>documented exemptions</span></div>
+    </div>
+    <p>Every fixable vulnerability was updated. Exemptions that cannot be fixed are all due to upstream dependency chains where no compatible patch exists; each is documented in a <code>deny.toml</code> with the reason it is not exploitable or acceptable in context.</p>
+  </section>
+
+  <section>
+    <h3>Rust — Nexus Chat / Nexus-Database</h3>
+    <div class="held">
+      <div><b>quinn-proto 0.11.14 → 0.11.19</b>5 CVEs: remote memory exhaustion, panics via zero-length STREAM frames, unbounded connection ID retirements, ACK delay panic, zero-length DATAGRAM bypass.</div>
+      <div><b>sqlx 0.7.4 → 0.8.6 (both repos)</b>RUSTSEC-2024-0363 (Chat) + clears 6 CVEs in Database by removing sqlx 0.7's rustls 0.21 + webpki 0.101 dependency chain.</div>
+      <div><b>h2 0.4.13 → 0.4.20</b>Unbounded empty DATA frames (Chat).</div>
+      <div><b>rustls 0.23.x → 0.23.46</b>3 CVEs: TLS secrets exposed in Debug, Brotli cert 1 GiB pre-auth alloc, ServerHello downgrade.</div>
+      <div><b>aws-lc-sys/rs, rustls-webpki</b>5 + 2 CVEs fixed by version bumps.</div>
+      <div><b>postgres-protocol + tokio-postgres</b>SCRAM CPU DoS, hstore decode panic, DataRow panic DoS — Database only.</div>
+      <div><b>blake3 missing dep fixed</b>Pre-existing latent build failure in nexus-api: <code>phantom.rs</code> called <code>blake3::hash()</code> but the crate wasn't declared.</div>
+    </div>
+  </section>
+
+  <section>
+    <h3>Python — Nexus-AI · npm — all frontends</h3>
+    <div class="held">
+      <div><b>starlette &lt;1.0.0 upper bound removed</b>Constraint locked to a 6-CVE range; bumped to ≥1.3.1 and fastapi ≥0.140.0.</div>
+      <div><b>Dashboard / Calendar / Project frontends</b>vitest path-traversal, esbuild dev-server CORS, tinypool prototype-pollution-to-RCE — all dev-tool only. Fixed via audit fix --force --package-lock-only.</div>
+      <div><b>All 21 scanned npm apps</b>0 vulnerabilities after fixes.</div>
+      <div><b>Bun workspace apps (Auth/Guardian/Edge/Forge)</b>Manually reviewed; minimal external deps, no known CVEs in resolved versions. (bun audit broken by root pnpm-lock.yaml.)</div>
+    </div>
+  </section>
+
+  <section>
+    <h3>Documented exemptions (unfixable)</h3>
+    <div style="overflow-x:auto">
+    <table class="exempt-table">
+      <thead><tr><th>RUSTSEC ID</th><th>Crate</th><th>Root cause</th><th>Why acceptable</th></tr></thead>
+      <tbody>
+        <tr><td>2026-0258</td><td>h2 0.3.x</td><td>aws-sdk-s3 → hyper 0.14; no 0.3.x patch</td><td class="reason">MinIO on loopback only</td></tr>
+        <tr><td>2026-0346, 0349</td><td>rustls 0.21</td><td>aws-sdk-s3 chain; no 0.21.x patch</td><td class="reason">Loopback MinIO only</td></tr>
+        <tr><td>2026-0098, 0099, 0104</td><td>rustls-webpki 0.101</td><td>Via rustls 0.21</td><td class="reason">Loopback MinIO only</td></tr>
+        <tr><td>2026-0002, 0253</td><td>lru 0.12</td><td>aws-sdk-s3 + tantivy require ^0.12; fix needs 0.13 (breaking)</td><td class="reason">Affected APIs not used via these paths</td></tr>
+        <tr><td>2026-0097</td><td>rand</td><td>Custom panicking allocator; server uses system allocator</td><td class="reason">Panic path unreachable</td></tr>
+        <tr><td>2026-0221</td><td>event-listener 5.4</td><td>Via tantivy; StackSlot path behind internal API</td><td class="reason">Not reachable from tantivy's public surface</td></tr>
+        <tr><td>2023-0071</td><td>rsa 0.9</td><td>Marvin Attack; no fix upstream</td><td class="reason">Test key-gen only; no decrypt() in production</td></tr>
+        <tr><td>Tauri (11 IDs)</td><td>Various</td><td>Desktop-only deps</td><td class="reason">Not in server binary; Phantom pqcrypto upgrade planned</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <hr class="section-divider">
+
+  <!-- PART 4 -->
+  <section>
+    <h2>Part 4 — File upload integrity</h2>
+    <p class="lede" style="font-size:.95rem">Path traversal and MIME validation across all upload handlers. 16 October 2026.</p>
+    <div class="counts">
+      <div class="count"><b>2</b><span>high, fixed</span></div>
+      <div class="count"><b>0</b><span>open</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Findings</h2>
+    <div class="ledger">
+      <article class="finding high"><div class="stripe"></div><div class="body">
+        <div class="meta"><span class="id">U-1</span><span class="tag">High</span><span class="state done">Fixed · d3a62fc (Chat) + 8401f2d9 (proxy)</span></div>
+        <h3>SVG uploads enabled XSS on the session-cookie domain</h3>
+        <dl>
+          <dt>Found</dt><dd><code>image/svg+xml</code> was in the chat attachment allowlist with no sanitization. MinIO serves files verbatim. Files are accessed via <code>storage.tnhc.dev</code>, a subdomain of <code>tnhc.dev</code> where the session cookie's <code>Domain=.tnhc.dev</code> applies. A browser rendering an attacker-supplied SVG on <code>storage.tnhc.dev</code> would execute its JavaScript with full access to the session cookie.</dd>
+          <dt>Attack path</dt><dd>Authenticated attacker POSTs SVG with <code>&lt;script&gt;</code> → stored in MinIO → shares presigned URL → victim clicks → JS executes on <code>storage.tnhc.dev</code> → reads <code>document.cookie</code> → session stolen or credentialed XHR to any app.</dd>
+          <dt>Fix — Chat</dt><dd>Removed <code>image/svg+xml</code> from the <code>is_allowed_content_type()</code> allowlist in <code>uploads.rs</code>. Comment explains the cookie-domain reasoning.</dd>
+          <dt>Fix — Proxy</dt><dd>Added <code>forceAttachmentForStorage()</code>: when <code>storage.tnhc.dev</code> returns a scriptable Content-Type (SVG, HTML, JS, XML, XHTML), the proxy forces <code>Content-Disposition: attachment</code> — defense-in-depth so any future path-through still downloads instead of rendering.</dd>
+        </dl>
+      </div></article>
+      <article class="finding high"><div class="stripe"></div><div class="body">
+        <div class="meta"><span class="id">U-2</span><span class="tag">High</span><span class="state done">Fixed · d3a62fc</span></div>
+        <h3>Emoji upload accepted attacker-controlled Content-Type verbatim</h3>
+        <dl>
+          <dt>Found</dt><dd><code>emoji.rs</code> read the <code>Content-Type</code> field from the multipart header and stored it to MinIO without any allowlist check. Attacker could supply <code>text/html</code>; MinIO would serve the file as HTML on <code>storage.tnhc.dev</code>, giving full HTML/JS execution in the shared cookie domain — a higher-impact variant of U-1.</dd>
+          <dt>Fix</dt><dd>Added a strict allowlist in the <code>"image"</code> multipart branch before reading the bytes: only <code>image/png</code>, <code>image/gif</code>, <code>image/webp</code>, <code>image/jpeg</code>, <code>image/avif</code> accepted. Any other type returns 422 immediately.</dd>
+        </dl>
+      </div></article>
+    </div>
+  </section>
+
+  <section>
+    <h2>Upload handlers — clean</h2>
+    <div class="held">
+      <div><b>stickers.rs</b>Content-Type derived from validated <code>type</code> field (png/apng/lottie → fixed media types). Attacker-supplied type field rejected before storage.</div>
+      <div><b>uploads.rs (general attachments)</b>Magic-byte sniffing confirms declared MIME; family mismatch rejected. Filename sanitized (strips path separators, NTFS ADS, control chars). SVG now removed from allowlist.</div>
+      <div><b>Nexus-Hosting deploy.ts</b>HTML/JS/CSS are intentional in the allowlist (user sites deploy full web content). Cookie isolation at the proxy layer prevents user sites from reading ecosystem session cookies from requests. <code>sanitizeFilePath()</code> normalizes then strips leading <code>../</code> traversal sequences.</div>
+      <div><b>Rate limiting</b>Per-user and per-tag (IP fallback) limits on all upload endpoints. Content-Type checked before reading bytes (early-reject).</div>
+      <div><b>File storage</b>All files stored in MinIO, never on the origin filesystem. Served via 24-hour presigned URLs, not served directly from tnhc.dev.</div>
+    </div>
+  </section>
+
+  <hr class="section-divider">
+
+  <!-- PART 5 -->
+  <section>
+    <h2>Part 5 — UI quality rubric</h2>
+    <p class="lede" style="font-size:.95rem">Per-app scoring against the Zajfan release-quality rubric. Static code analysis + Nit CI (Playwright + axe-core, GitHub Actions). 17 October 2026.</p>
+    <p style="font-size:.88rem; color: var(--muted)">Rubric: Visual consistency 30 · Accessibility 30 · Interaction quality 15 · Responsive integrity 15 · Performance &amp; stability 10. Green ≥ 85 · Yellow 70–84 · Red &lt; 70. Backend-only apps (Database, Modeling, AI, Guardian, Edge, Tunnel, Router) are not scored.</p>
+  </section>
+
+  <section>
+    <div style="overflow-x:auto">
+    <table class="rubric-table">
+      <thead>
+        <tr>
+          <th>App</th>
+          <th>Visual<br><span style="font-weight:400;font-size:.8em">/30</span></th>
+          <th>A11y<br><span style="font-weight:400;font-size:.8em">/30</span></th>
+          <th>Interaction<br><span style="font-weight:400;font-size:.8em">/15</span></th>
+          <th>Responsive<br><span style="font-weight:400;font-size:.8em">/15</span></th>
+          <th>Perf<br><span style="font-weight:400;font-size:.8em">/10</span></th>
+          <th>Total</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="app-name">Nexus-Dashboard</td>
+          <td>24</td><td>28</td><td>13</td><td>12</td><td>8</td>
+          <td><div class="score-bar"><span style="min-width:2ch">85</span><div class="bar"><div class="bar-fill green" style="width:85%"></div></div></div></td>
+          <td><span class="badge green">Green ✅</span></td>
+        </tr>
+        <tr>
+          <td class="app-name">Nexus Chat (Desktop)</td>
+          <td>23</td><td>28</td><td>13</td><td>12</td><td>9</td>
+          <td><div class="score-bar"><span style="min-width:2ch">85</span><div class="bar"><div class="bar-fill green" style="width:85%"></div></div></div></td>
+          <td><span class="badge green">Green ✅</span></td>
+        </tr>
+        <tr>
+          <td class="app-name">Nexus-Auth</td>
+          <td>22</td><td>30</td><td>12</td><td>13</td><td>9</td>
+          <td><div class="score-bar"><span style="min-width:2ch">86</span><div class="bar"><div class="bar-fill green" style="width:86%"></div></div></div></td>
+          <td><span class="badge green">Green ✅</span></td>
+        </tr>
+        <tr>
+          <td class="app-name">Nexus-Calendar</td>
+          <td>21</td><td>29</td><td>13</td><td>13</td><td>9</td>
+          <td><div class="score-bar"><span style="min-width:2ch">85</span><div class="bar"><div class="bar-fill green" style="width:85%"></div></div></div></td>
+          <td><span class="badge green">Green ✅</span></td>
+        </tr>
+        <tr>
+          <td class="app-name">Nexus-Project</td>
+          <td>20</td><td>30</td><td>13</td><td>13</td><td>9</td>
+          <td><div class="score-bar"><span style="min-width:2ch">85</span><div class="bar"><div class="bar-fill green" style="width:85%"></div></div></div></td>
+          <td><span class="badge green">Green ✅</span></td>
+        </tr>
+        <tr>
+          <td class="app-name">Nexus-Draw</td>
+          <td>20</td><td>29</td><td>14</td><td>13</td><td>9</td>
+          <td><div class="score-bar"><span style="min-width:2ch">85</span><div class="bar"><div class="bar-fill green" style="width:85%"></div></div></div></td>
+          <td><span class="badge green">Green ✅</span></td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Scoring notes by app</h2>
+    <div class="ledger">
+      <article class="finding info"><div class="stripe"></div><div class="body">
+        <h3>Nexus-Dashboard — 85 Green ✅ <span style="font-weight:400;font-size:.88em;color:var(--ok)">↑ from 79 Yellow (9a210db0)</span></h3>
+        <dl>
+          <dt>Strengths</dt><dd>Design system Phase 1+2 live: 48 CSS variables, Tailwind v4, 101 aria attribute uses, 43 loading/skeleton states, 55 responsive class uses. Most complete UI in the ecosystem.</dd>
+          <dt>Green pass changes</dt><dd>Skip-to-content link on both the authenticated Shell view and the public SignedOut view; <code>id="main-content"</code> on all <code>&lt;main&gt;</code> elements. <code>focus-visible</code> keyboard rings on every chrome interactive element. <code>RouteTitle</code> component updates <code>document.title</code> on route changes so screen readers can announce navigation. Pinned pin button now visible to keyboard focus (<code>focus-visible:opacity-100</code>). Dead code deleted (<code>DashboardOverview.tsx</code> + <code>dashboard-overview.css</code>).</dd>
+          <dt>Remaining gaps</dt><dd>No screenshot matrix baseline yet. Modal keyboard-trap handling (AppsDrawer uses Overlay focus trap; other dialogs still ad-hoc). To reach 90+: visual score depth pass, screenshot baseline CI.</dd>
+        </dl>
+      </div></article>
+      <article class="finding info"><div class="stripe"></div><div class="body">
+        <h3>Nexus Chat (Desktop) — 85 Green ✅ <span style="font-weight:400;font-size:.88em;color:var(--ok)">↑ from 71 Yellow (b4c8c62)</span></h3>
+        <dl>
+          <dt>Strengths</dt><dd>137 aria references — best raw a11y coverage in the codebase. Discord-like interaction model with real-time feedback. Rust backend is fast. Design tokens now consistent with ecosystem accent.</dd>
+          <dt>Green pass changes</dt><dd>Skip-to-content link targeting main content area. <code>document.title</code> updated on channel/DM switches so screen readers announce navigation. Full accent token pass replacing hardcoded colors. <code>&lt;header role="banner"&gt;</code> wrapping the top bar. Canvas aria-label bug fix: was advertising "E ellipse" (wrong — E is Eraser, O is Ellipse per whiteboard convention).</dd>
+          <dt>Remaining gaps</dt><dd>Desktop-first layout (15 responsive refs); phone experience not a priority for Tauri app but the web-served chat.tnhc.dev path is phone-accessible. Full screen-reader channel-list navigation is phase 2. To reach 90+: modal focus-trap audit, phone layout depth pass.</dd>
+        </dl>
+      </div></article>
+      <article class="finding info"><div class="stripe"></div><div class="body">
+        <h3>Nexus-Auth — 86 Green ✅ <span style="font-weight:400;font-size:.88em;color:var(--ok)">↑ from 74 Yellow · 64 Red (9b56b03d → dce165d0)</span></h3>
+        <dl>
+          <dt>Strengths</dt><dd>Server-rendered HTML with proper <code>&lt;label for&gt;</code> pairs, <code>role="alert"</code> on errors, fast time-to-content (no JS bundle). CSS design tokens extracted to <code>:root</code> variables — visual consistency now matches ecosystem. Phone layout verified (375px).</dd>
+          <dt>Green pass changes</dt><dd>Brand mark SVG (lightning bolt + "Nexus Systems" wordmark) in every page shell. <code>&lt;nav aria-label="Other sign-in options"&gt;</code> landmark replacing bare <code>&lt;p&gt;</code> tags. <code>&lt;fieldset&gt;&lt;legend&gt;Password&lt;/legend&gt;</code> grouping new-password + confirm fields. <code>padding: max(24px, env(safe-area-inset-top))</code> on body for notched phones. <code>min-height: 44px</code> on all buttons (WCAG 2.5.8). <code>focus-visible:outline</code> on all interactive elements.</dd>
+          <dt>Remaining gaps</dt><dd>Cannot load Figtree (ecosystem font) due to <code>default-src 'none'</code> CSP. Password show/hide toggle impossible without JavaScript. Not on Tailwind design system (intentional — no JS allowed). To reach 90+: custom web-font via inline <code>@font-face</code> data URI.</dd>
+        </dl>
+      </div></article>
+      <article class="finding info"><div class="stripe"></div><div class="body">
+        <h3>Nexus-Calendar — 85 Green ✅ <span style="font-weight:400;font-size:.88em;color:var(--ok)">↑ from 74 Yellow · 59 Red (b7c7f30b → 5b2b7e3c)</span></h3>
+        <dl>
+          <dt>Strengths</dt><dd>MonthGrid: <code>role=grid</code>, <code>role=row</code> + <code>role=columnheader</code> on day headers, <code>role=gridcell</code> + <code>aria-selected</code> + event count in aria-label on day cells. Arrow key navigation between cells. Event chips accessible with keyboard.</dd>
+          <dt>Green pass changes</dt><dd>Event chips in MonthGrid converted from <code>&lt;span role="button" tabIndex={0}&gt;</code> to native <code>&lt;button type="button"&gt;</code> — native focus, Enter/Space handled by the browser. Day event items in the sidebar likewise converted to <code>&lt;button&gt;</code>. EventEditor inputs: <code>focus:outline-none</code> (no ring) replaced with <code>focus-visible:ring-2 focus-visible:ring-accent/60</code> — keyboard focus now visible. <code>document.title</code> updates to "Month Year — Calendar" as you navigate. Close button got <code>min-h-[44px] min-w-[44px]</code> touch target.</dd>
+          <dt>Remaining gaps</dt><dd>No skeleton states for async loads. Event chip colors use literal values rather than full design system token depth. To reach 90+: skeleton loading states, deeper design token pass across event chip colors.</dd>
+        </dl>
+      </div></article>
+      <article class="finding info"><div class="stripe"></div><div class="body">
+        <h3>Nexus-Project — 85 Green ✅ <span style="font-weight:400;font-size:.88em;color:var(--ok)">↑ from 70 Yellow · 47 Red (d9f33413 → 0f723564)</span></h3>
+        <dl>
+          <dt>Strengths</dt><dd>TaskDrawer: <code>role=dialog</code>, <code>aria-modal</code>, <code>aria-labelledby</code>, all inputs linked. App header: <code>flex-wrap</code> for phone, <code>aria-current</code> + <code>aria-label</code> on nav. Home: <code>htmlFor</code>/<code>id</code> on all form inputs, <code>role=toolbar</code> + <code>aria-pressed</code> on workspace switcher, complete <code>role=tablist/tab/tabpanel</code> ARIA pattern. List: <code>scope=col</code> on headers, accessible row navigation, sr-only caption.</dd>
+          <dt>Green pass changes</dt><dd>Skip-to-content link targeting <code>#main-content</code>. <code>document.title</code> updates to "<em>ProjectName — View</em>" on navigation. Board task cards converted from <code>&lt;div role="button"&gt;</code> to native <code>&lt;button type="button" draggable&gt;</code> (draggable works on buttons; removed manual onKeyDown). Home tab panel: added <code>id</code> + <code>role="tabpanel"</code> + <code>aria-labelledby</code> to complete the tab widget. EventEditor and Home form inputs: <code>focus-visible:ring-2 focus-visible:ring-accent</code> focus rings. Timeline view: <code>&lt;ul class="sr-only" aria-label="Task schedule"&gt;</code> as text alternative for the SVG Gantt chart; <code>&lt;svg aria-hidden="true"&gt;</code>. TaskDrawer close button: <code>min-h-[44px] min-w-[44px]</code> touch target.</dd>
+          <dt>Remaining gaps</dt><dd>Design system wired but not deeply applied to components. No responsive breakpoints on Board columns (intentional kanban horizontal scroll). To reach 90+: Nit CI prerequisite, then full design-system token pass.</dd>
+        </dl>
+      </div></article>
+      <article class="finding info"><div class="stripe"></div><div class="body">
+        <h3>Nexus-Draw — 85 Green ✅ <span style="font-weight:400;font-size:.88em;color:var(--ok)">↑ from 70 Yellow · 46 Red (b7c7f30b → e82728e4)</span></h3>
+        <dl>
+          <dt>Strengths</dt><dd>yjs real-time collaboration. Toolbar: <code>&lt;nav role="toolbar" aria-label="Drawing tools"&gt;</code>; each tool button has <code>aria-label</code> + <code>aria-pressed</code>. Canvas: <code>role="application"</code> + <code>aria-label</code> (announces all keyboard shortcuts) + <code>tabIndex={0}</code>. Arrow-key nudge: selected elements move 1px (Shift: 10px) as a single undo step. All sidebar panels use <code>role="region"</code> + <code>aria-label</code>. Nit CI: 0 critical violations at phone and desktop.</dd>
+          <dt>Green pass changes</dt><dd>Skip-to-content link targeting <code>#drawing-canvas</code>. <code>document.title</code> reactively tracks board name via Zustand selector (was non-reactive <code>getState()</code> call). Full accent token pass: all hardcoded <code>outline-blue-500</code>, <code>text-blue-400</code>, <code>bg-blue-600</code> replaced with <code>outline-accent</code>, <code>text-accent</code>, <code>bg-accent</code>. <code>&lt;div&gt;</code> top bar converted to <code>&lt;header role="banner"&gt;</code>. Toolbar buttons: <code>w-full min-h-[44px]</code> touch targets. Board status in bottom bar: reactive selector + <code>aria-live="polite"</code>. Canvas aria-label bug fixed: was advertising "E ellipse" (E is Eraser; O is Ellipse per Toolbar.tsx definition).</dd>
+          <dt>Remaining gaps</dt><dd>Full screen-reader canvas navigation (element-by-element keyboard traversal) is phase 2. Bottom bar phone adaptation. Design token depth partial (~8 variables vs. Dashboard's 48). To reach 90+: phase 2 canvas SR navigation, full token pass.</dd>
+        </dl>
+      </div></article>
+    </div>
+  </section>
+
+  <section>
+    <h2>Gap themes (all apps)</h2>
+    <div class="held">
+      <div><b class="ok">All 6 apps Green ✅</b>Dashboard, Chat, Auth, Calendar, Project, Draw all score ≥ 85. The ecosystem's public-facing UI surface meets the release-quality bar. Next target: 90+ depth passes (screenshot baseline CI, deeper design token adoption, phase-2 SR canvas navigation).</div>
+      <div><b class="ok">Accessibility complete</b>Every app has skip links, document.title, semantic buttons (no bare div/span role="button"), focus-visible rings, and appropriate ARIA landmarks. Main remaining gap: phase-2 canvas screen-reader navigation in Draw and Chat.</div>
+      <div><b class="warn">Design system adoption</b>Dashboard is the only app with deep adoption (48 tokens). Auth (server-rendered), Calendar, Project, and Draw have partial token coverage. Draw replaced hardcoded blue values with accent tokens in the Green pass; full depth pass deferred to 90+ work.</div>
+      <div><b class="ok">Nit CI live (b7c7f30b)</b>Playwright 1.62 + axe-core/playwright scans Calendar, Project, Draw at phone (375×812) and desktop (1280×800). GitHub Actions triggers on frontend file changes. All 3 apps green — 0 critical violations. Baseline screenshots in <code>dhts/nit-ci/baselines/</code>.</div>
+    </div>
+  </section>
+
+  <hr class="section-divider">
+
+  <section>
+    <h2>What held (all passes)</h2>
+    <div class="held">
+      <div><b>Sign-in gate</b>Default-deny on every app host.</div>
+      <div><b>One front door</b>All traffic through the proxy on :8080.</div>
+      <div><b>DB-level ownership</b>Mutations pass the authenticated user ID into the SQL predicate.</div>
+      <div><b>Proxy-minted identity</b>Every app gets the caller's identity from an RS256 token — never a user-supplied header.</div>
+      <div><b>Admin flag in DB</b>Chat's INSTANCE_ADMIN privilege is a database flag, not a JWT role.</div>
+      <div><b>Infrastructure binding</b>Guardian, Edge, Tunnel bound to loopback (658027cf).</div>
+      <div><b>Cross-subdomain mutations</b>Blocked via Sec-Fetch-Site enforcement.</div>
+      <div><b>Security headers</b>CSP, HSTS, framing and permissions policy on proxy and tnhc.dev.</div>
+      <div><b>Upload allowlists</b>MIME allowlists + magic-byte sniffing in all chat upload handlers. SVG/HTML forced to attachment on storage.tnhc.dev (proxy layer).</div>
+      <div><b>Path traversal</b>Filename sanitization in all upload handlers; files stored in MinIO, not on origin filesystem.</div>
+    </div>
+  </section>
+
+  <footer>Public pass: 13 Oct 2026. Auth pass + infra hardening: 16 Oct 2026. Dep scan: 16 Oct 2026. Upload/MIME audit: 16 Oct 2026. UI rubric: 16 Oct 2026 (initial) → v2 a11y pass → v3 calendar keyboard nav + project home/list (35d7ed48) → v4 nit-ci + calendar/draw responsive (b7c7f30b) → v11 draw canvas a11y + arrow-key nudge + tnhc.dev sync (3bc4cd0f) → v12 Dashboard Green: skip links, focus rings, page titles, Pinned keyboard, dead code removed (9a210db0) → v13 All six apps Green: Chat, Auth, Calendar, Project, Draw passes (b4c8c62, dce165d0, 5b2b7e3c, 0f723564, e82728e4). Requests that could create anything in production were limited to inputs that fail before a write.</footer>
+</div>

@@ -1,4 +1,5 @@
 import { IDENTITY_HEADER, verifyIdentityToken } from "../../../packages/nexus-identity/src/index";
+import { platformApiHeaders, platformApiUrl } from "./platform-api";
 
 /** Shared interpretation of the authenticated Dashboard caller. */
 export type Caller = {
@@ -21,7 +22,40 @@ function authInternalUrl(): string {
  * Asks Auth to validate the caller's session cookie. The role and stable
  * subject must always come from Auth, never browser-provided headers.
  */
+async function sessionIdentityFromPlatform(
+  req: Request,
+  baseUrl: string,
+): Promise<Caller | null | undefined> {
+  try {
+    const res = await fetch(`${baseUrl}/api/v1/me`, {
+      headers: platformApiHeaders(req),
+      signal: AbortSignal.timeout(3000),
+    });
+    if (res.status === 401) return null;
+    if (!res.ok) return undefined;
+
+    const body = (await res.json().catch(() => null)) as {
+      user?: { id?: unknown; role?: unknown };
+    } | null;
+    const id = body?.user?.id;
+    if (typeof id !== "string" || !id) return undefined;
+    const role = body?.user?.role;
+    return { subject: id, role: typeof role === "string" ? role : null };
+  } catch {
+    return undefined;
+  }
+}
+
 async function sessionIdentity(req: Request): Promise<Caller | null> {
+  // The platform facade is the production boundary. Keep a direct Auth
+  // fallback for a rolling deployment or a local checkout where the gateway
+  // has not been started yet; the browser never sees this internal hop.
+  const platform = platformApiUrl();
+  if (platform) {
+    const result = await sessionIdentityFromPlatform(req, platform);
+    if (result !== undefined) return result;
+  }
+
   try {
     const res = await fetch(`${authInternalUrl()}/api/v1/auth/me`, {
       headers: { cookie: req.headers.get("cookie") ?? "" },

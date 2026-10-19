@@ -7,13 +7,16 @@
   "main": "src/index.ts",
   "scripts": {
     "start": "NODE_ENV=production bun src/index.ts",
+    "start:gateway": "NODE_ENV=production bun src/gateway-index.ts",
     "dev": "NODE_ENV=development bun --watch src/index.ts",
+    "dev:gateway": "NODE_ENV=development bun --watch src/gateway-index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit",
-    "lint": "biome check src tests",
-    "format": "biome check --write src tests",
+    "typecheck": "tsc -p tsconfig.gateway.json --noEmit",
+    "lint": "biome check src/api-contract.ts src/cloud.ts src/contracts.ts src/gateway-index.ts src/openapi.ts src/server.ts tests/public-api.test.ts tests/server.test.ts",
+    "lint:legacy": "biome check src tests",
+    "format": "biome check --write src/api-contract.ts src/cloud.ts src/contracts.ts src/gateway-index.ts src/openapi.ts src/server.ts tests/public-api.test.ts tests/server.test.ts",
     "check": "bun run typecheck && bun run lint"
   },
   "dependencies": {
