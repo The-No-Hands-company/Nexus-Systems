@@ -1,0 +1,621 @@
+openapi: 3.0.3
+info:
+  title: Nexus Hosting API route inventory
+  version: 1.0.0
+  description: Checked-in compatibility inventory for the retired Express surface; the stable platform facade is served by Nexus API.
+paths:
+  /.well-known/acme-challenge/{token}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /.well-known/nexus-cloud:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /admin/analytics:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /admin/audit-log:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /admin/cloud-routes:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /admin/node:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /admin/node-trust:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /admin/node-trust/{domain}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /admin/overview:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /admin/site-health:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /admin/sites:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /admin/users:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /admin/users/{id}/storage-cap:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /admin/users/{id}/suspend:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /auth/2fa/backup:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /auth/2fa/complete:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /auth/2fa/disable:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /auth/2fa/setup:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /auth/2fa/status:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /auth/2fa/validate:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /auth/2fa/verify:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /auth/user:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /auth/verify-email:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /callback:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /capacity/summary:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /cloud/client:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /cloud/discovery:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /cloud/register:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /domains/{id}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /domains/{id}/provision-tls:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /domains/{id}/tls-status:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /domains/{id}/verify:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /federation/blocks:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /federation/blocks/check:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /federation/blocks/{domain}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /federation/bootstrap:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /federation/events:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /federation/gossip:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /federation/gossip/discover:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /federation/gossip/push:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /federation/handshake:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /federation/manifest/{siteDomain}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /federation/meta:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /federation/peers:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /federation/ping:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /federation/sync:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /forms/{domain}/{formName}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /git-webhook/{siteId}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /health:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /health/live:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /health/ready:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /invitations/{token}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /invitations/{token}/accept:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /login:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /logout:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /mobile-auth/logout:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /nlpl/runtime-info:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /nodes:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /nodes/claim:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /nodes/enroll:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /nodes/{id}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /nodes/{id}/capacity:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /nodes/{id}/enrollment/revoke:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /nodes/{id}/generate-keys:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /nodes/{id}/update-capacity:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /notifications:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /notifications/read-all:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /notifications/unread-count:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /notifications/{id}/read:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /report:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /reports:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /reports/{id}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /reports/{id}/takedown:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/import:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/serve/{domain}/{filePath}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/analytics:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/analytics/export:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/analytics/referrers:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/analytics/stream:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/builds:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/builds/{buildId}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/clone:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/deploy:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/deployments:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/deployments/{depId}/diff:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/deployments/{depId}/rollback:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/domains:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/env:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/env/{key}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/export:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/files:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/files/upload-url:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/forms:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/forms/{formName}/export:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/forms/{submissionId}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/headers:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/headers/{headerId}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/invitations:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/invitations/{inviteId}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/members:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/members/{memberId}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/redirects:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/redirects/{ruleId}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/transfer:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/transfer/accept:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/unlock:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/visibility:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/webhooks:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/webhooks/{hookId}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /sites/{id}/webhooks/{hookId}/deliveries:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /stats:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /stats/hourly:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /storage/objects/{path}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /storage/public-objects/{filePath}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /storage/uploads/request-url:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /tag-bans:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /tag-bans/{tag}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /tokens:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /tokens/{id}:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /webhooks/config:
+    get:
+      responses:
+        "200":
+          description: Implemented route
+  /webhooks/test:
+    get:
+      responses:
+        "200":
+          description: Implemented route

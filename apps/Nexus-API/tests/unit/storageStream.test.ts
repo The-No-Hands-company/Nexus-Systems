@@ -10,6 +10,8 @@ const mockS3StorageProvider = vi.fn().mockImplementation(() => ({
     const client = this.client;
     if (client && client.send) {
       const response = await client.send();
+      if (response.ContentType) res.setHeader("Content-Type", response.ContentType);
+      if (response.ContentLength) res.setHeader("Content-Length", String(response.ContentLength));
       if (response.Body) {
         if (response.Body instanceof Readable) {
           response.Body.pipe(res);

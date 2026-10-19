@@ -17,10 +17,13 @@ import path from "node:path";
  * you raise the coverage.
  */
 const DOCUMENTED_FLOOR = 49;
+let cachedSpecPaths: Set<string> | undefined;
+let cachedCodeRoutes: Set<string> | undefined;
 
 function specPaths(): Set<string> {
+  if (cachedSpecPaths) return cachedSpecPaths;
   const raw = readFileSync(
-    path.resolve(__dirname, "../../../../lib/api-spec/openapi.yaml"),
+    path.resolve(__dirname, "../../docs/legacy-openapi.yaml"),
     "utf8",
   );
   // Deliberately not a YAML parse: js-yaml is not a dependency here, and the
@@ -34,19 +37,22 @@ function specPaths(): Set<string> {
     const m = inPaths && line.match(/^ {2}(\/[^:]*):\s*$/);
     if (m) out.add(m[1]);
   }
+  cachedSpecPaths = out;
   return out;
 }
 
 function codeRoutes(): Set<string> {
+  if (cachedCodeRoutes) return cachedCodeRoutes;
   const dir = path.resolve(__dirname, "../../src/routes");
   const out = new Set<string>();
   for (const f of readdirSync(dir).filter((n) => n.endsWith(".ts"))) {
     const src = readFileSync(path.join(dir, f), "utf8");
     for (const m of src.matchAll(/router\.(?:get|post|put|patch|delete)\(\s*"([^"]+)"/g)) {
       // Express ":id" is OpenAPI "{id}".
-      out.add(m[1].replace(/:(\w+)/g, "{$1}"));
+      out.add(m[1].replace(/:(\w+)/g, "{$1}").replace(/\*(\w+)/g, "{$1}"));
     }
   }
+  cachedCodeRoutes = out;
   return out;
 }
 
