@@ -24,8 +24,12 @@ echo "nexus-dashboard..."
 # Scoped to tests/ on purpose. A bare `bun test` walks into frontend/, whose
 # suite is vitest with a jsdom environment — bun's runner cannot provide
 # `document`, so all of those tests fail on a runner that was never meant to
-# execute them. That is the same fault that kept CI red for five days on
-# Nexus-Draw; this app simply had no gate for it to show up in.
-bun test --max-concurrency=1 tests/
+# execute them. Run each backend file in its own Bun process as well: several
+# proxy suites deliberately bind the same loopback fixture ports, and Bun can
+# otherwise load those files concurrently even with max-concurrency=1.
+for test_file in tests/*.test.ts; do
+  echo "backend: ${test_file}"
+  bun test --max-concurrency=1 "$test_file"
+done
 
 echo "PASS"
