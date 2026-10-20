@@ -564,36 +564,36 @@ export type MailMessage = {
 export type SendOutcome = { recipient: string; status: string; reason: string | null };
 
 export function listMailFolders() {
-  return request<MailFolder[]>("/ipa/mail/folders");
+  return platformRequest<MailFolder[]>("/api/v1/mail/folders");
 }
 
 export function listMailMessages(folderId: string) {
-  return request<MailSummary[]>(`/ipa/mail/folders/${encodeURIComponent(folderId)}/messages`);
+  return platformRequest<MailSummary[]>(`/api/v1/mail/folders/${encodeURIComponent(folderId)}/messages`);
 }
 
 export function readMailMessage(id: string) {
-  return request<MailMessage>(`/ipa/mail/messages/${encodeURIComponent(id)}`);
+  return platformRequest<MailMessage>(`/api/v1/mail/messages/${encodeURIComponent(id)}`);
 }
 
 export function markMailSeen(id: string, seen: boolean) {
-  return request<void>(`/ipa/mail/messages/${encodeURIComponent(id)}/seen`, {
+  return platformRequest<void>(`/api/v1/mail/messages/${encodeURIComponent(id)}/seen`, {
     method: "POST",
     body: JSON.stringify({ seen }),
   });
 }
 
 export function threadMessages(threadId: string) {
-  return request<MailSummary[]>(`/ipa/mail/threads/${encodeURIComponent(threadId)}/messages`);
+  return platformRequest<MailSummary[]>(`/api/v1/mail/threads/${encodeURIComponent(threadId)}/messages`);
 }
 
-/// The URL an attachment downloads from. Not fetched through `request`: the
+/// The URL an attachment downloads from. Not fetched via platformRequest: the
 /// response is bytes, not JSON, and the browser handles the download itself.
 export function attachmentUrl(messageId: string, index: number) {
-  return `/ipa/mail/messages/${encodeURIComponent(messageId)}/attachments/${index}`;
+  return `${platformApiOrigin()}/api/v1/mail/messages/${encodeURIComponent(messageId)}/attachments/${index}`;
 }
 
 export function searchMail(q: string) {
-  return request<MailSummary[]>(`/ipa/mail/search?q=${encodeURIComponent(q)}`);
+  return platformRequest<MailSummary[]>(`/api/v1/mail/search?q=${encodeURIComponent(q)}`);
 }
 
 export type OutgoingAttachment = {
@@ -613,7 +613,7 @@ export function sendMail(body: {
   references?: string[];
   attachments?: OutgoingAttachment[];
 }) {
-  return request<{ outcomes: SendOutcome[] }>("/ipa/mail/messages", {
+  return platformRequest<{ outcomes: SendOutcome[] }>("/api/v1/mail/messages", {
     method: "POST",
     body: JSON.stringify(body),
   });

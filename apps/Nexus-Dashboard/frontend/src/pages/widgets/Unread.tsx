@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Pill } from "../../../../../../packages/nexus-design/src/components/ui/pill";
 import type { MailSummary } from "../../api";
+import { platformApiOrigin } from "../../api";
 import WidgetShell, { type WidgetState } from "./WidgetShell";
 
 /**
@@ -14,7 +15,9 @@ export default function Unread() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/ipa/mail/messages?folder=inbox&unread=1")
+    fetch(`${platformApiOrigin()}/api/v1/mail/messages?folder=inbox&unread=1`, {
+      credentials: "include",
+    })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((body: unknown) => {
         // Every other mail function in api.ts (listMailMessages, threadMessages,
@@ -34,7 +37,9 @@ export default function Unread() {
       .catch(() => {
         if (!cancelled) setState({ status: "error", message: "Mail unavailable" });
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
