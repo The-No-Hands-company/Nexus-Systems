@@ -33,8 +33,9 @@ const PORT = Number(process.env.PORT || "3132");
 const DOMAIN = process.env.DOMAIN || "tnhc.dev";
 
 /**
- * The shell's content security policy. The SPA is fully self-hosted (one
- * hashed JS, one hashed CSS, no inline scripts, all API calls same-origin).
+ * The shell's content security policy. The SPA is self-hosted (one hashed JS,
+ * one hashed CSS, no inline scripts). API calls go to api.<DOMAIN> via the
+ * platform facade, so connect-src must allow it in addition to 'self'.
  * frame-src names the ecosystem's subdomains because the shell mounts each app
  * in an iframe at https://<app>.<DOMAIN>/?embed=1; without it frame-src falls
  * back to default-src 'self' and every app frame is refused (a blank page).
@@ -46,7 +47,7 @@ const SHELL_CSP = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",
-  "connect-src 'self'",
+  `connect-src 'self' https://api.${DOMAIN}`,
   `frame-src 'self' https://*.${DOMAIN}`,
   "object-src 'none'",
   "frame-ancestors 'self'",
