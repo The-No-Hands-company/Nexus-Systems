@@ -159,6 +159,15 @@ describe("stable platform API", () => {
           visibility: "default",
           health: "healthy",
         },
+        {
+          id: "nexus-staged",
+          releaseState: "staged",
+          surface: "user-app",
+          maturity: "stable",
+          reviewStatus: "approved",
+          visibility: "default",
+          health: "healthy",
+        },
       ],
     });
   });

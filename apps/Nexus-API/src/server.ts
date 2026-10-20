@@ -156,7 +156,7 @@ function releasedCatalogBody(body: string): string {
       const item = entry as Record<string, unknown>;
       return (
         item.surface === "user-app" &&
-        item.releaseState === "released" &&
+        (item.releaseState === "released" || item.releaseState === "staged") &&
         item.maturity === "stable" &&
         item.reviewStatus === "approved" &&
         item.visibility !== "hidden"
