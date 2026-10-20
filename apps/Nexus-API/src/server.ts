@@ -102,8 +102,10 @@ function operatorAuthorized(request: Request): boolean {
 }
 
 async function forwardCatalog(request: Request): Promise<Response> {
-  const caller = await callerFromAuth(request);
-  if (caller instanceof Response) return caller;
+  // The catalog is intentionally public: the signed-out home page needs it to
+  // show "Running right now". We attempt auth so the caller's identity is
+  // available for future personalisation, but we never gate the catalog on it.
+  await callerFromAuth(request);
 
   const headers = new Headers({ accept: "application/json" });
   const apiKey = process.env.NEXUS_API_CLOUD_API_KEY || process.env.NEXUS_CLOUD_API_KEY;
