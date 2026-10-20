@@ -173,9 +173,10 @@ function dashboardName(name: string): string {
   return name.replace(/^Nexus[-\s]+/i, "");
 }
 
-/** Shell-native views that are never registered in Cloud (they have no public
- *  origin of their own) but must appear in the launcher. The platform facade
- *  only returns Cloud-registered apps; these are merged in on the frontend. */
+/** Apps that must appear in the launcher regardless of how Cloud classifies them.
+ *  Shell-native apps (delivery: "shell-native") have no public origin.
+ *  Pinned external apps (delivery: "framed") have a publicUrl but need an
+ *  explicit surface: "user-app" because Cloud registers them as developer-tool. */
 const SHELL_NATIVE_APPS: AppEntry[] = [
   {
     id: "nexus-email",
@@ -190,6 +191,42 @@ const SHELL_NATIVE_APPS: AppEntry[] = [
     secondaryShelves: ["work"],
     audiences: ["general"],
     capabilities: ["mail", "calendar-inbox"],
+    maturity: "stable",
+    visibility: "default",
+    reviewStatus: "approved",
+  },
+  {
+    id: "nexus-hosting",
+    name: "Hosting",
+    description: "Deploy and host static sites and web apps — free, self-hosted, no recurring cost",
+    path: "/hosting",
+    publicUrl: "https://hosting.tnhc.dev",
+    delivery: "framed",
+    health: "healthy",
+    surface: "user-app",
+    releaseState: "released",
+    primaryShelf: "operate",
+    secondaryShelves: ["develop"],
+    audiences: ["developer", "power-user"],
+    capabilities: ["hosting", "static-sites"],
+    maturity: "stable",
+    visibility: "default",
+    reviewStatus: "approved",
+  },
+  {
+    id: "nexus-deploy",
+    name: "Deploy",
+    description: "Push-to-deploy platform: connect a repo, auto-build, auto-HTTPS, rollbacks included",
+    path: "/deploy",
+    publicUrl: "https://deploy.tnhc.dev",
+    delivery: "framed",
+    health: "healthy",
+    surface: "user-app",
+    releaseState: "staged",
+    primaryShelf: "operate",
+    secondaryShelves: ["develop"],
+    audiences: ["developer", "power-user"],
+    capabilities: ["deployment", "ci-cd"],
     maturity: "stable",
     visibility: "default",
     reviewStatus: "approved",

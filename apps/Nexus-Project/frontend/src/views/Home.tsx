@@ -87,28 +87,125 @@ export function HomeView({ onSelectProject }: { onSelectProject: (p: Project) =>
   if (loading) return <div className="p-8 text-zinc-500">Loading…</div>;
   if (error) return <div className="p-8 text-state-danger">{error}</div>;
 
-  // No workspaces — onboarding
+  // No workspaces — first-run onboarding
   if (workspaces.length === 0 && !creatingWs) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-5 text-center px-6">
-        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-zinc-700">
-          <rect x="2" y="7" width="20" height="15" rx="2" />
-          <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
-          <line x1="12" y1="12" x2="12" y2="16" />
-          <line x1="10" y1="14" x2="14" y2="14" />
-        </svg>
-        <div>
-          <h2 className="text-xl font-semibold text-zinc-100">No workspaces yet</h2>
-          <p className="mt-1.5 text-sm text-zinc-500 max-w-xs">
-            Create a workspace to start organising your projects and tasks.
-          </p>
+      <div className="flex flex-col items-center justify-center min-h-full py-12 px-6">
+        <div className="w-full max-w-2xl flex flex-col gap-8">
+          {/* Hero */}
+          <div className="text-center flex flex-col items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-zinc-800 border border-zinc-700 flex items-center justify-center">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-accent">
+                <rect x="2" y="7" width="20" height="15" rx="2" />
+                <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
+                <line x1="12" y1="12" x2="12" y2="16" />
+                <line x1="10" y1="14" x2="14" y2="14" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-zinc-100">Project — your self-hosted Linear</h1>
+              <p className="mt-2 text-sm text-zinc-400 max-w-md mx-auto">
+                A full project management system: workspaces, projects, tasks, dependencies, and automatic critical path scheduling. No subscriptions, no data sent elsewhere.
+              </p>
+            </div>
+          </div>
+
+          {/* Feature grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[
+              {
+                icon: (
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+                ),
+                title: "Workspaces",
+                desc: "Personal for solo work, or team workspaces with viewer, member, admin and owner roles.",
+              },
+              {
+                icon: (
+                  <>
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path d="M3 9h18M9 21V9" />
+                  </>
+                ),
+                title: "Projects with keys",
+                desc: "Give each project a short key (like WEB) and tasks become WEB-1, WEB-2 — just like Linear or Jira.",
+              },
+              {
+                icon: (
+                  <>
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                    <rect x="14" y="14" width="7" height="7" rx="1" />
+                  </>
+                ),
+                title: "Board, List, and Timeline",
+                desc: "Switch between a Kanban board, a sorted list, and a Gantt timeline — same data, three lenses.",
+              },
+              {
+                icon: (
+                  <>
+                    <line x1="8" y1="6" x2="21" y2="6" />
+                    <line x1="8" y1="12" x2="21" y2="12" />
+                    <line x1="8" y1="18" x2="21" y2="18" />
+                    <line x1="3" y1="6" x2="3.01" y2="6" />
+                    <line x1="3" y1="12" x2="3.01" y2="12" />
+                    <line x1="3" y1="18" x2="3.01" y2="18" />
+                  </>
+                ),
+                title: "Nested tasks",
+                desc: "Break any task into subtasks to any depth, building a full work breakdown structure automatically.",
+              },
+              {
+                icon: (
+                  <>
+                    <circle cx="12" cy="12" r="3" />
+                    <circle cx="4" cy="6" r="2" />
+                    <circle cx="20" cy="6" r="2" />
+                    <circle cx="4" cy="18" r="2" />
+                    <line x1="6" y1="6" x2="10" y2="11" />
+                    <line x1="14" y1="13" x2="18" y2="6" />
+                    <line x1="10" y1="13" x2="6" y2="17" />
+                  </>
+                ),
+                title: "Dependencies",
+                desc: "Link tasks with finish-to-start, start-to-start, finish-to-finish, or start-to-finish dependencies. Cycles are detected automatically.",
+              },
+              {
+                icon: (
+                  <>
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                  </>
+                ),
+                title: "Critical path",
+                desc: "Switch any project to auto-schedule mode and the engine computes float and the critical path for you.",
+              },
+            ].map(({ icon, title, desc }) => (
+              <div key={title} className="flex gap-3 p-4 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
+                <div className="mt-0.5 flex-shrink-0 w-8 h-8 rounded-md bg-zinc-700/60 flex items-center justify-center">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-zinc-300">
+                    {icon}
+                  </svg>
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-zinc-200">{title}</div>
+                  <div className="mt-0.5 text-xs text-zinc-500 leading-relaxed">{desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* CTA */}
+          <div className="flex flex-col items-center gap-2">
+            <button
+              onClick={() => setCreatingWs(true)}
+              className="px-6 py-3 rounded-md bg-accent text-zinc-900 font-semibold text-sm hover:opacity-90 transition-opacity"
+            >
+              Create your first workspace
+            </button>
+            <p className="text-xs text-zinc-600">Takes less than 30 seconds</p>
+          </div>
         </div>
-        <button
-          onClick={() => setCreatingWs(true)}
-          className="px-5 py-2.5 rounded-md bg-accent text-zinc-900 font-semibold text-sm hover:opacity-90 transition-opacity"
-        >
-          Create workspace
-        </button>
       </div>
     );
   }

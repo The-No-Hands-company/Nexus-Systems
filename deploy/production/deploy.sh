@@ -63,6 +63,7 @@ service_identity() {
         nexus-draw-web) SERVICE_DIR="$ROOT"; SERVICE_EXEC_PATTERN="run --config $ROOT/deploy/production/nexus-draw.Caddyfile" ;;
         nexus-project)      SERVICE_DIR="$ROOT/apps/Nexus-Project"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-project-web)  SERVICE_DIR="$ROOT"; SERVICE_EXEC_PATTERN="run --config $ROOT/deploy/production/nexus-project.Caddyfile" ;;
+        nexus-deploy)   SERVICE_DIR="$ROOT/apps/Nexus-Deploy"; SERVICE_EXEC_PATTERN="node dist/index.js" ;;
         terminal)       SERVICE_DIR="$ROOT/apps/Nexus-Terminal"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         mailapi)        SERVICE_DIR="$ROOT/apps/Nexus-Email"; SERVICE_EXEC_PATTERN="/nexus-mailapi" ;;
         mailsmtpd)      SERVICE_DIR="$ROOT/apps/Nexus-Email"; SERVICE_EXEC_PATTERN="/nexus-mailsmtpd" ;;
@@ -86,6 +87,7 @@ service_port() {
         nexus-draw-web) printf '%s\n' 8091 ;;
         nexus-project) printf '%s\n' 3152 ;;
         nexus-project-web) printf '%s\n' 8093 ;;
+        nexus-deploy) printf '%s\n' 8096 ;;
         terminal) printf '%s\n' 3110 ;;
         mailapi) printf '%s\n' 3140 ;;
         mailsmtpd) printf '%s\n' "${NEXUS_EMAIL_MX_PORT:-2525}" ;;
@@ -712,7 +714,39 @@ cmd_start() {
         fi
     fi
 
-    # 4d. Nexus-Terminal — the loopback-only shell service used by Dashboard.
+    # 4d. Nexus-Deploy — push-to-deploy platform on 8096. Secrets (APP_SECRET,
+    # JWT_SECRET) live in apps/Nexus-Deploy/.env, generated once on first start.
+    # The service is Node.js (not Bun): must be built before deploy with
+    # `cd apps/Nexus-Deploy && npm run build`.
+    if [ -f "$ROOT/apps/Nexus-Deploy/dist/index.js" ]; then
+        local deploy_env_file="$ROOT/apps/Nexus-Deploy/.env"
+        if [ ! -f "$deploy_env_file" ]; then
+            local deploy_app_secret deploy_jwt_secret
+            deploy_app_secret="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+            deploy_jwt_secret="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+            touch "$deploy_env_file"
+            chmod 600 "$deploy_env_file"
+            printf 'NEXUS_DEPLOY_APP_SECRET=%s\n' "$deploy_app_secret" >> "$deploy_env_file"
+            printf 'NEXUS_DEPLOY_JWT_SECRET=%s\n' "$deploy_jwt_secret" >> "$deploy_env_file"
+            log "Generated Deploy secrets in apps/Nexus-Deploy/.env"
+        fi
+        local nexus_deploy_app_secret nexus_deploy_jwt_secret
+        nexus_deploy_app_secret="$(sed -n 's/^NEXUS_DEPLOY_APP_SECRET=//p' "$deploy_env_file" | head -1 | tr -d '\r"')"
+        nexus_deploy_jwt_secret="$(sed -n 's/^NEXUS_DEPLOY_JWT_SECRET=//p' "$deploy_env_file" | head -1 | tr -d '\r"')"
+        start_service "nexus-deploy" "$ROOT/apps/Nexus-Deploy" 8096 \
+            PORT=8096 \
+            BASE_URL=https://deploy."$DOMAIN" \
+            BASE_DOMAIN="$DOMAIN" \
+            NEXUS_AUTH_URL=http://127.0.0.1:4310 \
+            NEXUS_AUTH_PUBLIC_URL=https://auth."$DOMAIN" \
+            APP_SECRET="$nexus_deploy_app_secret" \
+            JWT_SECRET="$nexus_deploy_jwt_secret" \
+            node dist/index.js
+    else
+        warn "Deploy not built — run: (cd apps/Nexus-Deploy && npm run build)"
+    fi
+
+    # 4e. Nexus-Terminal — the loopback-only shell service used by Dashboard.
     #
     # The browser never reaches this port directly. Dashboard authorizes the
     # same founder/admin session, validates the browser Origin, and relays the
@@ -1019,7 +1053,7 @@ cmd_stop() {
     local svc
 
     log "Stopping all Nexus services..."
-    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
         stop_service "$svc" || true
     done
     cd "$ROOT"
@@ -1029,7 +1063,7 @@ cmd_stop() {
 
 cmd_service_status() {
     echo "Service Status:"
-    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
         service_identity "$svc" || continue
         local pid port
         port="$(service_port "$svc")"
