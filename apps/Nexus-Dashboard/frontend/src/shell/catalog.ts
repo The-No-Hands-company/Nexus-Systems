@@ -76,7 +76,8 @@ export function isLauncherApp(app: AppEntry): boolean {
   const destinationValid = app.publicUrl === undefined
     ? app.delivery === "shell-native"
     : typeof app.publicUrl === "string" && safePublicUrl(app.publicUrl);
-  return app.surface === "user-app" && app.releaseState === "released" &&
+  return app.surface === "user-app" &&
+    (app.releaseState === "released" || app.releaseState === "staged") &&
     app.maturity === "stable" && app.health === "healthy" &&
     app.reviewStatus === "approved" &&
     (app.visibility === "default" || app.visibility === "discoverable") &&

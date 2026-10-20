@@ -158,9 +158,36 @@ type WireAppEntry = {
 function pathFor(app: WireAppEntry): string {
   if (app.path) return app.path;
   if (app.url?.startsWith("/")) return app.url;
-  // A fabricated slug is not proof that a released app has a usable route.
+  // Derive in-shell route for first-party nexus-* apps (nexus-chat → /chat).
+  // Non-nexus-* IDs return "" and are dropped by safePath in isLauncherApp.
+  if (typeof app.id === "string" && /^nexus-[a-z0-9-]+$/.test(app.id)) {
+    return `/${app.id.replace(/^nexus-/, "")}`;
+  }
   return "";
 }
+
+/** Shell-native views that are never registered in Cloud (they have no public
+ *  origin of their own) but must appear in the launcher. The platform facade
+ *  only returns Cloud-registered apps; these are merged in on the frontend. */
+const SHELL_NATIVE_APPS: AppEntry[] = [
+  {
+    id: "nexus-email",
+    name: "Nexus Mail",
+    description: "Sovereign mail — read, compose and search your Nexus mailbox",
+    path: "/mail",
+    delivery: "shell-native",
+    health: "healthy",
+    surface: "user-app",
+    releaseState: "released",
+    primaryShelf: "everyday",
+    secondaryShelves: ["work"],
+    audiences: ["general"],
+    capabilities: ["mail", "calendar-inbox"],
+    maturity: "stable",
+    visibility: "default",
+    reviewStatus: "approved",
+  },
+];
 
 export async function listApps(): Promise<AppEntry[]> {
   const { apps } = await platformRequest<{ apps: WireAppEntry[] }>("/api/v1/apps");
@@ -169,12 +196,17 @@ export async function listApps(): Promise<AppEntry[]> {
   // inspect the wire response directly.
   // Normalise once, here, so no component has to care whether the server that
   // answered is older than the bundle asking.
-  return apps.map(({ url, ...a }) => {
+  const registry = apps.map(({ url, ...a }) => {
     const path = pathFor({ ...a, url });
     const publicUrl = a.publicUrl ?? (url?.startsWith("/") ? undefined : url);
     const delivery = a.delivery ?? (url?.startsWith("/") ? "shell-native" : "framed");
     return normalizeCatalogEntry({ ...a, path, ...(publicUrl ? { publicUrl } : {}), delivery });
   });
+  // Merge shell-native entries first (they win on id/path collision).
+  const registryWithoutNative = registry.filter(
+    (r) => !SHELL_NATIVE_APPS.some((n) => n.id === r.id || n.path === r.path),
+  );
+  return [...SHELL_NATIVE_APPS, ...registryWithoutNative];
 }
 
 export function getCatalogPreferences() {
