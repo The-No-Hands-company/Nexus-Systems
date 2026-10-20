@@ -63,6 +63,35 @@ describe("stable platform API host", () => {
       globalThis.fetch = realFetch;
     }
   });
+
+  it("preserves credentialed CORS headers set by the Nexus-API service", async () => {
+    const { handleRequest } = await import("../proxy");
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = Object.assign(
+      async () =>
+        new Response(JSON.stringify({ apps: [] }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "access-control-allow-origin": "https://app.tnhc.dev",
+            "access-control-allow-credentials": "true",
+            vary: "Origin",
+          },
+        }),
+      { preconnect: realFetch.preconnect },
+    );
+    try {
+      const response = await handleRequest(
+        new Request("http://api.tnhc.dev/api/v1/apps", {
+          headers: { origin: "https://app.tnhc.dev" },
+        }),
+      );
+      expect(response.headers.get("access-control-allow-origin")).toBe("https://app.tnhc.dev");
+      expect(response.headers.get("access-control-allow-credentials")).toBe("true");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
 });
 
 describe("identity header is proxy-controlled", () => {
