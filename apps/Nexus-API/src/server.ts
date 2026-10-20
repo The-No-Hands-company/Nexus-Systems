@@ -1,5 +1,6 @@
 import { buildApiContract } from "./api-contract";
 import { startNexusApiHeartbeat } from "./cloud";
+import { applyApiCors, preflightApiResponse } from "./cors";
 import { buildOpenApiDocument } from "./openapi";
 
 interface Route {
@@ -218,116 +219,125 @@ export function createApiServer() {
     hostname: process.env.NEXUS_API_BIND_HOST || "127.0.0.1",
     port,
     async fetch(request: Request) {
-      const url = new URL(request.url);
-      const path = url.pathname || "";
-      if (request.method === "GET" && path === "/health") {
-        return json(
-          {
-            service: "nexus-api",
-            status: "ok",
-            version: process.env.NEXUS_API_VERSION?.trim() || "1.0.0",
-            uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
-          },
-          200,
-        );
-      }
+      const preflight = preflightApiResponse(request);
+      if (preflight) return preflight;
 
-      if (request.method === "GET" && path === "/api/v1/contract") {
-        return json(buildApiContract(baseUrl), 200);
-      }
-
-      if (request.method === "GET" && path === "/api/v1/openapi.json") {
-        return json(buildOpenApiDocument(buildApiContract(baseUrl)), 200, {
-          "cache-control": "public, max-age=300",
-        });
-      }
-
-      if (request.method === "GET" && path === "/api/v1/me") {
-        const caller = await callerFromAuth(request);
-        return caller instanceof Response
-          ? caller
-          : json({ user: caller.user }, 200, { "cache-control": "private, no-store" });
-      }
-
-      if (request.method === "GET" && (path === "/api/v1/apps" || path === "/api/v1/catalog")) {
-        return forwardCatalog(request);
-      }
-
-      if (path === "/api/v1/mail" || path.startsWith("/api/v1/mail/")) {
-        return forwardMail(request, path.replace(/^\/api\/v1\/mail\/?/, ""), url.search);
-      }
-
-      if (request.method === "GET" && path === "/api/v1/gateway/status") {
-        const s: GatewayStats = {
-          routesDefined: routes.size,
-          routedTotal,
-          errorsTotal,
-          uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
-        };
-        return json({ service: "nexus-api", ...s }, 200);
-      }
-
-      if (request.method === "GET" && path === "/api/v1/gateway/routes") {
-        if (!operatorAuthorized(request)) return json({ error: "operator_auth_required" }, 401);
-        return json({ routes: Array.from(routes.values()) }, 200);
-      }
-
-      if (request.method === "POST" && path === "/api/v1/gateway/routes") {
-        if (!operatorAuthorized(request)) return json({ error: "operator_auth_required" }, 401);
-        const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-        const routePath = typeof body.path === "string" ? body.path.trim() : "";
-        const method = typeof body.method === "string" ? body.method.toUpperCase() : "GET";
-        const target = typeof body.target === "string" ? body.target.trim() : "";
-        if (!routePath || !target) return json({ error: "path and target are required" }, 400);
-
-        const key = `${method}:${routePath}`;
-        routes.set(key, { path: routePath, method, target, enabled: true });
-        return json({ status: "ok", route: routes.get(key) }, 201);
-      }
-
-      const routeKeyMatch = path.match(/^\/api\/v1\/gateway\/routes\/([^/]+)\/([^/]+)$/);
-      if (request.method === "DELETE" && routeKeyMatch) {
-        if (!operatorAuthorized(request)) return json({ error: "operator_auth_required" }, 401);
-        const rawMethod = routeKeyMatch[1];
-        const rawPath = routeKeyMatch[2];
-        if (!rawMethod || !rawPath) return json({ error: "invalid route" }, 400);
-        const key = `${rawMethod.toUpperCase()}:${decodeURIComponent(rawPath)}`;
-        const deleted = routes.delete(key);
-        return json({ deleted }, deleted ? 200 : 404);
-      }
-
-      // ── Proxy routing ──
-      const requestKey = `${request.method}:${path}`;
-      const matched = routes.get(requestKey);
-      if (matched?.enabled) {
-        const headers = new Headers(request.headers);
-        headers.delete("host");
-        headers.delete("content-length");
-        if (authToken) headers.set("authorization", `Bearer ${authToken}`);
-
-        const body =
-          request.method === "GET" || request.method === "HEAD"
-            ? undefined
-            : await request.arrayBuffer();
-
-        try {
-          const upstream = await fetch(`${matched.target.replace(/\/$/, "")}${path}${url.search}`, {
-            method: request.method,
-            headers,
-            body,
-            redirect: "manual",
-          });
-          routedTotal++;
-          const resHeaders = new Headers(upstream.headers);
-          resHeaders.delete("content-length");
-          return new Response(upstream.body, { status: upstream.status, headers: resHeaders });
-        } catch {
-          errorsTotal++;
-          return json({ error: "upstream unavailable", target: matched.target }, 502);
+      const respond = async (): Promise<Response> => {
+        const url = new URL(request.url);
+        const path = url.pathname || "";
+        if (request.method === "GET" && path === "/health") {
+          return json(
+            {
+              service: "nexus-api",
+              status: "ok",
+              version: process.env.NEXUS_API_VERSION?.trim() || "1.0.0",
+              uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
+            },
+            200,
+          );
         }
-      }
 
-      return json({ error: "not found" }, 404);
+        if (request.method === "GET" && path === "/api/v1/contract") {
+          return json(buildApiContract(baseUrl), 200);
+        }
+
+        if (request.method === "GET" && path === "/api/v1/openapi.json") {
+          return json(buildOpenApiDocument(buildApiContract(baseUrl)), 200, {
+            "cache-control": "public, max-age=300",
+          });
+        }
+
+        if (request.method === "GET" && path === "/api/v1/me") {
+          const caller = await callerFromAuth(request);
+          return caller instanceof Response
+            ? caller
+            : json({ user: caller.user }, 200, { "cache-control": "private, no-store" });
+        }
+
+        if (request.method === "GET" && (path === "/api/v1/apps" || path === "/api/v1/catalog")) {
+          return forwardCatalog(request);
+        }
+
+        if (path === "/api/v1/mail" || path.startsWith("/api/v1/mail/")) {
+          return forwardMail(request, path.replace(/^\/api\/v1\/mail\/?/, ""), url.search);
+        }
+
+        if (request.method === "GET" && path === "/api/v1/gateway/status") {
+          const s: GatewayStats = {
+            routesDefined: routes.size,
+            routedTotal,
+            errorsTotal,
+            uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
+          };
+          return json({ service: "nexus-api", ...s }, 200);
+        }
+
+        if (request.method === "GET" && path === "/api/v1/gateway/routes") {
+          if (!operatorAuthorized(request)) return json({ error: "operator_auth_required" }, 401);
+          return json({ routes: Array.from(routes.values()) }, 200);
+        }
+
+        if (request.method === "POST" && path === "/api/v1/gateway/routes") {
+          if (!operatorAuthorized(request)) return json({ error: "operator_auth_required" }, 401);
+          const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+          const routePath = typeof body.path === "string" ? body.path.trim() : "";
+          const method = typeof body.method === "string" ? body.method.toUpperCase() : "GET";
+          const target = typeof body.target === "string" ? body.target.trim() : "";
+          if (!routePath || !target) return json({ error: "path and target are required" }, 400);
+
+          const key = `${method}:${routePath}`;
+          routes.set(key, { path: routePath, method, target, enabled: true });
+          return json({ status: "ok", route: routes.get(key) }, 201);
+        }
+
+        const routeKeyMatch = path.match(/^\/api\/v1\/gateway\/routes\/([^/]+)\/([^/]+)$/);
+        if (request.method === "DELETE" && routeKeyMatch) {
+          if (!operatorAuthorized(request)) return json({ error: "operator_auth_required" }, 401);
+          const rawMethod = routeKeyMatch[1];
+          const rawPath = routeKeyMatch[2];
+          if (!rawMethod || !rawPath) return json({ error: "invalid route" }, 400);
+          const key = `${rawMethod.toUpperCase()}:${decodeURIComponent(rawPath)}`;
+          const deleted = routes.delete(key);
+          return json({ deleted }, deleted ? 200 : 404);
+        }
+
+        // ── Proxy routing ──
+        const requestKey = `${request.method}:${path}`;
+        const matched = routes.get(requestKey);
+        if (matched?.enabled) {
+          const headers = new Headers(request.headers);
+          headers.delete("host");
+          headers.delete("content-length");
+          if (authToken) headers.set("authorization", `Bearer ${authToken}`);
+
+          const body =
+            request.method === "GET" || request.method === "HEAD"
+              ? undefined
+              : await request.arrayBuffer();
+
+          try {
+            const upstream = await fetch(
+              `${matched.target.replace(/\/$/, "")}${path}${url.search}`,
+              {
+                method: request.method,
+                headers,
+                body,
+                redirect: "manual",
+              },
+            );
+            routedTotal++;
+            const resHeaders = new Headers(upstream.headers);
+            resHeaders.delete("content-length");
+            return new Response(upstream.body, { status: upstream.status, headers: resHeaders });
+          } catch {
+            errorsTotal++;
+            return json({ error: "upstream unavailable", target: matched.target }, 502);
+          }
+        }
+
+        return json({ error: "not found" }, 404);
+      }; // end respond
+      return applyApiCors(request, await respond());
     },
   });
 

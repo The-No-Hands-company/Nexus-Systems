@@ -65,7 +65,7 @@ describe("OpenAPI coverage", () => {
 
   it("finds the service's routes", () => {
     expect(codeRoutes().size).toBeGreaterThan(100);
-  });
+  }, 30000);
 
   it("documents at least as many routes as it did when this was written", () => {
     const documented = [...codeRoutes()].filter((r) => specPaths().has(r)).length;

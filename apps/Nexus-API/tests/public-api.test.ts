@@ -170,4 +170,53 @@ describe("stable platform API", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ folders: [{ id: "inbox", name: "Inbox" }] });
   });
+
+  describe("CORS boundary", () => {
+    const ALLOWED = "https://app.tnhc.dev";
+    const BLOCKED = "https://evil.example.com";
+
+    it("responds to a preflight from the allowed origin with 204 and CORS headers", async () => {
+      const res = await fetch(`${base}/api/v1/me`, {
+        method: "OPTIONS",
+        headers: {
+          origin: ALLOWED,
+          "access-control-request-method": "GET",
+          "access-control-request-headers": "content-type",
+        },
+      });
+      expect(res.status).toBe(204);
+      expect(res.headers.get("access-control-allow-origin")).toBe(ALLOWED);
+      expect(res.headers.get("access-control-allow-credentials")).toBe("true");
+      expect(res.headers.get("vary")).toMatch(/origin/i);
+    });
+
+    it("rejects a preflight from a disallowed origin with 403", async () => {
+      const res = await fetch(`${base}/api/v1/me`, {
+        method: "OPTIONS",
+        headers: {
+          origin: BLOCKED,
+          "access-control-request-method": "GET",
+        },
+      });
+      expect(res.status).toBe(403);
+      expect(res.headers.get("access-control-allow-origin")).toBeNull();
+    });
+
+    it("adds CORS response headers on credentialed requests from the allowed origin", async () => {
+      const res = await fetch(`${base}/api/v1/me`, {
+        headers: { cookie: "nexus_session=valid", origin: ALLOWED },
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("access-control-allow-origin")).toBe(ALLOWED);
+      expect(res.headers.get("access-control-allow-credentials")).toBe("true");
+    });
+
+    it("omits CORS headers on requests from a disallowed origin", async () => {
+      const res = await fetch(`${base}/api/v1/me`, {
+        headers: { cookie: "nexus_session=valid", origin: BLOCKED },
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("access-control-allow-origin")).toBeNull();
+    });
+  });
 });

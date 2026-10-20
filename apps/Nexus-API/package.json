@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Nexus API server — unified API gateway for the Nexus ecosystem",
+  "description": "Nexus API server \u2014 unified API gateway for the Nexus ecosystem",
   "main": "src/index.ts",
   "scripts": {
     "start": "NODE_ENV=production bun src/index.ts",
@@ -14,9 +14,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc -p tsconfig.gateway.json --noEmit",
-    "lint": "biome check src/api-contract.ts src/cloud.ts src/contracts.ts src/gateway-index.ts src/openapi.ts src/server.ts tests/public-api.test.ts tests/server.test.ts",
+    "lint": "biome check src/api-contract.ts src/cloud.ts src/contracts.ts src/gateway-index.ts src/openapi.ts src/server.ts tests/public-api.test.ts tests/server.test.ts src/cors.ts tests/contract-parity.test.ts",
     "lint:legacy": "biome check src tests",
-    "format": "biome check --write src/api-contract.ts src/cloud.ts src/contracts.ts src/gateway-index.ts src/openapi.ts src/server.ts tests/public-api.test.ts tests/server.test.ts",
+    "format": "biome check --write src/api-contract.ts src/cloud.ts src/contracts.ts src/gateway-index.ts src/openapi.ts src/server.ts tests/public-api.test.ts tests/server.test.ts src/cors.ts tests/contract-parity.test.ts",
     "check": "bun run typecheck && bun run lint"
   },
   "dependencies": {

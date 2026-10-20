@@ -1,5 +1,5 @@
 export type ApiContractRoute = {
-  method: "GET" | "POST" | "DELETE";
+  method: "GET" | "POST" | "DELETE" | "PATCH" | "PUT";
   path: string;
   access: "public" | "session" | "operator";
   owner: "nexus-api" | "nexus-auth" | "nexus-cloud" | "nexus-email";

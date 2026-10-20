@@ -16,9 +16,11 @@
     "src/node-runtime.d.ts",
     "src/cloud.ts",
     "src/contracts.ts",
+    "src/cors.ts",
     "src/gateway-index.ts",
     "src/openapi.ts",
     "src/server.ts",
+    "tests/contract-parity.test.ts",
     "tests/public-api.test.ts",
     "tests/server.test.ts"
   ]
