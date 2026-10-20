@@ -166,13 +166,20 @@ function pathFor(app: WireAppEntry): string {
   return "";
 }
 
+/** Strip the "Nexus " / "Nexus-" brand prefix from catalog names for display
+ *  inside the dashboard — users are already in Nexus, the prefix is redundant.
+ *  IDs and slugs are untouched; only the human-readable display name changes. */
+function dashboardName(name: string): string {
+  return name.replace(/^Nexus[-\s]+/i, "");
+}
+
 /** Shell-native views that are never registered in Cloud (they have no public
  *  origin of their own) but must appear in the launcher. The platform facade
  *  only returns Cloud-registered apps; these are merged in on the frontend. */
 const SHELL_NATIVE_APPS: AppEntry[] = [
   {
     id: "nexus-email",
-    name: "Nexus Mail",
+    name: "Mail",
     description: "Sovereign mail — read, compose and search your Nexus mailbox",
     path: "/mail",
     delivery: "shell-native",
@@ -200,7 +207,8 @@ export async function listApps(): Promise<AppEntry[]> {
     const path = pathFor({ ...a, url });
     const publicUrl = a.publicUrl ?? (url?.startsWith("/") ? undefined : url);
     const delivery = a.delivery ?? (url?.startsWith("/") ? "shell-native" : "framed");
-    return normalizeCatalogEntry({ ...a, path, ...(publicUrl ? { publicUrl } : {}), delivery });
+    const name = typeof a.name === "string" ? dashboardName(a.name) : a.name;
+    return normalizeCatalogEntry({ ...a, name, path, ...(publicUrl ? { publicUrl } : {}), delivery });
   });
   // Merge shell-native entries first (they win on id/path collision).
   const registryWithoutNative = registry.filter(
