@@ -30,7 +30,7 @@ function stubFetch(overrides: Record<string, () => Response> = {}) {
     const u = String(url);
     const key = `${init?.method ?? "GET"} ${u}`;
     if (overrides[key]) return overrides[key]!();
-    if (u === "/ipa/v1/auth/me") return jsonResponse({ user: ME });
+    if (u === "https://api.tnhc.dev/api/v1/me") return jsonResponse({ user: ME });
     if (u === "/ipa/v1/auth/sessions") return jsonResponse({ sessions: SESSIONS });
     if (u === "/ipa/v1/auth/activity") return jsonResponse(ACTIVITY);
     if (u === "/ipa/v1/auth/recovery-codes") return jsonResponse({ remaining: 7 });

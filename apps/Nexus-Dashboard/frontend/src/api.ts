@@ -3,12 +3,44 @@ import { normalizeCatalogEntry } from "./shell/catalog";
 /**
  * Same-origin calls to the dashboard server.
  *
- * Every path here is relative on purpose. The dashboard server proxies
+ * Most paths here are relative on purpose. The dashboard server proxies
  * /ipa/v1/auth/* to Nexus-Auth, so the browser never makes a cross-origin
- * request and never needs credentialed CORS. Hardcoding https://auth.<domain>
- * here would work in dev and fail in a browser for reasons that look like a
- * login bug.
+ * request and never needs credentialed CORS for those calls.
+ *
+ * Identity and app catalog use the stable platform facade at api.tnhc.dev
+ * (VITE_NEXUS_API_URL). Those calls are cross-origin and use
+ * credentials: "include" so the session cookie is sent.
  */
+
+export function platformApiOrigin(): string {
+  return (
+    (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_NEXUS_API_URL?: string } }).env?.VITE_NEXUS_API_URL) ||
+    "https://api.tnhc.dev"
+  ).replace(/\/+$/, "");
+}
+
+async function platformRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const url = `${platformApiOrigin()}${path}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      credentials: "include",
+      headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+    });
+  } catch {
+    throw new ApiError("network", "Could not reach the server. Check your connection and try again.");
+  }
+  const body = await res.json().catch(() => ({}) as Record<string, unknown>);
+  if (!res.ok) {
+    const reason =
+      typeof (body as { error?: unknown }).error === "string"
+        ? (body as { error: string }).error
+        : `http_${res.status}`;
+    throw new ApiError(reason, reason);
+  }
+  return body as T;
+}
 
 export type CatalogShelf = "everyday" | "work" | "create" | "develop" | "operate" | "personal" | "explore";
 export type CatalogAudience = "general" | "business" | "creator" | "developer" | "operations" | "power-user";
@@ -86,7 +118,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function me(): Promise<Me | null> {
   try {
-    const { user } = await request<{ user: Me }>("/ipa/v1/auth/me");
+    const { user } = await platformRequest<{ user: Me }>("/api/v1/me");
     return user;
   } catch {
     // Not signed in is the common case here, not an error worth surfacing.
@@ -131,7 +163,7 @@ function pathFor(app: WireAppEntry): string {
 }
 
 export async function listApps(): Promise<AppEntry[]> {
-  const { apps } = await request<{ apps: WireAppEntry[] }>("/ipa/apps");
+  const { apps } = await platformRequest<{ apps: WireAppEntry[] }>("/api/v1/apps");
   // The catalog helper is the single frontend normalization boundary. Older
   // Dashboard servers may omit every placement field, so components must not
   // inspect the wire response directly.
