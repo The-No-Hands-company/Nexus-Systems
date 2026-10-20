@@ -94,6 +94,8 @@ jobs:
         run: bash scripts/check-privacy.sh
       - name: Gate
         run: cd deploy/production && bash check.sh
+      - name: Audit artifact integrity
+        run: bash deploy/production/tests/audit-artifact.test.sh
 
   # ── The identity contract, and the services that trust it ───────
   #
