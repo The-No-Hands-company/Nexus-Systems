@@ -160,7 +160,7 @@ function releasedCatalogBody(body: string): string {
         item.visibility !== "hidden"
       );
     });
-    return JSON.stringify({ ...parsed, [key]: apps });
+    return JSON.stringify({ [key]: apps });
   } catch {
     return JSON.stringify({ apps: [] });
   }
