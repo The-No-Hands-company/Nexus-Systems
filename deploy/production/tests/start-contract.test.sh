@@ -132,6 +132,9 @@ assert_contains $'\tNEXUS_API_BIND_HOST=127.0.0.1' "$nexus_api_args" "Nexus-API 
 assert_contains $'\tNEXUS_API_AUTH_URL=http://127.0.0.1:4310' "$nexus_api_args" "Nexus-API did not receive the loopback Auth URL"
 assert_contains $'\tNEXUS_API_CLOUD_URL=http://127.0.0.1:8787' "$nexus_api_args" "Nexus-API did not receive the loopback Cloud URL"
 assert_contains $'\tNEXUS_API_ALLOWED_ORIGINS=' "$nexus_api_args" "Nexus-API did not receive the CORS allowed origins"
+assert_contains $'\tNEXUS_API_CALENDAR_URL=http://127.0.0.1:3068' "$nexus_api_args" "Nexus-API did not receive the loopback Calendar URL"
+[ -n "${NEXUS_CALENDAR_DASHBOARD_SECRET:-}" ] \
+    || fail "cmd_start did not export the Calendar dashboard secret for services to inherit"
 assert_contains $'terminal\t' "$terminal_args" "production launch did not start Nexus-Terminal"
 assert_contains $'calendar\t' "$calendar_args" "production launch did not start Nexus-Calendar"
 assert_contains $'nexus-calendar-web\t' "$calendar_web_args" "production launch did not start the Calendar web front door"

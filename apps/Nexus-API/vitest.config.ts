@@ -13,6 +13,7 @@ export default defineConfig({
       "tests/public-api.test.ts",
       "tests/server.test.ts",
       "tests/delegation-boundary.test.ts",
+      "tests/calendar-boundary.test.ts",
     ],
   },
 });

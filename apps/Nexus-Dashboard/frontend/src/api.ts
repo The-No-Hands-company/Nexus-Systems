@@ -619,6 +619,73 @@ export function sendMail(body: {
   });
 }
 
+// ── Calendar ─────────────────────────────────────────────────────────────────
+//
+// All calendar routes go through the platform facade (api.tnhc.dev), which
+// resolves identity from the session cookie and forwards x-nexus-subject +
+// x-nexus-dashboard-secret to Nexus-Calendar. The browser never supplies
+// either header — the facade always overwrites them.
+
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  startTime: string;
+  endTime?: string;
+  allDay?: boolean;
+  description?: string;
+  location?: string;
+};
+
+export type CalendarEventInput = {
+  title: string;
+  startTime: string;
+  endTime?: string;
+  allDay?: boolean;
+  description?: string;
+  location?: string;
+};
+
+export function listCalendarEvents(from: string, to: string) {
+  return platformRequest<{ events: CalendarEvent[] }>(
+    `/api/v1/calendar/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+  ).then((r) => {
+    if (!Array.isArray(r.events)) throw new Error("malformed_response");
+    return r.events;
+  });
+}
+
+export function getCalendarEvent(id: string) {
+  return platformRequest<{ event: CalendarEvent }>(
+    `/api/v1/calendar/events/${encodeURIComponent(id)}`,
+  ).then((r) => r.event);
+}
+
+export function createCalendarEvent(input: CalendarEventInput) {
+  return platformRequest<{ event: CalendarEvent }>("/api/v1/calendar/events", {
+    method: "POST",
+    body: JSON.stringify(input),
+  }).then((r) => r.event);
+}
+
+export function updateCalendarEvent(id: string, patch: Partial<CalendarEventInput>) {
+  return platformRequest<{ event: CalendarEvent }>(
+    `/api/v1/calendar/events/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(patch) },
+  ).then((r) => r.event);
+}
+
+export function deleteCalendarEvent(id: string) {
+  return platformRequest<void>(`/api/v1/calendar/events/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export function getPublicCalendarEvent(token: string) {
+  return platformRequest<{ event: CalendarEvent }>(
+    `/api/v1/calendar/public/${encodeURIComponent(token)}`,
+  ).then((r) => r.event);
+}
+
 /** A filed issue, as GitHub returned it. */
 export type FiledIssue = { number: number; url: string };
 

@@ -1,23 +1,16 @@
 import { useEffect, useState } from "react";
+import { listCalendarEvents, type CalendarEvent } from "../../api";
 import WidgetShell, { type WidgetState } from "./WidgetShell";
 
-type Event = { id: string; title: string; startTime: string };
-
 export default function Today() {
-  const [state, setState] = useState<WidgetState<Event[]>>({ status: "loading" });
+  const [state, setState] = useState<WidgetState<CalendarEvent[]>>({ status: "loading" });
 
   useEffect(() => {
     let cancelled = false;
     const today = new Date().toISOString().slice(0, 10);
-    fetch(`/ipa/calendar/events?from=${today}&to=${today}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((body: { events?: unknown }) => {
-        // A 200 with the wrong shape is not "nothing today" — it is "we could
-        // not understand the answer", which is an error, not a quiet day.
-        // Throwing here (rather than coercing to []) routes it through the
-        // same catch below instead of letting `undefined.length` crash render.
-        if (!Array.isArray(body.events)) throw new Error("malformed_response");
-        if (!cancelled) setState({ status: "ready", data: body.events as Event[] });
+    listCalendarEvents(today, today)
+      .then((events) => {
+        if (!cancelled) setState({ status: "ready", data: events });
       })
       .catch(() => {
         if (!cancelled) setState({ status: "error", message: "Calendar unavailable" });

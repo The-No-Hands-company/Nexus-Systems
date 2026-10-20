@@ -14,9 +14,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc -p tsconfig.gateway.json --noEmit",
-    "lint": "biome check src/api-contract.ts src/cloud.ts src/contracts.ts src/gateway-index.ts src/openapi.ts src/server.ts tests/public-api.test.ts tests/server.test.ts src/cors.ts tests/contract-parity.test.ts",
+    "lint": "biome check src/api-contract.ts src/cloud.ts src/contracts.ts src/gateway-index.ts src/openapi.ts src/server.ts tests/public-api.test.ts tests/server.test.ts src/cors.ts tests/contract-parity.test.ts tests/calendar-boundary.test.ts",
     "lint:legacy": "biome check src tests",
-    "format": "biome check --write src/api-contract.ts src/cloud.ts src/contracts.ts src/gateway-index.ts src/openapi.ts src/server.ts tests/public-api.test.ts tests/server.test.ts src/cors.ts tests/contract-parity.test.ts",
+    "format": "biome check --write src/api-contract.ts src/cloud.ts src/contracts.ts src/gateway-index.ts src/openapi.ts src/server.ts tests/public-api.test.ts tests/server.test.ts src/cors.ts tests/contract-parity.test.ts tests/calendar-boundary.test.ts",
     "check": "bun run typecheck && bun run lint"
   },
   "dependencies": {

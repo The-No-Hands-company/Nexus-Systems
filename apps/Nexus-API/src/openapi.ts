@@ -203,6 +203,99 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
+      "/api/v1/calendar/events": {
+        get: {
+          operationId: "listCalendarEvents",
+          summary: "List the caller's events in a date range",
+          security: sessionSecurity,
+          parameters: [
+            {
+              name: "from",
+              in: "query",
+              required: true,
+              schema: { type: "string", format: "date" },
+            },
+            { name: "to", in: "query", required: true, schema: { type: "string", format: "date" } },
+          ],
+          responses: {
+            "200": jsonResponse("Caller-owned events", {
+              type: "object",
+              properties: { events: { type: "array" } },
+            }),
+            "400": jsonResponse("Invalid date range", { $ref: "#/components/schemas/Error" }),
+            "401": jsonResponse("Authentication required", { $ref: "#/components/schemas/Error" }),
+            "503": jsonResponse("Calendar unavailable", { $ref: "#/components/schemas/Error" }),
+          },
+        },
+        post: {
+          operationId: "createCalendarEvent",
+          summary: "Create an event for the caller",
+          security: sessionSecurity,
+          responses: {
+            "201": jsonResponse("Created event", { type: "object" }),
+            "400": jsonResponse("Invalid event", { $ref: "#/components/schemas/Error" }),
+            "401": jsonResponse("Authentication required", { $ref: "#/components/schemas/Error" }),
+            "503": jsonResponse("Calendar unavailable", { $ref: "#/components/schemas/Error" }),
+          },
+        },
+      },
+      "/api/v1/calendar/events/{id}": {
+        get: {
+          operationId: "getCalendarEvent",
+          summary: "Read one caller-owned event",
+          security: sessionSecurity,
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": jsonResponse("Caller-owned event", { type: "object" }),
+            "401": jsonResponse("Authentication required", { $ref: "#/components/schemas/Error" }),
+            "404": jsonResponse("Not found", { $ref: "#/components/schemas/Error" }),
+            "503": jsonResponse("Calendar unavailable", { $ref: "#/components/schemas/Error" }),
+          },
+        },
+        patch: {
+          operationId: "updateCalendarEvent",
+          summary: "Update one caller-owned event",
+          security: sessionSecurity,
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": jsonResponse("Updated event", { type: "object" }),
+            "400": jsonResponse("Invalid patch", { $ref: "#/components/schemas/Error" }),
+            "401": jsonResponse("Authentication required", { $ref: "#/components/schemas/Error" }),
+            "404": jsonResponse("Not found", { $ref: "#/components/schemas/Error" }),
+            "503": jsonResponse("Calendar unavailable", { $ref: "#/components/schemas/Error" }),
+          },
+        },
+        delete: {
+          operationId: "deleteCalendarEvent",
+          summary: "Delete one caller-owned event",
+          security: sessionSecurity,
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": jsonResponse("Deleted", {
+              type: "object",
+              properties: { deleted: { type: "boolean" } },
+            }),
+            "401": jsonResponse("Authentication required", { $ref: "#/components/schemas/Error" }),
+            "404": jsonResponse("Not found", { $ref: "#/components/schemas/Error" }),
+            "503": jsonResponse("Calendar unavailable", { $ref: "#/components/schemas/Error" }),
+          },
+        },
+      },
+      "/api/v1/calendar/public/{token}": {
+        get: {
+          operationId: "getPublicCalendarEvent",
+          summary: "Read a publicly shared event — the token is the access credential",
+          security: publicSecurity,
+          parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": jsonResponse("Publicly shared event", { type: "object" }),
+            "404": jsonResponse("Not found or token expired", {
+              $ref: "#/components/schemas/Error",
+            }),
+            "503": jsonResponse("Calendar unavailable", { $ref: "#/components/schemas/Error" }),
+          },
+        },
+      },
       "/api/v1/gateway/status": {
         get: {
           operationId: "getGatewayStatus",

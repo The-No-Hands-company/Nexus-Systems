@@ -365,6 +365,7 @@ start_nexus_api_service() {
         NEXUS_API_AUTH_URL=http://127.0.0.1:4310 \
         NEXUS_API_CLOUD_URL=http://127.0.0.1:8787 \
         NEXUS_API_MAIL_URL=http://127.0.0.1:3140 \
+        NEXUS_API_CALENDAR_URL=http://127.0.0.1:3068 \
         NEXUS_API_ENABLE_CLOUD_INTEGRATION=false \
         bun run src/gateway-index.ts
 }
@@ -478,6 +479,24 @@ cmd_start() {
     if [ -z "$NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT" ]; then
         warn "NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT unset — calendar will refuse to start if any pre-ownership events remain"
     fi
+
+    # Shared secret between Nexus-Calendar and Nexus-API. Calendar trusts
+    # x-nexus-subject only when this secret accompanies it. Both services
+    # inherit it from the environment — it is never written as a KEY=value
+    # launcher argument. Generated once on first boot and persisted to
+    # apps/Nexus-Calendar/.env so restarts keep the same value.
+    if [ -z "${NEXUS_CALENDAR_DASHBOARD_SECRET:-}" ] && [ -f "$ROOT/apps/Nexus-Calendar/.env" ]; then
+        NEXUS_CALENDAR_DASHBOARD_SECRET="$(sed -n 's/^NEXUS_CALENDAR_DASHBOARD_SECRET=//p' "$ROOT/apps/Nexus-Calendar/.env" \
+            | head -1 | tr -d '\r"')"
+        [ -n "$NEXUS_CALENDAR_DASHBOARD_SECRET" ] && log "Adopted NEXUS_CALENDAR_DASHBOARD_SECRET from apps/Nexus-Calendar/.env"
+    fi
+    if [ -z "${NEXUS_CALENDAR_DASHBOARD_SECRET:-}" ]; then
+        NEXUS_CALENDAR_DASHBOARD_SECRET="$(openssl rand -hex 32)"
+        printf 'NEXUS_CALENDAR_DASHBOARD_SECRET=%s\n' "$NEXUS_CALENDAR_DASHBOARD_SECRET" \
+            >> "$ROOT/apps/Nexus-Calendar/.env"
+        log "Generated NEXUS_CALENDAR_DASHBOARD_SECRET and persisted to apps/Nexus-Calendar/.env"
+    fi
+    export NEXUS_CALENDAR_DASHBOARD_SECRET
 
     # Same pattern for Email's database URL: the value lives beside the app so
     # a credential is never written into this script or the repo.

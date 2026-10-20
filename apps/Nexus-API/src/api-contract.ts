@@ -2,7 +2,7 @@ export type ApiContractRoute = {
   method: "GET" | "POST" | "DELETE" | "PATCH" | "PUT";
   path: string;
   access: "public" | "session" | "operator";
-  owner: "nexus-api" | "nexus-auth" | "nexus-cloud" | "nexus-email";
+  owner: "nexus-api" | "nexus-auth" | "nexus-cloud" | "nexus-email" | "nexus-calendar";
   description: string;
 };
 
@@ -60,6 +60,49 @@ const ROUTES: readonly ApiContractRoute[] = [
     access: "session",
     owner: "nexus-cloud",
     description: "Compatibility alias for the released app catalog",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/calendar/events",
+    access: "session",
+    owner: "nexus-calendar",
+    description: "List the caller's events in a date range",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/calendar/events",
+    access: "session",
+    owner: "nexus-calendar",
+    description: "Create an event for the caller",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/calendar/events/:id",
+    access: "session",
+    owner: "nexus-calendar",
+    description: "Read one caller-owned event",
+  },
+  {
+    method: "PATCH",
+    path: "/api/v1/calendar/events/:id",
+    access: "session",
+    owner: "nexus-calendar",
+    description: "Update one caller-owned event",
+  },
+  {
+    method: "DELETE",
+    path: "/api/v1/calendar/events/:id",
+    access: "session",
+    owner: "nexus-calendar",
+    description: "Delete one caller-owned event",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/calendar/public/:token",
+    access: "public",
+    owner: "nexus-calendar",
+    description:
+      "Read a publicly shared event by its share token — the token is the access credential",
   },
   {
     method: "GET",

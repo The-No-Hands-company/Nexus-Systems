@@ -28,20 +28,20 @@ function json(payload: unknown, s: number, h?: Record<string, string>): Response
   });
 }
 
-function serviceUrl(name: "auth" | "cloud" | "mail"): string {
-  const fallback =
-    name === "auth"
-      ? "http://127.0.0.1:4310"
-      : name === "cloud"
-        ? "http://127.0.0.1:8787"
-        : "http://127.0.0.1:3140";
-  const envName =
-    name === "auth"
-      ? "NEXUS_API_AUTH_URL"
-      : name === "cloud"
-        ? "NEXUS_API_CLOUD_URL"
-        : "NEXUS_API_MAIL_URL";
-  return (process.env[envName] || fallback).trim().replace(/\/+$/, "");
+function serviceUrl(name: "auth" | "cloud" | "mail" | "calendar"): string {
+  const fallbacks: Record<string, string> = {
+    auth: "http://127.0.0.1:4310",
+    cloud: "http://127.0.0.1:8787",
+    mail: "http://127.0.0.1:3140",
+    calendar: "http://127.0.0.1:3068",
+  };
+  const envNames: Record<string, string> = {
+    auth: "NEXUS_API_AUTH_URL",
+    cloud: "NEXUS_API_CLOUD_URL",
+    mail: "NEXUS_API_MAIL_URL",
+    calendar: "NEXUS_API_CALENDAR_URL",
+  };
+  return (process.env[envNames[name]] || fallbacks[name]).trim().replace(/\/+$/, "");
 }
 
 function credentialHeaders(request: Request): Headers {
@@ -205,6 +205,77 @@ async function forwardMail(request: Request, rest: string, search: string): Prom
   }
 }
 
+const PUBLIC_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
+
+async function forwardCalendar(request: Request, rest: string, search: string): Promise<Response> {
+  // Public share: no session required — the token IS the access credential.
+  if (rest.startsWith("public/")) {
+    if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405);
+    const token = rest.slice("public/".length);
+    if (!PUBLIC_TOKEN_RE.test(token)) return json({ error: "not_found" }, 404);
+    try {
+      const upstream = await fetch(`${serviceUrl("calendar")}/api/v1/calendar/${rest}`, {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(5000),
+      });
+      const ct = upstream.headers.get("content-type");
+      return new Response(upstream.body, {
+        status: upstream.status,
+        headers: { "content-type": ct ?? "application/json", "cache-control": "no-store" },
+      });
+    } catch {
+      return json({ error: "calendar_unavailable" }, 503);
+    }
+  }
+
+  // Session routes — allowlist: events (list/create) and events/:id (read/update/delete).
+  // Sharing mutation routes (/shares, /public-share) are kept owner-private.
+  const allowed = /^events(?:\/[^/]+)?$/;
+  if (!allowed.test(rest)) return json({ error: "not_found" }, 404);
+  if (
+    request.method !== "GET" &&
+    request.method !== "POST" &&
+    request.method !== "PATCH" &&
+    request.method !== "DELETE"
+  ) {
+    return json({ error: "method_not_allowed" }, 405);
+  }
+
+  const caller = await callerFromAuth(request);
+  if (caller instanceof Response) return caller;
+  const subject = callerSubject(caller);
+  if (!subject) return json({ error: "identity_unavailable" }, 503);
+
+  const secret = (process.env.NEXUS_CALENDAR_DASHBOARD_SECRET || "").trim();
+  if (!secret) return json({ error: "calendar_unavailable" }, 503);
+
+  const headers = new Headers({
+    accept: request.headers.get("accept") ?? "application/json",
+    "x-nexus-subject": subject,
+    "x-nexus-dashboard-secret": secret,
+  });
+  const contentType = request.headers.get("content-type");
+  if (contentType) headers.set("content-type", contentType);
+
+  try {
+    const upstream = await fetch(`${serviceUrl("calendar")}/api/v1/calendar/${rest}${search}`, {
+      method: request.method,
+      headers,
+      body:
+        request.method === "POST" || request.method === "PATCH"
+          ? await request.arrayBuffer()
+          : undefined,
+      signal: AbortSignal.timeout(10000),
+    });
+    const responseHeaders = new Headers();
+    const ct = upstream.headers.get("content-type");
+    responseHeaders.set("content-type", ct ?? "application/json");
+    return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
+  } catch {
+    return json({ error: "calendar_unavailable" }, 503);
+  }
+}
+
 export function createApiServer() {
   const port = Number(process.env.PORT || "3036");
   const baseUrl = process.env.NEXUS_API_BASE_URL || `http://localhost:${port}`;
@@ -256,6 +327,10 @@ export function createApiServer() {
 
         if (request.method === "GET" && (path === "/api/v1/apps" || path === "/api/v1/catalog")) {
           return forwardCatalog(request);
+        }
+
+        if (path === "/api/v1/calendar" || path.startsWith("/api/v1/calendar/")) {
+          return forwardCalendar(request, path.replace(/^\/api\/v1\/calendar\/?/, ""), url.search);
         }
 
         if (path === "/api/v1/mail" || path.startsWith("/api/v1/mail/")) {
