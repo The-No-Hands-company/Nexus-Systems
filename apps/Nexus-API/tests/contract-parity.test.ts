@@ -48,4 +48,15 @@ describe("contract / OpenAPI parity", () => {
     expect(accesses).toContain("session");
     expect(accesses).toContain("operator");
   });
+
+  it("every route has a non-empty owner and a valid access tier (admission gate)", () => {
+    const validAccess = new Set(["public", "session", "operator"]);
+    for (const route of contract.routes) {
+      expect(route.owner, `route ${route.method} ${route.path} is missing an owner`).toBeTruthy();
+      expect(
+        validAccess.has(route.access),
+        `route ${route.method} ${route.path} has invalid access: "${route.access}"`,
+      ).toBe(true);
+    }
+  });
 });
