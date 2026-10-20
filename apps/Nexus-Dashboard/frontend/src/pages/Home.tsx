@@ -4,6 +4,7 @@ import Shell from "../shell/Shell";
 import NotificationBell from "../shell/NotificationBell";
 import { Pill } from "../../../../../packages/nexus-design/src/components/ui/pill";
 import Activity from "./widgets/Activity";
+import Today from "./widgets/Today";
 import { buildAuthPageUrl } from "../authPages";
 import Pinned from "./widgets/Pinned";
 import AppShelf from "../components/AppShelf";
@@ -88,8 +89,9 @@ export default function Home() {
               ))}
             </section>
 
-            {/* Pinned apps + activity */}
+            {/* Widgets: today's schedule, unread mail, pinned apps, activity */}
             <div className="grid gap-4 md:grid-cols-2">
+              <Today />
               <Pinned />
               <Activity />
             </div>

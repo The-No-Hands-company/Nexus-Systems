@@ -30,6 +30,15 @@ vi.mock("./api", () => ({
   listSessions: vi.fn(async () => []),
   myActivity: vi.fn(async () => []),
   remainingRecoveryCodes: vi.fn(async () => 7),
+  listCalendarEvents: vi.fn(async () => []),
+  createCalendarEvent: vi.fn(async (input) => ({ id: "new-1", ...input })),
+  deleteCalendarEvent: vi.fn(async () => undefined),
+  ApiError: class ApiError extends Error {
+    constructor(public readonly reason: string, message?: string) {
+      super(message ?? reason);
+      this.name = "ApiError";
+    }
+  },
 }));
 
 import App from "./App";
@@ -115,14 +124,13 @@ describe("shell routing", () => {
     expect(screen.queryByText("App not found.")).toBeNull();
   });
 
-  it("does not retain a Dashboard-native Calendar view", async () => {
-    // /calendar is intercepted by Dashboard's server and served by the
-    // Calendar proxy before this SPA is reached. The client router therefore
-    // cannot own a Calendar component or an iframe fallback for it.
+  it("mounts the Calendar view inside the shell at /calendar", async () => {
     window.history.pushState({}, "", "/calendar");
     render(<App />);
-    await waitFor(() => expect(screen.getByText("App not found.")).toBeTruthy());
-    expect(screen.queryByTitle(/Calendar/)).toBeNull();
+    // CalendarView renders a month heading (e.g. "October 2026"). Waiting for
+    // the navigation buttons is sufficient to prove the route mounted.
+    await waitFor(() => expect(screen.getByRole("button", { name: /previous month/i })).toBeTruthy());
+    expect(screen.getByRole("button", { name: /next month/i })).toBeTruthy();
   });
 });
 
@@ -134,6 +142,7 @@ describe("shell-native views", () => {
   for (const path of [
     "/account", "/admin", "/cloud", "/cloud/tools",
     "/cloud/federation", "/cloud/identity", "/cloud/api", "/terminal",
+    "/calendar",
     // C3: Grid was built and tested but unrouted — this proves /apps
     // actually reaches it inside the shell, the browse view behind the
     // drawer's "See all N apps" affordance.

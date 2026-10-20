@@ -17,6 +17,7 @@ import { listApps, me, type AppEntry, type Me } from "./api";
 import Shell from "./shell/Shell";
 import NotificationBell from "./shell/NotificationBell";
 import AppFrame from "./shell/AppFrame";
+import CalendarView from "./pages/calendar/CalendarView";
 import ReportIssue from "./pages/ReportIssue";
 import TerminalAccess, { type UserState } from "./pages/terminal/TerminalAccess";
 
@@ -262,6 +263,14 @@ export default function App() {
           }
         />
         <Route
+          path="/calendar"
+          element={
+            <ShellView state={appsState} user={user}>
+              <CalendarView />
+            </ShellView>
+          }
+        />
+        <Route
           path="/mail"
           element={<ShellView state={appsState} user={user}><MailList /></ShellView>}
         />
@@ -325,6 +334,7 @@ const ROUTE_TITLES: Record<string, string> = {
   "/cloud/federation": "Cloud Federation — Nexus",
   "/cloud/identity": "Cloud Identity — Nexus",
   "/cloud/api": "Cloud API — Nexus",
+  "/calendar": "Calendar — Nexus",
   "/mail": "Mail — Nexus",
   "/report": "Report — Nexus",
   "/terminal": "Terminal — Nexus",
