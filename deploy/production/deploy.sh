@@ -433,6 +433,23 @@ install_privacy_canary() {
         || warn "could not install the privacy canary timer (user systemd unavailable?)"
 }
 
+# Service watchdog: a timer fires deploy.sh bg every 5 minutes. Since bg is
+# idempotent (it skips managed services and starts missing ones), a crashed
+# service recovers within one interval automatically. Never fatal.
+install_watchdog() {
+    [ "${NEXUS_SKIP_WATCHDOG_INSTALL:-0}" = "1" ] && return 0
+    local here lib unit_dir
+    here="$ROOT/deploy/production"
+    lib="$HOME/.local/lib/nexus"
+    unit_dir="$HOME/.config/systemd/user"
+    mkdir -p "$lib" "$unit_dir" \
+        && install -m 0755 "$here/nexus-watchdog.sh" "$lib/nexus-watchdog.sh" \
+        && install -m 0644 "$here/systemd/nexus-watchdog.service" "$here/systemd/nexus-watchdog.timer" "$unit_dir/" \
+        && systemctl --user daemon-reload \
+        && systemctl --user enable --now nexus-watchdog.timer \
+        || warn "could not install the watchdog timer (user systemd unavailable?) - services will not auto-recover"
+}
+
 # Run the privacy canary once, right after a deploy, so status.tnhc.dev shows
 # the state this deploy produced rather than the last daily run, which may have
 # fallen inside an outage and still read "fail" (audit O-7). --no-block: the
@@ -932,9 +949,12 @@ cmd_start() {
     install_log_rotation
     install_privacy_canary
 
-    # 6. Verify
+    # 6. Verify and arm watchdog
     sleep 3
     cmd_status
+    install_log_rotation
+    install_privacy_canary
+    install_watchdog
     run_privacy_canary_now
 }
 

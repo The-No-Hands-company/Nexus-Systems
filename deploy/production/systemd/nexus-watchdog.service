@@ -1,0 +1,8 @@
+[Unit]
+Description=Nexus ecosystem watchdog — restart any crashed services
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/lib/nexus/nexus-watchdog.sh
+StandardOutput=journal
+StandardError=journal
