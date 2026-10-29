@@ -7,6 +7,7 @@ import { API_HOST, gate } from "./gate";
 import { privacyStatusBody } from "./privacy-status";
 import { canaryStatusBody } from "./warrant-canary";
 import { stripAddressHeaders, tagFromRequestHeaders, CLIENT_TAG_HEADER } from "./client-tag";
+import { renderMaintenancePage } from "./maintenance-page";
 
 // Configuration
 const PORT = Number(process.env.PROXY_PORT || "80");
@@ -28,6 +29,9 @@ interface NexusCloudRoute {
    * missing or misspelled field can never lock an app's users out.
    */
   requiresAuth?: boolean;
+  /** Present when an operator has this part in maintenance; the proxy serves
+   *  the maintenance page instead of proxying. */
+  maintenance?: { part: string; reason?: string; startedAt: string; expectedEndAt?: string };
 }
 
 /** Where a host resolves to, and what kind of thing lives there. */
@@ -54,6 +58,9 @@ export interface RouteTarget {
    * addressing.
    */
   kind: "app" | "site";
+  /** Operator-set maintenance window for this part, if any. When present the
+   *  proxy serves the maintenance page in place of the upstream. */
+  maintenance?: { part: string; reason?: string; startedAt: string; expectedEndAt?: string };
 }
 
 // Route cache: host (full domain, lowercased) -> target
@@ -123,6 +130,14 @@ async function fetchRouteConfig(): Promise<NexusCloudRoute[] | null> {
 }
 
 // Convert Nexus-Cloud routes to a simple host->upstream map
+// Retry-After for a maintenance 503: the time left until the expected end,
+// clamped to a sane band, or a short default when no end is known.
+function retryAfterSeconds(expectedEndAt?: string): number {
+  if (!expectedEndAt) return 300;
+  const ms = Date.parse(expectedEndAt) - Date.now();
+  return Number.isNaN(ms) ? 300 : Math.max(30, Math.min(86400, Math.ceil(ms / 1000)));
+}
+
 export function buildRouteMap(routes: NexusCloudRoute[]): Record<string, RouteTarget> {
   const map: Record<string, RouteTarget> = {};
 
@@ -142,6 +157,7 @@ export function buildRouteMap(routes: NexusCloudRoute[]): Record<string, RouteTa
         // Anything Cloud has a route row for is a registered application. Sites
         // never appear here — they are reached through the wildcard fallback.
         kind: "app",
+        ...(route.maintenance ? { maintenance: route.maintenance } : {}),
       };
     }
   }
@@ -552,6 +568,8 @@ async function handleRequestInner(
     // rather than assumed, so the route table stays the thing that decides and
     // the value cannot quietly become decorative.
     let matchedKind: RouteTarget["kind"] | null = null;
+    // An operator-set maintenance window for the matched part, if any.
+    let maintenance: RouteTarget["maintenance"];
 
     // Cloud keys its routing table by full hostname, and buildRouteMap
     // lowercases and strips a leading "www." from both sides, so a single
@@ -567,7 +585,31 @@ async function handleRequestInner(
         upstreamUrl = matched.upstream;
         requiresAuth = matched.requiresAuth;
         matchedKind = matched.kind;
+        maintenance = matched.maintenance;
       }
+    }
+
+    // An operator has this part in maintenance: serve the maintenance page
+    // instead of proxying. Deliberately before the auth gate — the page is
+    // public — and uncacheable, with Retry-After derived from the expected end.
+    if (maintenance) {
+      return new Response(
+        renderMaintenancePage({
+          part: maintenance.part,
+          reason: maintenance.reason,
+          startedAt: maintenance.startedAt,
+          expectedEndAt: maintenance.expectedEndAt,
+          statusUrl: `status.${DOMAIN}`,
+        }),
+        {
+          status: 503,
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "retry-after": String(retryAfterSeconds(maintenance.expectedEndAt)),
+            "cache-control": "no-store",
+          },
+        },
+      );
     }
 
     // Former tunnel bypass routes: storage and the non-login auth.<DOMAIN> paths
