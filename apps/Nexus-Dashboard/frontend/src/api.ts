@@ -183,6 +183,24 @@ function dashboardName(name: string): string {
  *  explicit surface: "user-app" because Cloud registers them as developer-tool. */
 const SHELL_NATIVE_APPS: AppEntry[] = [
   {
+    id: "nexus-chat",
+    name: "Chat",
+    description: "Private, community-owned chat — servers, channels, voice and direct messages",
+    path: "/chat",
+    publicUrl: "https://chat.tnhc.dev",
+    delivery: "framed",
+    health: "healthy",
+    surface: "user-app",
+    releaseState: "released",
+    primaryShelf: "work",
+    secondaryShelves: ["everyday", "personal"],
+    audiences: ["general"],
+    capabilities: ["chat", "messaging"],
+    maturity: "stable",
+    visibility: "default",
+    reviewStatus: "approved",
+  },
+  {
     id: "nexus-email",
     name: "Mail",
     description: "Sovereign mail — read, compose and search your Nexus mailbox",
