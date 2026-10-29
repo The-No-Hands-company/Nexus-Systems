@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { buildAuthPageUrl } from "../authPages";
+import MaintenanceControls from "../components/MaintenanceControls";
 import { PageHeader } from "../../../../../packages/nexus-design/src/components/ui/page-header";
 import { Badge } from "../../../../../packages/nexus-design/src/components/ui/badge";
 import {
@@ -155,6 +156,8 @@ export default function Admin() {
       <div className="space-y-10 px-6 py-6">
 
       {error && <p role="alert" className="text-sm text-state-danger">{error}</p>}
+
+      <MaintenanceControls />
 
       <div>
         <h2 className="text-lg font-medium">Pending requests</h2>

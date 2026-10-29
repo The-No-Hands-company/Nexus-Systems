@@ -580,6 +580,43 @@ export function listServiceHealth() {
   return request<{ services: ServiceStatus[] }>("/ipa/dev/services");
 }
 
+// ── Platform maintenance (operator-only) ───────────────────────────────────
+//
+// Set/clear an operator maintenance window for a platform part. Proxied through
+// this origin to Cloud, which authorises the write against the caller's session
+// (system:config). The browser never holds the operator API key.
+
+export type MaintenanceWindow = {
+  subjectId: string;
+  part: string;
+  reason?: string;
+  startedAt: string;
+  expectedEndAt?: string;
+  setBy: string;
+};
+
+export function listMaintenance() {
+  return request<{ maintenance: MaintenanceWindow[] }>("/ipa/maintenance").then(
+    (r) => r.maintenance ?? [],
+  );
+}
+
+export function setMaintenance(
+  subjectId: string,
+  input: { part: string; reason?: string; expectedEndAt?: string },
+) {
+  return request<{ maintenance: MaintenanceWindow }>(
+    `/ipa/maintenance/${encodeURIComponent(subjectId)}`,
+    { method: "POST", body: JSON.stringify(input) },
+  ).then((r) => r.maintenance);
+}
+
+export function clearMaintenance(subjectId: string) {
+  return request<{ ok: true }>(`/ipa/maintenance/${encodeURIComponent(subjectId)}`, {
+    method: "DELETE",
+  });
+}
+
 // ── User management (founder-only) ─────────────────────────────────────────
 
 export type ManagedUser = {

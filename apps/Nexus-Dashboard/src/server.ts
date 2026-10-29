@@ -393,6 +393,38 @@ async function fetchApps(req: Request): Promise<Response> {
   }
 }
 
+/**
+ * Operator maintenance control. Unlike the Cloud console proxy — which attaches
+ * the operator API key for read-only views — this forwards the caller's own
+ * session cookie, because Cloud authorises a maintenance write against the
+ * operator's session (system:config) and explicitly refuses the node API key
+ * for it. Admin-gated here too, as defense in depth ahead of Cloud's own check.
+ */
+async function proxyToMaintenance(req: Request, subPath: string): Promise<Response> {
+  const who = await callerIdentity(req);
+  if (!who) return Response.json({ error: "not_authenticated" }, { status: 401 });
+  if (!isAdminRole(who.role)) return Response.json({ error: "forbidden" }, { status: 403 });
+  const method = req.method;
+  try {
+    const res = await fetch(`${cloudBaseUrl()}/api/v1/maintenance${subPath}`, {
+      method,
+      headers: {
+        cookie: req.headers.get("cookie") ?? "",
+        ...(method === "GET" || method === "HEAD" ? {} : { "content-type": "application/json" }),
+      },
+      body: method === "GET" || method === "HEAD" ? undefined : await req.text(),
+      signal: AbortSignal.timeout(5000),
+    });
+    const body = await res.text();
+    return new Response(body, {
+      status: res.status,
+      headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
+    });
+  } catch {
+    return Response.json({ error: "cloud_unavailable" }, { status: 503 });
+  }
+}
+
 async function proxyToAuth(req: Request, path: string): Promise<Response> {
   const incoming = new URL(req.url);
   const upstream = new URL(authInternalUrl());
@@ -522,6 +554,15 @@ export async function handleRequest(
 
   if (path.startsWith(MAIL_PREFIX)) {
     return proxyToMail(req, path.slice(MAIL_PREFIX.length), url.search);
+  }
+
+  if (path === "/ipa/maintenance" || path.startsWith("/ipa/maintenance/")) {
+    const subPath = path.slice("/ipa/maintenance".length); // "" or "/<subjectId>"
+    if (req.method === "GET" && subPath === "") return proxyToMaintenance(req, "");
+    if ((req.method === "POST" || req.method === "DELETE") && subPath.length > 1) {
+      return proxyToMaintenance(req, subPath);
+    }
+    return Response.json({ error: "not_found" }, { status: 404 });
   }
 
   if (req.method === "GET" && path.startsWith(CLOUD_PREFIX)) {
