@@ -18,7 +18,7 @@ if [ -z "${CADDY_BIN:-}" ]; then
 fi
 CLOUD_ENV_FILE="${NEXUS_CLOUD_ENV_FILE:-$ROOT/apps/Nexus-Cloud/.env}"
 NEXUS_CHAT_ENV_FILE="${NEXUS_CHAT_ENV_FILE:-$ROOT/deploy/production/nexus-chat.env}"
-NEXUS_CHAT_BINARY_PATH="${NEXUS_CHAT_BINARY_PATH:-$ROOT/apps/Nexus/target/debug/nexus}"
+NEXUS_CHAT_BINARY_PATH="${NEXUS_CHAT_BINARY_PATH:-$HOME/.cache/cargo-target/debug/nexus}"
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
 # shellcheck source=processes.sh
@@ -444,6 +444,8 @@ install_watchdog() {
     unit_dir="$HOME/.config/systemd/user"
     mkdir -p "$lib" "$unit_dir" \
         && install -m 0755 "$here/nexus-watchdog.sh" "$lib/nexus-watchdog.sh" \
+        && printf '#!/usr/bin/env bash\n# Shim installed by deploy.sh: the watchdog looks for deploy.sh beside itself,\n# but the real deployer must run from the repo so its ROOT (dirname/../..)\n# resolves. Exec it.\nexec bash "%s/deploy/production/deploy.sh" "$@"\n' "$ROOT" > "$lib/deploy.sh" \
+        && chmod 0755 "$lib/deploy.sh" \
         && install -m 0644 "$here/systemd/nexus-watchdog.service" "$here/systemd/nexus-watchdog.timer" "$unit_dir/" \
         && systemctl --user daemon-reload \
         && systemctl --user enable --now nexus-watchdog.timer \
