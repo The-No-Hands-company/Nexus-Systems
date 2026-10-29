@@ -19,12 +19,12 @@ function jsonResponse(body: unknown, status = 200) {
 function stubFetch(signedIn: boolean, role = "user") {
   vi.stubGlobal("fetch", vi.fn(async (url: RequestInfo | URL) => {
     const u = String(url);
-    if (u === "https://api.tnhc.dev/api/v1/me") {
+    if (u === "/api/v1/me") {
       return signedIn
         ? jsonResponse({ user: { id: "u1", username: "ada", email: "a@x.dev", role } })
         : jsonResponse({ error: "unauthenticated" }, 401);
     }
-    if (u === "https://api.tnhc.dev/api/v1/apps") {
+    if (u === "/api/v1/apps") {
       return jsonResponse({
         apps: [
           { id: "nexus-chat", name: "Nexus Chat", description: "Chat", publicUrl: "https://chat.tnhc.dev", path: "/chat", delivery: "framed", health: "healthy", surface: "user-app", releaseState: "released", maturity: "stable", visibility: "default", reviewStatus: "approved", primaryShelf: "everyday" },

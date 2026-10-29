@@ -1,7 +1,7 @@
-import { Link } from "react-router-dom";
 import { Pill } from "../../../../../packages/nexus-design/src/components/ui/pill";
 import type { AppEntry } from "../api";
 import { shelfLabel } from "./catalogLabels";
+import AppLaunchLink from "./AppLaunchLink";
 
 function status(app: AppEntry): { label: string; tone: "neutral" | "warning" | "danger" } {
   if (app.health !== "healthy") return { label: "Offline", tone: "neutral" };
@@ -29,7 +29,7 @@ export default function AppCard({ app, compact = false, showShelf = false }: { a
   );
 
   if (canLaunch) {
-    return <Link to={app.path} aria-label={app.name} className="block rounded-lg border border-zinc-700 bg-zinc-900/60 p-4 transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{content}</Link>;
+    return <AppLaunchLink app={app} aria-label={app.name} className="block rounded-lg border border-zinc-700 bg-zinc-900/60 p-4 transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{content}</AppLaunchLink>;
   }
   return <div data-app-entry="" aria-disabled="true" title={state.label} className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 opacity-75">{content}</div>;
 }

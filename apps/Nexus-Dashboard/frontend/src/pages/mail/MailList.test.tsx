@@ -81,7 +81,7 @@ describe("MailList", () => {
     // An ordinary state for a new account. Telling someone their mail is broken
     // when they simply have no address yet is worse than saying nothing.
     stubFetch({
-      "https://api.tnhc.dev/api/v1/mail/folders": () =>
+      "/api/v1/mail/folders": () =>
         jsonResponse({ error: "no mailbox for this account" }, 404),
     });
     render(
@@ -98,7 +98,7 @@ describe("MailList", () => {
     // An empty list and a broken service look identical to a user unless the
     // page says which it is.
     stubFetch({
-      "https://api.tnhc.dev/api/v1/mail/folders": () =>
+      "/api/v1/mail/folders": () =>
         jsonResponse({ error: "mail_unavailable" }, 503),
     });
     render(

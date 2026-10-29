@@ -12,13 +12,13 @@ afterEach(() => {
 });
 
 describe("platformApiOrigin", () => {
-  it("defaults to https://api.tnhc.dev", () => {
-    expect(platformApiOrigin()).toBe("https://api.tnhc.dev");
+  it("defaults to same-origin (empty string)", () => {
+    expect(platformApiOrigin()).toBe("");
   });
 });
 
 describe("me()", () => {
-  it("calls https://api.tnhc.dev/api/v1/me with credentials include", async () => {
+  it("calls /api/v1/me with credentials include", async () => {
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ user: { id: "u1", username: "alice", email: "a@b.com", role: "member" } }), {
         status: 200,
@@ -30,7 +30,7 @@ describe("me()", () => {
 
     expect(mockFetch).toHaveBeenCalledOnce();
     const [url, init] = mockFetch.mock.calls[0];
-    expect(url).toBe("https://api.tnhc.dev/api/v1/me");
+    expect(url).toBe("/api/v1/me");
     expect((init as RequestInit).credentials).toBe("include");
     expect(user).toMatchObject({ id: "u1", username: "alice" });
   });
@@ -66,7 +66,7 @@ describe("listApps()", () => {
     visibility: "default" as const,
   };
 
-  it("calls https://api.tnhc.dev/api/v1/apps with credentials include", async () => {
+  it("calls /api/v1/apps with credentials include", async () => {
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ apps: [releaseApp] }), {
         status: 200,
@@ -78,7 +78,7 @@ describe("listApps()", () => {
 
     expect(mockFetch).toHaveBeenCalledOnce();
     const [url, init] = mockFetch.mock.calls[0];
-    expect(url).toBe("https://api.tnhc.dev/api/v1/apps");
+    expect(url).toBe("/api/v1/apps");
     expect((init as RequestInit).credentials).toBe("include");
   });
 
@@ -91,8 +91,10 @@ describe("listApps()", () => {
     );
 
     const apps = await listApps();
-    expect(apps).toHaveLength(1);
-    expect(apps[0].id).toBe("nexus-draw");
-    expect(apps[0].path).toBe("/draw");
+    // listApps prepends the pinned shell-native apps, so assert the registry
+    // entry is present and normalized rather than that it is the only entry.
+    const draw = apps.find((a) => a.id === "nexus-draw");
+    expect(draw).toBeDefined();
+    expect(draw!.path).toBe("/draw");
   });
 });

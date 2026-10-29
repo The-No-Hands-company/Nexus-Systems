@@ -1,6 +1,6 @@
-import { Link } from "react-router-dom";
 import type { AppEntry } from "../api";
 import { isLauncherApp } from "./catalog";
+import AppLaunchLink from "../components/AppLaunchLink";
 
 /**
  * The app list in the sidebar.
@@ -9,9 +9,9 @@ import { isLauncherApp } from "./catalog";
  * grid does it: inviting a click that goes nowhere is worse than showing the
  * app is down.
  *
- * Every app links to its own flat path (/chat, /mail, /cloud). The path names
- * the app; whether the shell frames it or renders it itself is decided when the
- * route renders, not encoded in the link.
+ * A shell-native or framed app links to its own flat path (/chat, /mail, /cloud)
+ * and renders in-shell; an external app opens in a new tab. AppLaunchLink makes
+ * that choice from the app's delivery (see the frontend load architecture note).
  */
 export default function Launcher({
   apps,
@@ -25,13 +25,13 @@ export default function Launcher({
       <ul className="space-y-1">
         {apps.filter(isLauncherApp).map((app) => (
           <li key={app.id}>
-              <Link
-                to={app.path}
+              <AppLaunchLink
+                app={app}
                 aria-current={app.id === activeId ? "page" : undefined}
                 className="block rounded-md px-3 py-2 text-sm hover:bg-zinc-800 aria-[current=page]:bg-zinc-800"
               >
                 {app.name}
-              </Link>
+              </AppLaunchLink>
           </li>
         ))}
       </ul>

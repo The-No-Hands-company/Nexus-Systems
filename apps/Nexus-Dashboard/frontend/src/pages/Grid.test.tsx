@@ -4,10 +4,15 @@ import { MemoryRouter } from "react-router-dom";
 import Grid from "./Grid";
 import { buildCatalogReleaseFixture } from "../../../../Nexus-Cloud/src/catalog/release-fixture";
 
+// Uses ids that are NOT pinned in SHELL_NATIVE_APPS, so the registry entry is
+// what renders (a pinned id would be overridden by the hardcoded pin).
 const APPS = [
-  { id: "nexus-chat", name: "Nexus Chat", description: "Real-time messaging",
-    publicUrl: "https://chat.tnhc.dev", path: "/chat", delivery: "framed", health: "healthy",
+  { id: "nexus-notes", name: "Nexus Notes", description: "Real-time messaging",
+    publicUrl: "https://notes.tnhc.dev", path: "/notes", delivery: "framed", health: "healthy",
     primaryShelf: "everyday", secondaryShelves: [], audiences: ["general"], capabilities: ["messaging"], maturity: "stable", visibility: "default", reviewStatus: "approved", surface: "user-app", releaseState: "released" },
+  { id: "nexus-paint", name: "Nexus Paint", description: "Painting canvas",
+    publicUrl: "https://paint.tnhc.dev", path: "/paint", delivery: "external", health: "healthy",
+    primaryShelf: "create", secondaryShelves: [], audiences: ["creator"], capabilities: ["drawing"], maturity: "stable", visibility: "default", reviewStatus: "approved", surface: "user-app", releaseState: "released" },
   { id: "nexus-draw", name: "Nexus Draw", description: "Whiteboard",
     publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "offline",
     primaryShelf: "create", secondaryShelves: [], audiences: ["creator"], capabilities: ["drawing"], maturity: "stable", visibility: "default", reviewStatus: "approved", surface: "user-app", releaseState: "released" },
@@ -29,7 +34,7 @@ describe("Grid", () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(buildCatalogReleaseFixture())));
 
     render(<MemoryRouter><Grid /></MemoryRouter>);
-    await waitFor(() => expect(screen.getAllByText("Nexus Mail").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText("Mail").length).toBeGreaterThan(0));
     expect(screen.getByRole("heading", { name: "Everyday" })).toBeTruthy();
     expect(screen.queryByText("Nexus Calendar")).toBeNull();
     expect(screen.queryByText("Nexus Cloud")).toBeNull();
@@ -37,24 +42,34 @@ describe("Grid", () => {
     expect(screen.queryByText("Nexus Experimental")).toBeNull();
   });
 
-  it("renders a tile per app, linking to its in-shell path", async () => {
+  it("links a framed app to its in-shell path", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ apps: APPS })));
 
     render(<MemoryRouter><Grid /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Nexus Chat")).toBeTruthy());
-    // The tile links into the shell, never out to the app's own origin. The
-    // path names the app; framing is decided at the route.
-    expect(screen.getByRole("link", { name: /nexus chat/i }).getAttribute("href"))
-      .toBe("/chat");
+    await waitFor(() => expect(screen.getByText("Notes")).toBeTruthy());
+    // A framed app stays in the shell: the link is the in-shell path, framing is
+    // decided at the route.
+    expect(screen.getByRole("link", { name: /notes/i }).getAttribute("href"))
+      .toBe("/notes");
+  });
+
+  it("links an external app out to its own origin in a new tab", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ apps: APPS })));
+
+    render(<MemoryRouter><Grid /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText("Paint")).toBeTruthy());
+    const link = screen.getByRole("link", { name: /paint/i });
+    expect(link.getAttribute("href")).toBe("https://paint.tnhc.dev");
+    expect(link.getAttribute("target")).toBe("_blank");
   });
 
   it("omits an offline app from the directory", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ apps: APPS })));
 
     render(<MemoryRouter><Grid /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Nexus Chat")).toBeTruthy());
-    expect(screen.queryByText("Nexus Draw")).toBeNull();
-    expect(screen.queryByRole("link", { name: /nexus draw/i })).toBeNull();
+    await waitFor(() => expect(screen.getByText("Notes")).toBeTruthy());
+    expect(screen.queryByText("Draw")).toBeNull();
+    expect(screen.queryByRole("link", { name: /draw/i })).toBeNull();
   });
 
   it("says so when no apps are reachable instead of rendering an empty page", async () => {
@@ -80,7 +95,7 @@ describe("Grid", () => {
 
     render(<MemoryRouter><Grid /></MemoryRouter>);
     await waitFor(() => expect(spy).toHaveBeenCalled());
-    expect(String(spy.mock.calls[0]![0])).toBe("https://api.tnhc.dev/api/v1/apps");
+    expect(String(spy.mock.calls[0]![0])).toBe("/api/v1/apps");
   });
 
   it("shows each app's description so the grid is legible to a newcomer", async () => {

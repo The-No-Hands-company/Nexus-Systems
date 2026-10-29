@@ -26,7 +26,7 @@ function stubFetch(who: typeof ADMIN | typeof PLAIN, overrides: Record<string, (
     const u = String(url);
     const key = `${init?.method ?? "GET"} ${u}`;
     if (overrides[key]) return overrides[key]!();
-    if (u === "https://api.tnhc.dev/api/v1/me") return jsonResponse({ user: who });
+    if (u === "/api/v1/me") return jsonResponse({ user: who });
     if (u === "/ipa/v1/auth/access-requests") return jsonResponse({ requests: REQUESTS });
     if (u.endsWith("/approve") || u.endsWith("/reject")) return jsonResponse({ user: {} });
     if (u === "/ipa/v1/auth/invites") {
