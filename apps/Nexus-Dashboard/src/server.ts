@@ -317,6 +317,28 @@ async function terminalReachable(): Promise<boolean> {
   }
 }
 
+/**
+ * The SPA's identity check. Forwards the caller's session cookie to Auth's
+ * /api/v1/auth/me and returns its answer verbatim: { user } on success, 401
+ * when there is no valid session. The frontend reads user.{id,username,email,
+ * role} from this, so the whole user object must pass through untouched.
+ */
+async function fetchMe(req: Request): Promise<Response> {
+  try {
+    const res = await fetch(`${authInternalUrl()}/api/v1/auth/me`, {
+      headers: { cookie: req.headers.get("cookie") ?? "", accept: "application/json" },
+      signal: AbortSignal.timeout(3000),
+    });
+    const body = await res.text();
+    return new Response(body, {
+      status: res.status,
+      headers: { "content-type": "application/json" },
+    });
+  } catch {
+    return Response.json({ error: "auth_unreachable" }, { status: 502 });
+  }
+}
+
 async function fetchApps(req: Request): Promise<Response> {
   const caller = await callerIdentity(req);
   const includeTerminal = isAdminRole(caller?.role ?? null);
@@ -431,6 +453,14 @@ export async function handleRequest(
   }
 
   if (req.method === "GET" && path === "/ipa/apps") return fetchApps(req);
+
+  // Platform API facade, served from this origin so the SPA need not reach a
+  // separate api.<domain> host. The frontend's VITE_NEXUS_API_URL points here;
+  // these are the two calls it makes cross-"facade": who am I, and what apps do
+  // I have. /me forwards the session cookie to Auth verbatim; /apps reuses the
+  // same catalog projection the /ipa/apps console route uses.
+  if (req.method === "GET" && path === "/api/v1/me") return fetchMe(req);
+  if (req.method === "GET" && path === "/api/v1/apps") return fetchApps(req);
 
   // GET-only, and only for names on CLOUD_ALLOWLIST — anything else (a
   // mutating method, or a name not in the table) falls through to the

@@ -13,9 +13,13 @@ import { normalizeCatalogEntry } from "./shell/catalog";
  */
 
 export function platformApiOrigin(): string {
+  // Same-origin by default: the dashboard server serves the platform facade
+  // (/api/v1/me, /api/v1/apps) from this very host, so relative URLs reach it
+  // and carry the session cookie without CORS. Set VITE_NEXUS_API_URL only once
+  // a dedicated api.<domain> host actually exists to point these calls at.
   return (
     (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_NEXUS_API_URL?: string } }).env?.VITE_NEXUS_API_URL) ||
-    "https://api.tnhc.dev"
+    ""
   ).replace(/\/+$/, "");
 }
 
