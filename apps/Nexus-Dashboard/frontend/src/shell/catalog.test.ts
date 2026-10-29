@@ -58,14 +58,20 @@ describe("normalizeCatalogEntry", () => {
     });
   });
 
+  // These exercise the wire→entry path through listApps, which also prepends the
+  // pinned SHELL_NATIVE apps. Each wire entry is given a unique, non-pinned path
+  // (the app() default "/chat" would collide with pinned Chat and be dropped),
+  // and the result is filtered to the entries under test so the pins do not
+  // pollute the assertion.
   it("keeps missing and unknown visibility out of the launcher after wire normalization", async () => {
     const raw = app({ delivery: "shell-native", publicUrl: undefined });
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ apps: [
-      { ...raw, id: "missing", visibility: undefined },
-      { ...raw, id: "unknown", visibility: "unknown" },
-      { ...raw, id: "discoverable", visibility: "discoverable" },
+      { ...raw, id: "missing", path: "/t-missing", visibility: undefined },
+      { ...raw, id: "unknown", path: "/t-unknown", visibility: "unknown" },
+      { ...raw, id: "discoverable", path: "/t-discoverable", visibility: "discoverable" },
     ] }), { status: 200, headers: { "content-type": "application/json" } })));
-    const entries = await listApps();
+    const ids = new Set(["missing", "unknown", "discoverable"]);
+    const entries = (await listApps()).filter((entry) => ids.has(entry.id));
     expect(entries.filter(isLauncherApp).map((entry) => entry.id)).toEqual(["discoverable"]);
   });
 
@@ -74,25 +80,27 @@ describe("normalizeCatalogEntry", () => {
     const credentialUrl = new URL("https://example.test");
     credentialUrl.username = "someone";
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ apps: [
-      { ...raw, id: "mail", path: "/mail" },
+      { ...raw, id: "mail", path: "/t-mail" },
       { ...raw, id: "missing-route", path: undefined },
-      { ...raw, id: "bad-protocol", publicUrl: "javascript:alert(1)" },
-      { ...raw, id: "credentials", publicUrl: credentialUrl.href },
-      { ...raw, id: "control-char", publicUrl: "https://example.test/\n" },
-      { ...raw, id: "valid-url", publicUrl: "https://mail.tnhc.dev" },
+      { ...raw, id: "bad-protocol", path: "/t-bad-protocol", publicUrl: "javascript:alert(1)" },
+      { ...raw, id: "credentials", path: "/t-credentials", publicUrl: credentialUrl.href },
+      { ...raw, id: "control-char", path: "/t-control-char", publicUrl: "https://example.test/\n" },
+      { ...raw, id: "valid-url", path: "/t-valid-url", publicUrl: "https://mail.tnhc.dev" },
     ] }), { status: 200, headers: { "content-type": "application/json" } })));
-    const entries = await listApps();
+    const ids = new Set(["mail", "missing-route", "bad-protocol", "credentials", "control-char", "valid-url"]);
+    const entries = (await listApps()).filter((entry) => ids.has(entry.id));
     expect(entries.filter(isLauncherApp).map((entry) => entry.id)).toEqual(["mail", "valid-url"]);
   });
 
   it("uses an explicit legacy relative url as a shell-native route", async () => {
     const raw = app({ delivery: "shell-native", publicUrl: undefined });
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ apps: [
-      { ...raw, id: "relative", path: undefined, url: "/mail" },
+      { ...raw, id: "relative", path: undefined, url: "/t-relative" },
       { ...raw, id: "unsafe-relative", path: undefined, url: "//outside.test" },
     ] }), { status: 200, headers: { "content-type": "application/json" } })));
-    const entries = await listApps();
-    expect(entries.filter(isLauncherApp).map((entry) => [entry.id, entry.path])).toEqual([["relative", "/mail"]]);
+    const ids = new Set(["relative", "unsafe-relative"]);
+    const entries = (await listApps()).filter((entry) => ids.has(entry.id));
+    expect(entries.filter(isLauncherApp).map((entry) => [entry.id, entry.path])).toEqual([["relative", "/t-relative"]]);
   });
 });
 
