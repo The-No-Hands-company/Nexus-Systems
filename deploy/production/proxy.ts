@@ -574,15 +574,20 @@ async function handleRequestInner(
         const value = req.headers.get(name);
         if (value !== null) forwardHeaders.set(name, value);
       }
-      const resp = await fetch(`${target}${EMAIL_INGRESS_PATH}`, {
-        method: "POST",
-        headers: forwardHeaders,
-        body: await req.arrayBuffer(),
-        redirect: "manual",
-      });
-      const headers = new Headers(resp.headers);
-      sanitizeResponseHeaders(headers);
-      return new Response(resp.body, { status: resp.status, headers });
+      try {
+        const resp = await fetch(`${target}${EMAIL_INGRESS_PATH}`, {
+          method: "POST",
+          headers: forwardHeaders,
+          body: await req.arrayBuffer(),
+          redirect: "manual",
+        });
+        const headers = new Headers(resp.headers);
+        sanitizeResponseHeaders(headers);
+        return new Response(resp.body, { status: resp.status, headers });
+      } catch (err) {
+        console.error(`[proxy] Email ingress upstream unavailable (${target}):`, err instanceof Error ? err.message : String(err));
+        return new Response("Email ingress upstream unavailable", { status: 503 });
+      }
     }
 
     const dashboardTerminalRequest =
@@ -899,11 +904,12 @@ async function handleRequestInner(
 
       return new Response(resp.body, { status: resp.status, headers });
     } catch (err) {
-      console.error(`[proxy] Proxy error for ${upstreamUrl}:`, err instanceof Error ? err.name : "error");
+      console.error(`[proxy] Proxy error for ${upstreamUrl}:`, err instanceof Error ? `${err.message}\n${err.stack}` : String(err));
       return new Response(`Bad Gateway: Unable to reach upstream`, { status: 502 });
     }
   } catch (err) {
-    console.error(`[proxy] Request handling error:`, err instanceof Error ? err.name : "error");
+    const reqDesc = `${req.method} ${req.url}`;
+    console.error(`[proxy] Request handling error for ${reqDesc}:`, err instanceof Error ? `${err.message}\n${err.stack}` : String(err));
     return new Response(`Internal Server Error`, { status: 500 });
   }
 }
@@ -961,9 +967,13 @@ export function startProxy() {
   // to rely on that lazy path alone.
   if (POLL_INTERVAL_MS > 0) {
     const poller = setInterval(async () => {
-      const fresh = await fetchRouteConfig();
-      if (fresh !== null) {
-        routeCache = { timestamp: Date.now(), routes: buildRouteMap(fresh) };
+      try {
+        const fresh = await fetchRouteConfig();
+        if (fresh !== null) {
+          routeCache = { timestamp: Date.now(), routes: buildRouteMap(fresh) };
+        }
+      } catch (err) {
+        console.error("[proxy] Route poll error:", err instanceof Error ? err.message : String(err));
       }
     }, POLL_INTERVAL_MS);
     poller.unref?.();
@@ -978,6 +988,10 @@ export function startProxy() {
     port: PORT,
     hostname: process.env.NEXUS_PROXY_BIND_HOST || "0.0.0.0",
     fetch: (req, srv) => handleRequest(req, srv),
+    error(err) {
+      console.error("[proxy] Server error:", err instanceof Error ? `${err.message}\n${err.stack}` : String(err));
+      return new Response("Internal Server Error", { status: 500 });
+    },
 
     // ── WebSocket relay ────────────────────────────────────────────────────
     // One socket in from the browser, one socket out to the app, and frames

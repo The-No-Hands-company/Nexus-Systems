@@ -384,8 +384,18 @@ preflight_service_start() {
         nexus-api) : ;;
         nexus-chat) validate_nexus_chat_environment ;;
         nexus-chat-web) validate_nexus_chat_caddy ;;
-        *) warn "Per-service recovery is limited to cloud, nexus-chat, and nexus-chat-web"; return 1 ;;
+        proxy) adopt_cloud_registration_environment_for_dependents ;;
+        *) warn "Per-service recovery is limited to cloud, nexus-chat, nexus-chat-web, and proxy"; return 1 ;;
     esac
+}
+
+start_proxy_service() {
+    start_service "proxy" "$ROOT/deploy/production" 8080 \
+        PROXY_PORT=8080 DOMAIN="$DOMAIN" CLOUD_URL=http://localhost:8787 \
+        API_UPSTREAM=http://127.0.0.1:3036 \
+        DASHBOARD_UPSTREAM=http://127.0.0.1:3132 \
+        HOSTING_SITE_UPSTREAM="${HOSTING_SITE_UPSTREAM:-http://127.0.0.1:8090}" \
+        bun run proxy.ts
 }
 
 start_named_service() {
@@ -394,7 +404,8 @@ start_named_service() {
         nexus-api) start_nexus_api_service ;;
         nexus-chat) start_nexus_chat_service ;;
         nexus-chat-web) start_nexus_chat_web_service ;;
-        *) warn "Per-service recovery is limited to cloud, nexus-chat, and nexus-chat-web"; return 1 ;;
+        proxy) start_proxy_service ;;
+        *) warn "Per-service recovery is limited to cloud, nexus-chat, nexus-chat-web, and proxy"; return 1 ;;
     esac
 }
 
@@ -1152,7 +1163,7 @@ Usage: $(basename "$0") [command]
   bg, --bg          start in the background and return
   stop, --stop      stop all services and the infrastructure containers
   status, --status  report what is running
-  restart SERVICE   safely restart cloud, nexus-chat, or nexus-chat-web
+  restart SERVICE   safely restart cloud, nexus-chat, nexus-chat-web, or proxy
   cleanup-log SERVICE
                     after both rotation checkpoints, stop one affected writer,
                     replace its exact historical log, and safely restart it
