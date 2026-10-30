@@ -340,7 +340,7 @@ using Reverb = time::AlgorithmicReverb;
 #include <string>
 
 // Forward declarations
-namespace dawg { namespace core { class AudioBuffer; } }
+namespace dawg::engine { class AudioBuffer; }
 
 namespace dawg {
 namespace dsp {

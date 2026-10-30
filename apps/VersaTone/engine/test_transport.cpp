@@ -1,7 +1,7 @@
-#include "dawg/core/Transport.h"
+#include <dawg/engine/Transport.h>
 
 int main() {
-    dawg::core::Transport t;
+    dawg::engine::Transport t;
     t.play();
     return 0;
 }

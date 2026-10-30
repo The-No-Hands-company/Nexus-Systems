@@ -18,13 +18,13 @@
  */
 
 #include "dawg/dawg.h"
-#include "dawg/core/AudioEngine.h"
+#include <dawg/engine/AudioEngine.h>
 
 namespace dawg {
     
     // Global engine instance
     namespace {
-        std::unique_ptr<core::AudioEngine> g_engine;
+        std::unique_ptr<engine::AudioEngine> g_engine;
     }
     
     bool initialize() {
@@ -34,7 +34,7 @@ namespace dawg {
         }
         
         try {
-            g_engine = std::make_unique<core::AudioEngine>();
+            g_engine = std::make_unique<engine::AudioEngine>();
             return true;
         } catch (...) {
             return false;
@@ -49,7 +49,7 @@ namespace dawg {
         return g_engine != nullptr;
     }
     
-    core::AudioEngine& getAudioEngine() {
+    engine::AudioEngine& getAudioEngine() {
         if (!g_engine) {
             throw std::runtime_error("AudioEngine not initialized. Call dawg::initialize() first.");
         }

@@ -26,7 +26,7 @@ License: AGPL-3.0-or-later
 */
 
 #include "dawg/dsp/dynamics/Gate.h"
-#include "dawg/core/AudioBuffer.h"
+#include <dawg/engine/AudioBuffer.h>
 #include <cstring>
 #include <algorithm>
 #include <cmath>
@@ -50,7 +50,7 @@ Gate::~Gate() = default;
 // EFFECT INTERFACE
 // ============================================================================
 
-void Gate::process(core::AudioBuffer& buffer) {
+void Gate::process(engine::AudioBuffer& buffer) {
     if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0) {
         return;
     }

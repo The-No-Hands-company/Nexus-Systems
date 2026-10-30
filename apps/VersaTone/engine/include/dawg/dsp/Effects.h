@@ -217,7 +217,7 @@ public:
      * @brief Process audio through entire chain
      * @param buffer Audio buffer to process
      */
-    void process(core::AudioBuffer& buffer);
+    void process(engine::AudioBuffer& buffer);
     
     /**
      * @brief Reset all effects in chain

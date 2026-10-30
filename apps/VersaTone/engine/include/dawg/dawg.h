@@ -29,11 +29,11 @@
 #define DAWG_VERSION_STRING "1.0.0"
 
 // Core audio engine
-#include "dawg/core/AudioEngine.h"
-#include "dawg/core/AudioBuffer.h"
-#include "dawg/core/VoiceManager.h"
-#include "dawg/core/Transport.h"
-#include "dawg/core/Timeline.h"
+#include <dawg/engine/AudioEngine.h>
+#include <dawg/engine/AudioBuffer.h>
+#include <dawg/engine/VoiceScheduler.h>
+#include <dawg/engine/Transport.h>
+#include <dawg/engine/Timeline.h>
 
 // Digital signal processing
 #include "dawg/dsp/SineGenerator.h"
@@ -88,6 +88,6 @@ const char* getVersion();
  * @brief Get the main audio engine instance
  * @return Reference to the global audio engine
  */
-core::AudioEngine& getAudioEngine();
+engine::AudioEngine& getAudioEngine();
 
 } // namespace dawg

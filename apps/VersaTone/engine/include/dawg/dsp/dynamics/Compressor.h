@@ -53,7 +53,7 @@ public:
     // EFFECT INTERFACE
     // ========================================================================
     
-    void process(core::AudioBuffer& buffer) override;
+    void process(engine::AudioBuffer& buffer) override;
     void reset() override;
     void setSampleRate(uint32_t sampleRate) override;
     void setBufferSize(uint32_t bufferSize) override;
@@ -137,7 +137,7 @@ public:
      * @brief Process side-chain input
      * @param sideChain Side-chain audio buffer
      */
-    void processSideChain(const core::AudioBuffer& sideChain);
+    void processSideChain(const engine::AudioBuffer& sideChain);
     
     /**
      * @brief Set side-chain high-pass filter frequency

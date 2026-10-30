@@ -19,10 +19,10 @@
  */
 #pragma once
 #include <string>
-#include "dawg/core/dawg::core::Audiobuffer.h"
+#include <dawg/engine/AudioBuffer.h>
 
 namespace dawg {
-    bool importAiff(const std::string& path, dawg::core::Audiobuffer& buffer);
-    bool exportAiff(const std::string& path, const dawg::core::Audiobuffer& buffer);
+    bool importAiff(const std::string& path, dawg::engine::AudioBuffer& buffer);
+    bool exportAiff(const std::string& path, const dawg::engine::AudioBuffer& buffer);
 }
 

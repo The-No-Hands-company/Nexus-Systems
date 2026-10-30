@@ -1,5 +1,5 @@
 ﻿#include "dawg/dsp/Mixer.h"
-#include "dawg/core/AudioBuffer.h"
+#include <dawg/engine/AudioBuffer.h>
 #include <vector>
 #include <memory>
 #include <atomic>
@@ -17,7 +17,7 @@ namespace dsp {
 class Effect {
 public:
     virtual ~Effect() = default;
-    virtual void process(core::AudioBuffer& buffer) = 0;
+    virtual void process(engine::AudioBuffer& buffer) = 0;
     virtual void setSampleRate(uint32_t sampleRate) = 0;
     virtual void setBufferSize(uint32_t bufferSize) = 0;
     virtual bool isBypassed() const = 0;
@@ -37,8 +37,8 @@ public:
         settings.auxSendPre.resize(8, false);
     }
     
-    void process(core::AudioBuffer& input, std::vector<core::AudioBuffer*>& auxOutputs, 
-                core::AudioBuffer& mainOutput) {
+    void process(engine::AudioBuffer& input, std::vector<engine::AudioBuffer*>& auxOutputs, 
+                engine::AudioBuffer& mainOutput) {
         if (settings.mute) {
             mainOutput.clear();
             return;
@@ -74,7 +74,7 @@ public:
                 float sendLevel = dbToLinear(settings.auxSendLevels[i]);
                 
                 // Use pre-fader signal if enabled
-                core::AudioBuffer& sendSource = settings.auxSendPre[i] ? workingBuffer : mainOutput;
+                engine::AudioBuffer& sendSource = settings.auxSendPre[i] ? workingBuffer : mainOutput;
                 
                 // Add to aux bus with send level
                 for (uint16_t ch = 0; ch < sendSource.getChannels() && ch < auxOutputs[i]->getChannels(); ++ch) {
@@ -125,7 +125,7 @@ public:
         bufferSize = bs;
         // Resize working buffer if needed
         if (workingBuffer.getSampleCount() != bs) {
-            workingBuffer = core::AudioBuffer(workingBuffer.getChannels(), bs);
+            workingBuffer = engine::AudioBuffer(workingBuffer.getChannels(), bs);
         }
         
         for (auto& effect : insertEffects) {
@@ -141,7 +141,7 @@ private:
     uint32_t bufferSize = 512;
     
     ChannelStrip::Settings settings;
-    core::AudioBuffer workingBuffer{2, 512}; // Stereo working buffer
+    engine::AudioBuffer workingBuffer{2, 512}; // Stereo working buffer
     
     std::vector<std::unique_ptr<Effect>> insertEffects;
     
@@ -156,12 +156,12 @@ private:
         return std::pow(10.0f, db / 20.0f);
     }
     
-    void processEQ(core::AudioBuffer& buffer) {
+    void processEQ(engine::AudioBuffer& buffer) {
         // TODO: Implement parametric EQ
         // For now, simple high/low shelf simulation
     }
     
-    void processCompressor(core::AudioBuffer& buffer) {
+    void processCompressor(engine::AudioBuffer& buffer) {
         // TODO: Implement professional compressor
         // For now, simple limiting
         for (uint16_t ch = 0; ch < buffer.getChannels(); ++ch) {
@@ -176,7 +176,7 @@ private:
         }
     }
     
-    void updateMetering(const core::AudioBuffer& buffer) {
+    void updateMetering(const engine::AudioBuffer& buffer) {
         float inputSum = 0.0f, outputSum = 0.0f;
         uint32_t sampleCount = buffer.getSampleCount() * buffer.getChannels();
         
@@ -203,8 +203,8 @@ ChannelStrip::ChannelStrip(uint32_t channelNumber)
 
 ChannelStrip::~ChannelStrip() = default;
 
-void ChannelStrip::process(core::AudioBuffer& input, std::vector<core::AudioBuffer*>& auxOutputs, 
-                          core::AudioBuffer& mainOutput) {
+void ChannelStrip::process(engine::AudioBuffer& input, std::vector<engine::AudioBuffer*>& auxOutputs, 
+                          engine::AudioBuffer& mainOutput) {
     pImpl->process(input, auxOutputs, mainOutput);
 }
 
@@ -269,7 +269,7 @@ double ChannelStrip::getGainReduction() const {
 AuxBus::AuxBus(uint32_t busNumber) : busNumber(busNumber) {}
 AuxBus::~AuxBus() = default;
 
-void AuxBus::process(core::AudioBuffer& input, core::AudioBuffer& output) {}
+void AuxBus::process(engine::AudioBuffer& input, engine::AudioBuffer& output) {}
 void AuxBus::reset() {}
 void AuxBus::setSampleRate(uint32_t sampleRate) {}
 void AuxBus::setBufferSize(uint32_t bufferSize) {}
@@ -295,8 +295,8 @@ uint32_t MixingConsole::getNumChannels() const { return 0; }
 uint32_t MixingConsole::getNumAuxBuses() const { return 0; }
 uint32_t MixingConsole::getNumMixBuses() const { return 0; }
 
-void MixingConsole::process(std::vector<core::AudioBuffer>& inputs, 
-                           std::vector<core::AudioBuffer>& outputs) {
+void MixingConsole::process(std::vector<engine::AudioBuffer>& inputs, 
+                           std::vector<engine::AudioBuffer>& outputs) {
     // TODO: Implement full mixing console processing
 }
 

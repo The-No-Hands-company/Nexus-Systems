@@ -1,5 +1,5 @@
 #include "../../../include/dawg/dsp/dynamics/Limiter.h"
-#include "../../../include/dawg/core/AudioBuffer.h"
+#include "../../../include/dawg/engine/AudioBuffer.h"
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -166,7 +166,7 @@ public:
     // MAIN PROCESSING
     // ========================================================================
     
-    void process(dawg::core::AudioBuffer& buffer) {
+    void process(dawg::engine::AudioBuffer& buffer) {
         if (buffer.getChannelCount() == 0 || buffer.getSampleCount() == 0) return;
         
         uint32_t channels = buffer.getChannelCount();
@@ -206,7 +206,7 @@ public:
         updateMetering(buffer, channels, samples);
     }
     
-    void processDirectly(dawg::core::AudioBuffer& buffer, uint32_t channels, uint32_t samples) {
+    void processDirectly(dawg::engine::AudioBuffer& buffer, uint32_t channels, uint32_t samples) {
         for (uint32_t i = 0; i < samples; ++i) {
             // Get peak level across all channels
             float peakLevel = 0.0f;
@@ -266,7 +266,7 @@ public:
         }
     }
     
-    void processWithOversampling(dawg::core::AudioBuffer& buffer, uint32_t channels, uint32_t samples) {
+    void processWithOversampling(dawg::engine::AudioBuffer& buffer, uint32_t channels, uint32_t samples) {
         // For this implementation, we'll use a simplified oversampling approach
         // In production, would use proper polyphase filters
         
@@ -352,7 +352,7 @@ public:
         }
     }
     
-    void updateMetering(dawg::core::AudioBuffer& buffer, uint32_t channels, uint32_t samples) {
+    void updateMetering(dawg::engine::AudioBuffer& buffer, uint32_t channels, uint32_t samples) {
         // Update peak metering
         float bufferPeak = 0.0f;
         double bufferRMS = 0.0;
@@ -425,7 +425,7 @@ Limiter::~Limiter() = default;
 // CORE PROCESSING
 // ========================================================================
 
-void Limiter::process(dawg::core::AudioBuffer& buffer) {
+void Limiter::process(dawg::engine::AudioBuffer& buffer) {
     if (!isBypassed()) {
         pImpl->process(buffer);
     }

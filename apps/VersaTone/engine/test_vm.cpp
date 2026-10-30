@@ -1,6 +1,6 @@
-#include "dawg/core/VoiceManager.h"
+#include <dawg/engine/VoiceScheduler.h>
 
 int main() {
-    dawg::core::VoiceManager vm(4096, 32768, 256000);
+    dawg::engine::VoiceScheduler vm(4096, 32768, 256000);
     return 0;
 }

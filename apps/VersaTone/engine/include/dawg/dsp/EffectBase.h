@@ -16,7 +16,7 @@
 #include <algorithm>
 
 // Forward declarations
-namespace dawg { namespace core { class AudioBuffer; } }
+namespace dawg::engine { class AudioBuffer; }
 
 namespace dawg {
 namespace dsp {
@@ -40,7 +40,7 @@ public:
      * @brief Process audio buffer in-place
      * @param buffer Audio buffer to process
      */
-    virtual void process(core::AudioBuffer& buffer) = 0;
+    virtual void process(engine::AudioBuffer& buffer) = 0;
     
     /**
      * @brief Reset effect state (clear delays, etc.)

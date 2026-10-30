@@ -1,5 +1,5 @@
 #include "../../../include/dawg/dsp/time/Delay.h"
-#include "../../../include/dawg/core/AudioBuffer.h"
+#include "../../../include/dawg/engine/AudioBuffer.h"
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -191,7 +191,7 @@ public:
     // MAIN PROCESSING
     // ========================================================================
     
-    void process(dawg::core::AudioBuffer& buffer) {
+    void process(dawg::engine::AudioBuffer& buffer) {
         if (buffer.getChannelCount() == 0 || buffer.getSampleCount() == 0) return;
         
         uint32_t channels = buffer.getChannelCount();
@@ -237,7 +237,7 @@ public:
         }
     }
     
-    void processMono(dawg::core::AudioBuffer& buffer, uint32_t channels, uint32_t samples) {
+    void processMono(dawg::engine::AudioBuffer& buffer, uint32_t channels, uint32_t samples) {
         for (uint32_t i = 0; i < samples; ++i) {
             // Sum input to mono
             float input = buffer.getChannelData(0)[i];
@@ -259,7 +259,7 @@ public:
         }
     }
     
-    void processStereo(dawg::core::AudioBuffer& buffer, uint32_t channels, uint32_t samples) {
+    void processStereo(dawg::engine::AudioBuffer& buffer, uint32_t channels, uint32_t samples) {
         for (uint32_t i = 0; i < samples; ++i) {
             for (uint32_t ch = 0; ch < channels; ++ch) {
                 float input = buffer.getChannelData(ch)[i];
@@ -282,7 +282,7 @@ public:
         }
     }
     
-    void processPingPong(dawg::core::AudioBuffer& buffer, uint32_t channels, uint32_t samples) {
+    void processPingPong(dawg::engine::AudioBuffer& buffer, uint32_t channels, uint32_t samples) {
         for (uint32_t i = 0; i < samples; ++i) {
             float inputL = buffer.getChannelData(0)[i];
             float inputR = (channels > 1) ? buffer.getChannelData(1)[i] : inputL;
@@ -311,7 +311,7 @@ public:
         }
     }
     
-    void processMultiTap(dawg::core::AudioBuffer& buffer, uint32_t channels, uint32_t samples) {
+    void processMultiTap(dawg::engine::AudioBuffer& buffer, uint32_t channels, uint32_t samples) {
         for (uint32_t i = 0; i < samples; ++i) {
             for (uint32_t ch = 0; ch < channels; ++ch) {
                 float input = buffer.getChannelData(ch)[i];
@@ -449,7 +449,7 @@ Delay::~Delay() = default;
 // CORE PROCESSING
 // ========================================================================
 
-void Delay::process(dawg::core::AudioBuffer& buffer) {
+void Delay::process(dawg::engine::AudioBuffer& buffer) {
     if (!isBypassed()) {
         pImpl->process(buffer);
     }

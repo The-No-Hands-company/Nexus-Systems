@@ -19,9 +19,9 @@
  */
 #pragma once
 #include <string>
-#include "dawg/core/dawg::core::Audiobuffer.h"
+#include <dawg/engine/AudioBuffer.h>
 
-// Writes a 32-bit float WAV file from an dawg::core::Audiobuffer
+// Writes a 32-bit float WAV file from an dawg::engine::AudioBuffer
 // Throws std::runtime_error on failure
-void writeWavFile(const std::string& filename, const dawg::core::Audiobuffer& buffer, unsigned sampleRate);
+void writeWavFile(const std::string& filename, const dawg::engine::AudioBuffer& buffer, unsigned sampleRate);
 

@@ -2,7 +2,7 @@
 #include <cstdint>
 
 // Forward declaration
-namespace dawg { namespace core { class AudioBuffer; } }
+namespace dawg::engine { class AudioBuffer; }
 
 namespace dawg {
 namespace dsp {
@@ -19,7 +19,7 @@ public:
     void setSampleRate(uint32_t sampleRate);
     void setAmplitude(double amplitude);
     
-    void generate(core::AudioBuffer& buffer, uint32_t numSamples);
+    void generate(engine::AudioBuffer& buffer, uint32_t numSamples);
     void reset();
     
 private:

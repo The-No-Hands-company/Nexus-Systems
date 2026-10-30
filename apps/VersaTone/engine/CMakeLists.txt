@@ -30,7 +30,7 @@ include_directories(
 set(DAWG_ENGINE_CORE_SOURCES
     src/core/AudioEngine.cpp
     src/core/AudioBuffer.cpp
-    src/core/VoiceManager.cpp
+    src/core/VoiceScheduler.cpp
     src/core/Transport.cpp
     src/core/Timeline.cpp
     src/core/dawg.cpp

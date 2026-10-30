@@ -21,13 +21,13 @@
 #include <string>
 #include <vector>
 #include <cstdint>
-#include "dawg/core/AudioBuffer.h"
+#include <dawg/engine/AudioBuffer.h>
 
 /**
- * @brief Loads 16/24/32-bit PCM WAV files into dawg::core::Audiobuffer (mono/stereo).
+ * @brief Loads 16/24/32-bit PCM WAV files into dawg::engine::AudioBuffer (mono/stereo).
  */
 class WavLoader {
 public:
-    static bool load(const std::string& filename, dawg::core::Audiobuffer& buffer, uint32_t& sampleRate);
+    static bool load(const std::string& filename, dawg::engine::AudioBuffer& buffer, uint32_t& sampleRate);
 };
 

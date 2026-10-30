@@ -1,5 +1,5 @@
 ﻿#include "../../../include/dawg/dsp/eq/ParametricEQ.h"
-#include "../../../include/dawg/core/AudioBuffer.h"
+#include "../../../include/dawg/engine/AudioBuffer.h"
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -102,7 +102,7 @@ public:
         band.filter.a2 = a2 / a0;
     }
     
-    void process(dawg::core::AudioBuffer& buffer) {
+    void process(dawg::engine::AudioBuffer& buffer) {
         if (buffer.getChannelCount() == 0 || buffer.getSampleCount() == 0) return;
         
         // Process each channel
@@ -143,7 +143,7 @@ ParametricEQ::~ParametricEQ() = default;
 // CORE PROCESSING
 // ========================================================================
 
-void ParametricEQ::process(dawg::core::AudioBuffer& buffer) {
+void ParametricEQ::process(dawg::engine::AudioBuffer& buffer) {
     if (!isBypassed()) {
         pImpl->process(buffer);
     }

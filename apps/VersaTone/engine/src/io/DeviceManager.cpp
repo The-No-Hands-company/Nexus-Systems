@@ -1,5 +1,5 @@
 ﻿#include "dawg/io/DeviceManager.h"
-#include "dawg/core/AudioBuffer.h"
+#include <dawg/engine/AudioBuffer.h>
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -327,8 +327,8 @@ private:
 #endif
         
         std::vector<float> outputBuffer(config.bufferSize * config.outputChannels);
-        dawg::core::AudioBuffer inputAudioBuffer(config.bufferSize, 0);
-        dawg::core::AudioBuffer outputAudioBuffer(config.bufferSize, config.outputChannels);
+        dawg::engine::AudioBuffer inputAudioBuffer(config.bufferSize, 0);
+        dawg::engine::AudioBuffer outputAudioBuffer(config.bufferSize, config.outputChannels);
         
         auto lastTime = std::chrono::high_resolution_clock::now();
         

@@ -1,6 +1,6 @@
 ﻿
 #include "dawg/dsp/SineGenerator.h"
-#include "dawg/core/AudioBuffer.h"
+#include <dawg/engine/AudioBuffer.h>
 #include <cmath>
 
 #ifndef M_PI
@@ -25,7 +25,7 @@ void SineGenerator::setAmplitude(double amp) {
     amplitude = amp;
 }
 
-void SineGenerator::generate(core::AudioBuffer& buffer, uint32_t numSamples) {
+void SineGenerator::generate(engine::AudioBuffer& buffer, uint32_t numSamples) {
     if (numSamples == 0) return;
     
     double phaseIncrement = 2.0 * M_PI * frequency / sampleRate;

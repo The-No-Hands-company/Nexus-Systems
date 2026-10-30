@@ -17,16 +17,14 @@
  * Author: DAWg Development Team
  * Created: 2025-08-14
  */
-#include "dawg/core/Timeline.h"
+#include <dawg/engine/Timeline.h>
 #include <algorithm>
 
-namespace dawg {
-namespace core {
+namespace dawg::engine {
 
 void Timeline::removeClip(const std::shared_ptr<Clip>& clip) {
     clips.erase(std::remove(clips.begin(), clips.end(), clip), clips.end());
 }
 
-} // namespace core
-} // namespace dawg
+} // namespace dawg::engine
 

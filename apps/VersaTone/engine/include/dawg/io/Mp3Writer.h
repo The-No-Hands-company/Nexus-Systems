@@ -19,10 +19,10 @@
  */
 #pragma once
 #include <string>
-#include "dawg/core/dawg::core::Audiobuffer.h"
+#include <dawg/engine/AudioBuffer.h>
 
 namespace dawg {
-    bool importMp3(const std::string& path, dawg::core::Audiobuffer& buffer);
-    bool exportMp3(const std::string& path, const dawg::core::Audiobuffer& buffer);
+    bool importMp3(const std::string& path, dawg::engine::AudioBuffer& buffer);
+    bool exportMp3(const std::string& path, const dawg::engine::AudioBuffer& buffer);
 }
 

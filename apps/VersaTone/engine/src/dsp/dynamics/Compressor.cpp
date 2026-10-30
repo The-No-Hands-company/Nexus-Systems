@@ -1,5 +1,5 @@
 ﻿#include "../../../include/dawg/dsp/dynamics/Compressor.h"
-#include "../../../include/dawg/core/AudioBuffer.h"
+#include "../../../include/dawg/engine/AudioBuffer.h"
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -20,7 +20,7 @@ public:
     // Compression state
     double gainReduction = 0.0;    // Current gain reduction
     
-    void process(dawg::core::AudioBuffer& buffer) {
+    void process(dawg::engine::AudioBuffer& buffer) {
         // Basic threshold-based gain reduction
         for (uint32_t channel = 0; channel < buffer.getChannelCount(); ++channel) {
             float* samples = buffer.getChannelData(channel);
@@ -50,7 +50,7 @@ Compressor::~Compressor() = default;
 // CORE PROCESSING
 // ========================================================================
 
-void Compressor::process(dawg::core::AudioBuffer& buffer) {
+void Compressor::process(dawg::engine::AudioBuffer& buffer) {
     if (!isBypassed()) {
         pImpl->process(buffer);
     }
@@ -149,7 +149,7 @@ void Compressor::setSideChainEnabled(bool enabled) {
     // TODO: Implement side-chain
 }
 
-void Compressor::processSideChain(const dawg::core::AudioBuffer& sideChain) {
+void Compressor::processSideChain(const dawg::engine::AudioBuffer& sideChain) {
     // TODO: Implement side-chain processing
 }
 

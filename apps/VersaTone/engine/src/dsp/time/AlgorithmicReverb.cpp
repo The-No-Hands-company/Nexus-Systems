@@ -1,5 +1,5 @@
 ﻿#include "../../../include/dawg/dsp/time/AlgorithmicReverb.h"
-#include "../../../include/dawg/core/AudioBuffer.h"
+#include "../../../include/dawg/engine/AudioBuffer.h"
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -339,7 +339,7 @@ public:
     // MAIN PROCESSING
     // ========================================================================
     
-    void process(dawg::core::AudioBuffer& buffer) {
+    void process(dawg::engine::AudioBuffer& buffer) {
         if (buffer.getChannelCount() == 0 || buffer.getSampleCount() == 0) return;
         
         // Process stereo (convert mono to stereo if needed)
@@ -415,7 +415,7 @@ AlgorithmicReverb::~AlgorithmicReverb() = default;
 // CORE PROCESSING
 // ========================================================================
 
-void AlgorithmicReverb::process(dawg::core::AudioBuffer& buffer) {
+void AlgorithmicReverb::process(dawg::engine::AudioBuffer& buffer) {
     if (!isBypassed()) {
         pImpl->process(buffer);
     }

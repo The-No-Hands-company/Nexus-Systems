@@ -22,10 +22,8 @@
 #include <cstdint>
 
 // Forward declarations
-namespace dawg { 
-    namespace core { class AudioBuffer; }
-    namespace dsp { class Effect; class EffectsChain; }
-}
+namespace dawg::engine { class AudioBuffer; }
+namespace dawg::dsp { class Effect; class EffectsChain; }
 
 namespace dawg {
 namespace dsp {
@@ -84,8 +82,8 @@ public:
     ~ChannelStrip();
     
     // Processing
-    void process(core::AudioBuffer& input, std::vector<core::AudioBuffer*>& auxOutputs, 
-                core::AudioBuffer& mainOutput);
+    void process(engine::AudioBuffer& input, std::vector<engine::AudioBuffer*>& auxOutputs,
+                engine::AudioBuffer& mainOutput);
     void reset();
     void setSampleRate(uint32_t sampleRate);
     void setBufferSize(uint32_t bufferSize);
@@ -126,7 +124,7 @@ public:
     ~AuxBus();
     
     // Processing
-    void process(core::AudioBuffer& input, core::AudioBuffer& output);
+    void process(engine::AudioBuffer& input, engine::AudioBuffer& output);
     void reset();
     void setSampleRate(uint32_t sampleRate);
     void setBufferSize(uint32_t bufferSize);
@@ -183,8 +181,8 @@ public:
     uint32_t getNumMixBuses() const;
     
     // Audio processing
-    void process(std::vector<core::AudioBuffer>& inputs, 
-                std::vector<core::AudioBuffer>& outputs);
+    void process(std::vector<engine::AudioBuffer>& inputs,
+                std::vector<engine::AudioBuffer>& outputs);
     void reset();
     void setSampleRate(uint32_t sampleRate);
     void setBufferSize(uint32_t bufferSize);

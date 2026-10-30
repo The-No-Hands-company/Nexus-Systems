@@ -17,10 +17,10 @@
  * Created: 2025-08-14
  */
 
-#include "dawg/core/AudioEngine.h"
-#include "dawg/core/VoiceManager.h"
-#include "dawg/core/Transport.h"
-#include "dawg/core/Timeline.h"
+#include <dawg/engine/AudioEngine.h>
+#include <dawg/engine/VoiceScheduler.h>
+#include <dawg/engine/Transport.h>
+#include <dawg/engine/Timeline.h>
 #include <thread>
 #include <atomic>
 #include <numbers>
@@ -28,8 +28,7 @@
 #include <chrono>
 #include <iostream>
 
-namespace dawg {
-namespace core {
+namespace dawg::engine {
 
 // Forward declaration of implementation class
 class AudioEngine::Impl {
@@ -60,7 +59,7 @@ public:
         m_channels = config.channels;
         
         // Initialize voice manager with configured capacities
-        m_voiceManager = std::make_unique<VoiceManager>(
+        m_voiceManager = std::make_unique<VoiceScheduler>(
             config.maxRAMVoices,
             config.maxStreamingVoices,
             config.maxVirtualVoices
@@ -145,7 +144,7 @@ public:
         updateStats();
     }
     
-    VoiceManager& getVoiceManager() noexcept {
+    VoiceScheduler& getVoiceScheduler() noexcept {
         return *m_voiceManager;
     }
     
@@ -222,6 +221,8 @@ private:
             m_latencyMs = std::chrono::duration<double, std::milli>(frameTime).count();
             
             // Sleep for remaining time to maintain target frame rate
+            auto targetFrameTime = std::chrono::microseconds(
+                static_cast<long long>(1000000.0 * m_bufferSize / m_sampleRate));
             auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
             if (elapsed < targetFrameTime) {
                 std::this_thread::sleep_for(targetFrameTime - elapsed);
@@ -241,7 +242,7 @@ private:
 
     // Member variables
     EngineConfig m_config;
-    std::unique_ptr<VoiceManager> m_voiceManager;
+    std::unique_ptr<VoiceScheduler> m_voiceManager;
     std::unique_ptr<Transport> m_transport;
     std::unique_ptr<Timeline> m_timeline;
     
@@ -308,8 +309,8 @@ void AudioEngine::processAudio(AudioBuffer& outputBuffer, const AudioBuffer* inp
     m_impl->processAudio(outputBuffer, inputBuffer);
 }
 
-VoiceManager& AudioEngine::getVoiceManager() noexcept {
-    return m_impl->getVoiceManager();
+VoiceScheduler& AudioEngine::getVoiceScheduler() noexcept {
+    return m_impl->getVoiceScheduler();
 }
 
 Transport& AudioEngine::getTransport() noexcept {
@@ -336,5 +337,4 @@ float AudioEngine::getMasterVolume() const noexcept {
     return m_impl->getMasterVolume();
 }
 
-} // namespace core
-} // namespace dawg
+} // namespace dawg::engine

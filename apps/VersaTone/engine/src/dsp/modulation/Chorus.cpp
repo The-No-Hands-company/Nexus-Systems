@@ -1,5 +1,5 @@
 #include "../../../include/dawg/dsp/modulation/Chorus.h"
-#include "../../../include/dawg/core/AudioBuffer.h"
+#include "../../../include/dawg/engine/AudioBuffer.h"
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -329,7 +329,7 @@ public:
     // PROCESSING
     // ========================================================================
     
-    void process(core::AudioBuffer& buffer) {
+    void process(engine::AudioBuffer& buffer) {
         uint32_t numSamples = buffer.getSampleCount();
         uint32_t numChannels = buffer.getChannelCount();
         
@@ -449,7 +449,7 @@ Chorus::~Chorus() = default;
 // EFFECT INTERFACE
 // ========================================================================
 
-void Chorus::process(core::AudioBuffer& buffer) {
+void Chorus::process(engine::AudioBuffer& buffer) {
     pImpl->process(buffer);
 }
 

@@ -19,12 +19,12 @@
  */
 #pragma once
 #include <string>
-#include "dawg/core/dawg::core::Audiobuffer.h"
+#include <dawg/engine/AudioBuffer.h>
 
 namespace dawg {
     // Export buffer to FLAC file (16/24-bit)
-    bool exportFlac(const std::string& path, const dawg::core::Audiobuffer& buffer);
+    bool exportFlac(const std::string& path, const dawg::engine::AudioBuffer& buffer);
     // Import FLAC file to buffer
-    bool importFlac(const std::string& path, dawg::core::Audiobuffer& buffer);
+    bool importFlac(const std::string& path, dawg::engine::AudioBuffer& buffer);
 }
 

@@ -84,7 +84,7 @@ public:
     // EFFECT INTERFACE
     // ========================================================================
     
-    void process(core::AudioBuffer& buffer) override;
+    void process(engine::AudioBuffer& buffer) override;
     void reset() override;
     void setSampleRate(uint32_t sampleRate) override;
     void setBufferSize(uint32_t bufferSize) override;

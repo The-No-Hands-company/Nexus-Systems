@@ -16,7 +16,7 @@
 #include <cstdint>
 
 // Forward declarations
-namespace dawg { namespace core { class AudioBuffer; } }
+namespace dawg::engine { class AudioBuffer; }
 
 namespace dawg {
 namespace io {
@@ -53,8 +53,8 @@ struct AudioStreamConfig {
  * @brief Audio callback function type
  */
 using AudioCallback = std::function<void(
-    const dawg::core::AudioBuffer& input,
-    dawg::core::AudioBuffer& output,
+    const dawg::engine::AudioBuffer& input,
+    dawg::engine::AudioBuffer& output,
     uint32_t frameCount
 )>;
 

@@ -1,9 +1,8 @@
-﻿#include "dawg/core/AudioBuffer.h"
+﻿#include <dawg/engine/AudioBuffer.h>
 #include <algorithm>
 #include <cstring>
 
-namespace dawg {
-namespace core {
+namespace dawg::engine {
 
 AudioBuffer::AudioBuffer(uint16_t channels, uint32_t samples)
     : m_channels(channels), m_samples(samples) {
@@ -138,5 +137,4 @@ void AudioBuffer::copyToInterleaved(float* dest, uint32_t numFrames) const noexc
     }
 }
 
-} // namespace core
-} // namespace dawg
+} // namespace dawg::engine
