@@ -52,7 +52,7 @@ service_identity() {
         auth)           SERVICE_DIR="$ROOT/apps/Nexus-Auth"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         cloud)          SERVICE_DIR="$ROOT/apps/Nexus-Cloud"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         chat)           SERVICE_DIR="$ROOT/apps/Nexus-Team-Chat"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
-        nexus-chat)     SERVICE_DIR="$ROOT/apps/Nexus"; SERVICE_EXEC_PATTERN="./target/debug/nexus serve --port 8180" ;;
+        nexus-chat)     SERVICE_DIR="$ROOT/apps/Nexus"; SERVICE_EXEC_PATTERN="$NEXUS_CHAT_BINARY_PATH serve --port 8180" ;;
         nexus-chat-web) SERVICE_DIR="$ROOT"; SERVICE_EXEC_PATTERN="caddy run --config $ROOT/deploy/production/nexus-chat.Caddyfile" ;;
         dashboard)      SERVICE_DIR="$ROOT/apps/Nexus-Dashboard"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-api)      SERVICE_DIR="$ROOT/apps/Nexus-API"; SERVICE_EXEC_PATTERN="bun run src/gateway-index.ts" ;;
@@ -354,7 +354,7 @@ start_nexus_chat_service() {
         # override the URL/key used by Nexus's startup registration path.
         adopt_cloud_registration_environment_for_dependents || return 1
         start_service "nexus-chat" "$ROOT/apps/Nexus" 8180 \
-            ./target/debug/nexus serve --port 8180 --gateway-port 8181 --voice-port 8182
+            "$NEXUS_CHAT_BINARY_PATH" serve --port 8180 --gateway-port 8181 --voice-port 8182
     )
 }
 
@@ -629,7 +629,7 @@ cmd_start() {
     # nexus-chat.env.example). Skipped rather than fatal when absent, so a node
     # that has not been given the credentials still starts everything else.
     if [ -f "$ROOT/deploy/production/nexus-chat.env" ]; then
-        if [ ! -x "$ROOT/apps/Nexus/target/debug/nexus" ]; then
+        if [ ! -x "$NEXUS_CHAT_BINARY_PATH" ]; then
             warn "nexus-chat binary missing — build it with: (cd apps/Nexus && cargo build --bin nexus)"
         else
             # Sourced inside a subshell so it cannot leak. `set -a` exports
