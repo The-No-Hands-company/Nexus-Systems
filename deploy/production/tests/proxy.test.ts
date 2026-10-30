@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from "bun:test";
 
-beforeAll(() => { process.env.GATE_SKIP_AUTH = "true"; });
+beforeAll(async () => {
+  process.env.GATE_SKIP_AUTH = "true";
+  // Seed an empty maintenance cache so handleRequest never reaches out to Cloud
+  // for maintenance during tests (mirrors __setRoutesForTest for the route table).
+  const { __setMaintenanceForTest } = await import("../proxy");
+  __setMaintenanceForTest([]);
+});
 
 describe("proxy module", () => {
   it("can be imported without binding a port", async () => {
@@ -16,6 +22,53 @@ describe("proxy module", () => {
     const { handleRequest } = await import("../proxy");
     const res = await handleRequest(new Request("http://nope.example.com/"));
     expect(res.status).toBe(404);
+  });
+});
+
+describe("maintenance", () => {
+  afterEach(async () => {
+    const { __setMaintenanceForTest } = await import("../proxy");
+    __setMaintenanceForTest([]); // reset so other suites are unaffected
+  });
+
+  it("serves the maintenance page (503 + Retry-After) for a host in maintenance", async () => {
+    const { handleRequest, __setRoutesForTest, __setMaintenanceForTest } = await import("../proxy");
+    __setRoutesForTest({});
+    __setMaintenanceForTest([
+      {
+        subjectId: "hosting.tnhc.dev",
+        part: "Nexus Hosting",
+        reason: "Storage upgrade",
+        startedAt: new Date().toISOString(),
+        expectedEndAt: new Date(Date.now() + 3_600_000).toISOString(),
+      },
+    ]);
+    const res = await handleRequest(new Request("http://hosting.tnhc.dev/"));
+    expect(res.status).toBe(503);
+    expect(res.headers.get("retry-after")).toBeTruthy();
+    const body = await res.text();
+    expect(body).toContain("Nexus Hosting");
+    expect(body).toContain("maintenance");
+  });
+
+  it("fires even when the host is served from a fallback route, not the route table", async () => {
+    const { handleRequest, __setRoutesForTest, __setMaintenanceForTest } = await import("../proxy");
+    __setRoutesForTest({}); // empty table — chat would be a fallback route
+    __setMaintenanceForTest([
+      { subjectId: "chat.tnhc.dev", part: "Chat", startedAt: new Date().toISOString() },
+    ]);
+    const res = await handleRequest(new Request("http://chat.tnhc.dev/"));
+    expect(res.status).toBe(503);
+  });
+
+  it("does not affect a host that is not in maintenance", async () => {
+    const { handleRequest, __setRoutesForTest, __setMaintenanceForTest } = await import("../proxy");
+    __setMaintenanceForTest([
+      { subjectId: "hosting.tnhc.dev", part: "Nexus Hosting", startedAt: new Date().toISOString() },
+    ]);
+    __setRoutesForTest({ "chat.tnhc.dev": { upstream: "http://127.0.0.1:1", requiresAuth: false, kind: "app" } });
+    const res = await handleRequest(new Request("http://chat.tnhc.dev/"));
+    expect(res.status).not.toBe(503);
   });
 });
 

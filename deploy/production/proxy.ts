@@ -170,6 +170,58 @@ export function __setRoutesForTest(routes: Record<string, RouteTarget>): void {
   routeCache = { timestamp: Date.now(), routes };
 }
 
+// Operator maintenance, fetched independently of the route table so a part can
+// be shown as "in maintenance" even while it is served from a fallback route
+// (Cloud's route table fluctuates with tool heartbeats; the edge must not).
+interface MaintenanceRecord {
+  subjectId: string;
+  part: string;
+  reason?: string;
+  startedAt: string;
+  expectedEndAt?: string;
+}
+let maintenanceCache: { timestamp: number; list: MaintenanceRecord[] } = { timestamp: 0, list: [] };
+// Set once a test seeds the cache, so getMaintenanceList never hits the network
+// in tests (mirrors how seeded routes skip fetchRouteConfig).
+let maintenanceSeeded = false;
+const MAINTENANCE_TTL_MS = Number(process.env.MAINTENANCE_TTL_MS || "15000");
+
+async function fetchMaintenance(): Promise<MaintenanceRecord[] | null> {
+  try {
+    const url = `${CLOUD_URL.replace(/\/+$/, "")}/api/v1/maintenance`;
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(2000),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    return (data.maintenance as MaintenanceRecord[]) ?? [];
+  } catch (err) {
+    console.warn(`[proxy] Failed to fetch maintenance: ${err}`);
+    return null;
+  }
+}
+
+// Current maintenance windows. Fails open: if Cloud cannot be reached and
+// nothing is cached, the list is empty and everything serves normally.
+async function getMaintenanceList(): Promise<MaintenanceRecord[]> {
+  if (maintenanceSeeded) return maintenanceCache.list;
+  const now = Date.now();
+  if (now - maintenanceCache.timestamp < MAINTENANCE_TTL_MS) return maintenanceCache.list;
+  const fresh = await fetchMaintenance();
+  // Cache either way (keep the last list when Cloud is unreachable, but advance
+  // the timestamp) so a slow or down Cloud is paid at most once per TTL rather
+  // than on every request.
+  maintenanceCache = { timestamp: now, list: fresh ?? maintenanceCache.list };
+  return maintenanceCache.list;
+}
+
+/** Seeds the maintenance cache directly. Tests only. */
+export function __setMaintenanceForTest(list: MaintenanceRecord[]): void {
+  maintenanceCache = { timestamp: Date.now(), list };
+  maintenanceSeeded = true;
+}
+
 // Get current routes (from cache or fresh fetch)
 async function getRoutes(): Promise<Record<string, RouteTarget>> {
   const now = Date.now();
@@ -555,6 +607,33 @@ async function handleRequestInner(
 
     // Get current routing configuration. The pinned Terminal hop does not
     // depend on Cloud availability or on a mutable upstream entry.
+    // Operator maintenance, matched by host and independent of the route table,
+    // so it fires whether the host is served from a Cloud route or a fallback.
+    // Public (before any auth gate) and uncacheable; Retry-After from the
+    // expected end. Fails open: no record (or Cloud unreachable) serves normally.
+    const maint = (await getMaintenanceList()).find(
+      (m) => m.subjectId === host || m.subjectId === host.replace(/^www\./, ""),
+    );
+    if (maint) {
+      return new Response(
+        renderMaintenancePage({
+          part: maint.part,
+          reason: maint.reason,
+          startedAt: maint.startedAt,
+          expectedEndAt: maint.expectedEndAt,
+          statusUrl: `status.${DOMAIN}`,
+        }),
+        {
+          status: 503,
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "retry-after": String(retryAfterSeconds(maint.expectedEndAt)),
+            "cache-control": "no-store",
+          },
+        },
+      );
+    }
+
     const routes = dashboardTerminalRequest || apiRequest ? {} : await getRoutes();
     
     // Find matching route
@@ -568,8 +647,6 @@ async function handleRequestInner(
     // rather than assumed, so the route table stays the thing that decides and
     // the value cannot quietly become decorative.
     let matchedKind: RouteTarget["kind"] | null = null;
-    // An operator-set maintenance window for the matched part, if any.
-    let maintenance: RouteTarget["maintenance"];
 
     // Cloud keys its routing table by full hostname, and buildRouteMap
     // lowercases and strips a leading "www." from both sides, so a single
@@ -585,31 +662,7 @@ async function handleRequestInner(
         upstreamUrl = matched.upstream;
         requiresAuth = matched.requiresAuth;
         matchedKind = matched.kind;
-        maintenance = matched.maintenance;
       }
-    }
-
-    // An operator has this part in maintenance: serve the maintenance page
-    // instead of proxying. Deliberately before the auth gate — the page is
-    // public — and uncacheable, with Retry-After derived from the expected end.
-    if (maintenance) {
-      return new Response(
-        renderMaintenancePage({
-          part: maintenance.part,
-          reason: maintenance.reason,
-          startedAt: maintenance.startedAt,
-          expectedEndAt: maintenance.expectedEndAt,
-          statusUrl: `status.${DOMAIN}`,
-        }),
-        {
-          status: 503,
-          headers: {
-            "content-type": "text/html; charset=utf-8",
-            "retry-after": String(retryAfterSeconds(maintenance.expectedEndAt)),
-            "cache-control": "no-store",
-          },
-        },
-      );
     }
 
     // Former tunnel bypass routes: storage and the non-login auth.<DOMAIN> paths
