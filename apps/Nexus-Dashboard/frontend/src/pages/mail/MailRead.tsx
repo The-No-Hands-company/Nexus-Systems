@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  attachmentUrl, markMailSeen, readMailMessage, threadMessages,
+  attachmentUrl, markMailSeen, moveMailMessage, readMailMessage, threadMessages,
   type MailMessage, type MailSummary,
 } from "../../api";
 import { mailDate, senderName } from "./format";
@@ -17,6 +17,7 @@ export default function MailRead() {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [showHtml, setShowHtml] = useState(false);
   const [siblings, setSiblings] = useState<MailSummary[]>([]);
+  const [moveError, setMoveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!messageId) return;
@@ -28,6 +29,7 @@ export default function MailRead() {
         const message = await readMailMessage(messageId);
         if (cancelled) return;
         setState({ kind: "ready", message });
+        setMoveError(null);
         setShowHtml(false);
         // The rest of the conversation, best effort: failing to load it must
         // not stop the message the reader actually opened from rendering.
@@ -77,6 +79,19 @@ export default function MailRead() {
   }
 
   const m = state.message;
+  const move = async (folder: "inbox" | "trash" | "junk") => {
+    try {
+      setMoveError(null);
+      await moveMailMessage(m.id, folder);
+      const message = await readMailMessage(m.id);
+      setState({ kind: "ready", message });
+    } catch (e) {
+      setMoveError(e instanceof Error ? e.message : "unknown");
+    }
+  };
+  const isInbox = m.folder_kind === "inbox";
+  const isTrash = m.folder_kind === "trash";
+  const isJunk = m.folder_kind === "custom" && m.folder_name === "Junk";
   return (
     <section className="mx-auto max-w-3xl space-y-4 px-4 py-6 sm:p-8">
       <div className="flex items-center gap-3">
@@ -99,7 +114,44 @@ export default function MailRead() {
         >
           Reply
         </Link>
+        {(isInbox || isJunk) && (
+          <button
+            type="button"
+            onClick={() => void move("trash")}
+            className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900"
+          >
+            Move to Trash
+          </button>
+        )}
+        {isTrash && (
+          <button
+            type="button"
+            onClick={() => void move("inbox")}
+            className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900"
+          >
+            Restore to Inbox
+          </button>
+        )}
+        {isInbox && (
+          <button
+            type="button"
+            onClick={() => void move("junk")}
+            className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900"
+          >
+            Mark as Spam
+          </button>
+        )}
+        {isJunk && (
+          <button
+            type="button"
+            onClick={() => void move("inbox")}
+            className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900"
+          >
+            Not Spam
+          </button>
+        )}
       </div>
+      {moveError && <p role="alert" className="text-sm text-red-300">Could not move message ({moveError}).</p>}
 
       <header className="border-b border-zinc-800 pb-4">
         <h1 className="text-xl font-semibold text-zinc-100">{m.subject || "(no subject)"}</h1>

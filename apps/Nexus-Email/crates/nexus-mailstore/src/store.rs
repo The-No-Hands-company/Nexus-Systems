@@ -629,6 +629,42 @@ impl MailStore {
         }
     }
 
+    /// The folder currently containing a mailbox's message.
+    ///
+    /// The membership join scopes this lookup to the caller's mailbox, just as
+    /// `raw_message` does, so exposing folder metadata cannot reveal another
+    /// mailbox's placement.
+    pub async fn message_folder(
+        &self,
+        mailbox_id: Uuid,
+        message_id: Uuid,
+    ) -> Result<Option<Folder>> {
+        let row: Option<(Uuid, Uuid, String, String)> = sqlx::query_as(
+            "SELECT f.id, f.mailbox_id, f.name, f.kind
+             FROM mailbox_messages mm
+             JOIN folders f ON f.id = mm.folder_id
+             WHERE mm.mailbox_id = $1 AND mm.message_id = $2",
+        )
+        .bind(mailbox_id)
+        .bind(message_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|(id, mailbox_id, name, kind)| Folder {
+            id,
+            mailbox_id,
+            name,
+            kind: match kind.as_str() {
+                "inbox" => FolderKind::Inbox,
+                "sent" => FolderKind::Sent,
+                "drafts" => FolderKind::Drafts,
+                "trash" => FolderKind::Trash,
+                "archive" => FolderKind::Archive,
+                _ => FolderKind::Custom,
+            },
+        }))
+    }
+
     /// The address a mailbox sends as.
     ///
     /// Falls back to any address it owns when none is marked primary, because

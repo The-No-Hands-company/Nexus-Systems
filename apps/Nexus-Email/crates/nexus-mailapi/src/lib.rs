@@ -130,6 +130,7 @@ pub fn router(state: SharedState) -> Router {
         .route("/api/v1/folders/:id/messages", get(list_messages))
         .route("/api/v1/messages/:id", get(read_message))
         .route("/api/v1/messages/:id/seen", post(mark_seen))
+        .route("/api/v1/messages/:id/folder", post(move_message))
         .route("/api/v1/messages", post(send_message))
         .route("/api/v1/search", get(search))
         .route("/api/v1/threads/:id/messages", get(thread_messages))
@@ -356,6 +357,8 @@ pub struct MessageDto {
     /// True when remote images or similar were stripped, so the UI can offer to
     /// load them instead of silently showing a different message than was sent.
     pub blocked_remote: bool,
+    pub folder_kind: String,
+    pub folder_name: String,
     pub attachments: Vec<AttachmentDto>,
 }
 
@@ -382,6 +385,12 @@ async fn read_message(
         .raw_message(mailbox, message_id)
         .await
         .map_err(|_| ApiError(StatusCode::NOT_FOUND, "no such message".into()))?;
+    let folder = state
+        .store
+        .message_folder(mailbox, message_id)
+        .await
+        .map_err(|e| server(&format!("message folder: {e}")))?
+        .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "no such message".into()))?;
 
     let parsed = nexus_mailmsg::parse(&raw, nexus_mailmsg::Limits::default())
         .map_err(|e| server(&format!("parse: {e}")))?;
@@ -423,6 +432,8 @@ async fn read_message(
         text: body_of("text/plain").unwrap_or_else(|| root.text()),
         blocked_remote: sanitised.as_ref().map(|s| s.blocked_remote).unwrap_or(false),
         html: sanitised.map(|s| s.html),
+        folder_kind: folder.kind.as_str().to_string(),
+        folder_name: folder.name,
         attachments,
     }))
 }
@@ -444,6 +455,51 @@ async fn mark_seen(
         .set_seen(mailbox, message_id, body.seen)
         .await
         .map_err(|e| server(&format!("set_seen: {e}")))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+pub struct MoveFolderBody {
+    pub folder: String,
+}
+
+async fn move_message(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path(message_id): Path<Uuid>,
+    Json(body): Json<MoveFolderBody>,
+) -> Result<StatusCode, ApiError> {
+    let mailbox = mailbox_of(&state, &headers).await?;
+    let current = state
+        .store
+        .message_folder(mailbox, message_id)
+        .await
+        .map_err(|e| server(&format!("message folder: {e}")))?
+        .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "no such message".into()))?;
+    let allowed = matches!(
+        (current.kind, current.name.as_str(), body.folder.as_str()),
+        (FolderKind::Inbox, _, "trash" | "junk")
+            | (FolderKind::Trash, _, "inbox")
+            | (FolderKind::Custom, "Junk", "inbox" | "trash")
+    );
+    if !allowed {
+        return Err(bad("folder transition is not allowed"));
+    }
+    let folder = match body.folder.as_str() {
+        "inbox" => state.store.folder(mailbox, FolderKind::Inbox).await,
+        "trash" => state.store.folder(mailbox, FolderKind::Trash).await,
+        "junk" => state
+            .store
+            .folder_named_or_create(mailbox, "Junk", FolderKind::Custom)
+            .await,
+        _ => return Err(bad("folder must be inbox, trash, or junk")),
+    }
+        .map_err(|e| server(&format!("folder: {e}")))?;
+    state
+        .store
+        .move_to_folder(mailbox, message_id, folder)
+        .await
+        .map_err(|e| server(&format!("move: {e}")))?;
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -92,6 +92,19 @@ async fn post(addr: std::net::SocketAddr, path: &str, headers: &[(&str, &str)], 
     String::from_utf8_lossy(&out).into_owned()
 }
 
+async fn get(addr: std::net::SocketAddr, path: &str, headers: &[(&str, &str)]) -> String {
+    let mut s = TcpStream::connect(addr).await.unwrap();
+    let mut req = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n");
+    for (k, v) in headers {
+        req.push_str(&format!("{k}: {v}\r\n"));
+    }
+    req.push_str("\r\n");
+    s.write_all(req.as_bytes()).await.unwrap();
+    let mut out = Vec::new();
+    s.read_to_end(&mut out).await.unwrap();
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 #[tokio::test]
 async fn a_message_sent_through_the_api_carries_no_client_address_or_received_line() {
     let api = start(None).await;
@@ -164,4 +177,100 @@ async fn a_failed_inbound_delivery_logs_no_recipient_address() {
     assert!(!log.contains(&rcpt), "recipient leaked: {log:?}");
     assert!(!log.contains(&api.local), "recipient domain leaked: {log:?}");
     assert!(!log.contains("stranger@sender.example"), "sender leaked: {log:?}");
+}
+
+#[tokio::test]
+async fn a_mailbox_owner_can_move_a_message_between_special_folders() {
+    let api = start(None).await;
+    let subject = format!("usr-{}", Uuid::now_v7().simple());
+    let mailbox = api.store.create_identity_mailbox(&subject, "Alice").await.unwrap();
+    let from = Address::parse(&format!("sender@{}", api.local)).unwrap();
+    let thread = api.store.thread_for(None, &[], Some("Keep me")).await.unwrap();
+    let message = api
+        .store
+        .store_message(
+            b"From: sender@example.test\r\nSubject: Keep me\r\n\r\nbody",
+            thread,
+            &from,
+            Some("Keep me"),
+            None,
+            None,
+            &[],
+            nexus_mailstore::Transport::Internal,
+            None,
+        )
+        .await
+        .unwrap();
+    let inbox = api.store.folder(mailbox.id, nexus_mailstore::FolderKind::Inbox).await.unwrap();
+    api.store.deliver(mailbox.id, message, inbox).await.unwrap();
+
+    let missing = post(
+        api.addr,
+        &format!("/api/v1/messages/{}/folder", Uuid::now_v7()),
+        &[("Content-Type", "application/json"), ("X-Nexus-Subject", &subject)],
+        br#"{"folder":"trash"}"#,
+    )
+    .await;
+    assert!(missing.starts_with("HTTP/1.1 404"), "{missing}");
+
+    let trash = post(
+        api.addr,
+        &format!("/api/v1/messages/{message}/folder"),
+        &[("Content-Type", "application/json"), ("X-Nexus-Subject", &subject)],
+        br#"{"folder":"trash"}"#,
+    )
+    .await;
+    assert!(trash.starts_with("HTTP/1.1 204"), "{trash}");
+
+    let trash_id = api.store.folder(mailbox.id, nexus_mailstore::FolderKind::Trash).await.unwrap();
+    assert_eq!(api.store.list_folder(mailbox.id, trash_id, 10, 0).await.unwrap().len(), 1);
+    assert!(api.store.list_folder(mailbox.id, inbox, 10, 0).await.unwrap().is_empty());
+
+    let trash_to_junk = post(
+        api.addr,
+        &format!("/api/v1/messages/{message}/folder"),
+        &[("Content-Type", "application/json"), ("X-Nexus-Subject", &subject)],
+        br#"{"folder":"junk"}"#,
+    )
+    .await;
+    assert!(trash_to_junk.starts_with("HTTP/1.1 400"), "{trash_to_junk}");
+
+    let restore = post(
+        api.addr,
+        &format!("/api/v1/messages/{message}/folder"),
+        &[("Content-Type", "application/json"), ("X-Nexus-Subject", &subject)],
+        br#"{"folder":"inbox"}"#,
+    )
+    .await;
+    assert!(restore.starts_with("HTTP/1.1 204"), "{restore}");
+    assert_eq!(api.store.list_folder(mailbox.id, inbox, 10, 0).await.unwrap().len(), 1);
+
+    let junk = post(
+        api.addr,
+        &format!("/api/v1/messages/{message}/folder"),
+        &[("Content-Type", "application/json"), ("X-Nexus-Subject", &subject)],
+        br#"{"folder":"junk"}"#,
+    )
+    .await;
+    assert!(junk.starts_with("HTTP/1.1 204"), "{junk}");
+    let junk_id = api.store.folder_named_or_create(mailbox.id, "Junk", nexus_mailstore::FolderKind::Custom).await.unwrap();
+    assert_eq!(api.store.list_folder(mailbox.id, junk_id, 10, 0).await.unwrap().len(), 1);
+    let message_response = get(
+        api.addr,
+        &format!("/api/v1/messages/{message}"),
+        &[("X-Nexus-Subject", &subject)],
+    )
+    .await;
+    assert!(message_response.contains(r#""folder_kind":"custom""#), "{message_response}");
+    assert!(message_response.contains(r#""folder_name":"Junk""#), "{message_response}");
+
+    let not_spam = post(
+        api.addr,
+        &format!("/api/v1/messages/{message}/folder"),
+        &[("Content-Type", "application/json"), ("X-Nexus-Subject", &subject)],
+        br#"{"folder":"inbox"}"#,
+    )
+    .await;
+    assert!(not_spam.starts_with("HTTP/1.1 204"), "{not_spam}");
+    assert_eq!(api.store.list_folder(mailbox.id, inbox, 10, 0).await.unwrap().len(), 1);
 }
