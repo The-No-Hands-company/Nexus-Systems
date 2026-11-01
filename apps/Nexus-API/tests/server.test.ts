@@ -89,7 +89,7 @@ describe("nexus-api", () => {
     expect(typeof body.routedTotal).toBe("number");
   });
 
-  it("GET /api/v1/contract returns the versioned public API contract", async () => {
+  it("GET /api/v1/contract returns the versioned API contract from the private loopback server route", async () => {
     const r = await fetch(`${base}/api/v1/contract`);
     expect(r.status).toBe(200);
     const body = (await r.json()) as {
@@ -101,10 +101,10 @@ describe("nexus-api", () => {
     expect(body.service).toMatchObject({ id: "nexus-api", auth: "Bearer token or hosted session" });
     expect(body.routes).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ method: "GET", path: "/api/v1/contract", access: "public" }),
+        expect.objectContaining({ method: "GET", path: "/ipa/v1/contract", access: "public" }),
         expect.objectContaining({
           method: "POST",
-          path: "/api/v1/gateway/routes",
+          path: "/ipa/v1/gateway/routes",
           access: "operator",
         }),
       ]),

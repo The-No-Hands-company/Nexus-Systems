@@ -42,7 +42,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/contract": {
+      "/ipa/v1/contract": {
         get: {
           operationId: "getContract",
           security: publicSecurity,
@@ -53,14 +53,14 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/openapi.json": {
+      "/ipa/v1/openapi.json": {
         get: {
           operationId: "getOpenApi",
           security: publicSecurity,
           responses: { "200": { description: "OpenAPI document" } },
         },
       },
-      "/api/v1/me": {
+      "/ipa/v1/me": {
         get: {
           operationId: "getCurrentUser",
           security: sessionSecurity,
@@ -72,7 +72,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/apps": {
+      "/ipa/v1/apps": {
         get: {
           operationId: "listApps",
           security: sessionSecurity,
@@ -85,7 +85,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/catalog": {
+      "/ipa/v1/catalog": {
         get: {
           operationId: "getCatalogCompatibilityAlias",
           security: sessionSecurity,
@@ -97,7 +97,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/mail/folders": {
+      "/ipa/v1/mail/folders": {
         get: {
           operationId: "listMailFolders",
           security: sessionSecurity,
@@ -110,7 +110,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/mail/folders/{id}/messages": {
+      "/ipa/v1/mail/folders/{id}/messages": {
         get: {
           operationId: "listFolderMessages",
           security: sessionSecurity,
@@ -124,7 +124,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/mail/messages/{id}": {
+      "/ipa/v1/mail/messages/{id}": {
         get: {
           operationId: "getMailMessage",
           security: sessionSecurity,
@@ -138,7 +138,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/mail/messages/{id}/seen": {
+      "/ipa/v1/mail/messages/{id}/seen": {
         post: {
           operationId: "setMailMessageSeen",
           security: sessionSecurity,
@@ -152,7 +152,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/mail/messages": {
+      "/ipa/v1/mail/messages": {
         post: {
           operationId: "sendMailMessage",
           security: sessionSecurity,
@@ -162,7 +162,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/mail/search": {
+      "/ipa/v1/mail/search": {
         get: {
           operationId: "searchMail",
           security: sessionSecurity,
@@ -175,7 +175,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/mail/threads/{id}/messages": {
+      "/ipa/v1/mail/threads/{id}/messages": {
         get: {
           operationId: "listThreadMessages",
           security: sessionSecurity,
@@ -189,7 +189,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/mail/messages/{id}/attachments/{index}": {
+      "/ipa/v1/mail/messages/{id}/attachments/{index}": {
         get: {
           operationId: "downloadMailAttachment",
           security: sessionSecurity,
@@ -203,7 +203,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/calendar/events": {
+      "/ipa/v1/calendar/events": {
         get: {
           operationId: "listCalendarEvents",
           summary: "List the caller's events in a date range",
@@ -239,7 +239,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/calendar/events/{id}": {
+      "/ipa/v1/calendar/events/{id}": {
         get: {
           operationId: "getCalendarEvent",
           summary: "Read one caller-owned event",
@@ -281,7 +281,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/calendar/public/{token}": {
+      "/ipa/v1/calendar/public/{token}": {
         get: {
           operationId: "getPublicCalendarEvent",
           summary: "Read a publicly shared event — the token is the access credential",
@@ -296,7 +296,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/gateway/status": {
+      "/ipa/v1/gateway/status": {
         get: {
           operationId: "getGatewayStatus",
           security: publicSecurity,
@@ -307,7 +307,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/gateway/routes": {
+      "/ipa/v1/gateway/routes": {
         get: {
           operationId: "listGatewayRoutes",
           security: operatorSecurity,
@@ -342,7 +342,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
           },
         },
       },
-      "/api/v1/gateway/routes/{method}/{path}": {
+      "/ipa/v1/gateway/routes/{method}/{path}": {
         delete: {
           operationId: "deleteGatewayRoute",
           security: operatorSecurity,
