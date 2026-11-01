@@ -89,10 +89,12 @@ describe("delegation trust boundary", () => {
       });
       capturedMailHeaders.push(headers);
       if (headers["x-nexus-subject"]) capturedMailSubjects.push(headers["x-nexus-subject"]);
-      if (new URL(request.url).pathname !== "/api/v1/folders")
+      const path = new URL(request.url).pathname;
+      if (path !== "/api/v1/folders" && path !== "/api/v1/messages/message-id/folder")
         return new Response("not found", { status: 404 });
       if (headers["x-nexus-subject"] !== "resolved-user-id")
         return Response.json({ error: "wrong subject" }, { status: 403 });
+      if (path.endsWith("/folder")) return new Response(null, { status: 204 });
       return Response.json({ folders: [] });
     });
 
@@ -138,12 +140,22 @@ describe("delegation trust boundary", () => {
         "x-nexus-subject": "attacker-injected-subject",
       },
     });
+
     expect(res.status).toBe(200);
 
     // Mail must have been called with exactly the Auth-resolved id
     expect(capturedMailSubjects).toEqual(["resolved-user-id"]);
     // The attacker value must not have been forwarded
     expect(capturedMailSubjects).not.toContain("attacker-injected-subject");
+  });
+
+  it("forwards a message move to Mail", async () => {
+    const res = await fetch(`${base}/api/v1/mail/messages/message-id/folder`, {
+      method: "POST",
+      headers: { cookie: "nexus_session=valid", "content-type": "application/json" },
+      body: JSON.stringify({ folder: "trash" }),
+    });
+    expect(res.status).toBe(204);
   });
 
   it("does not expose the Cloud API key in the catalog response", async () => {

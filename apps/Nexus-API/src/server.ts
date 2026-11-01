@@ -175,7 +175,7 @@ async function forwardMail(request: Request, rest: string, search: string): Prom
   if (!subject) return json({ error: "identity_unavailable" }, 503);
 
   const allowed =
-    /^(folders(?:\/[^/]+\/messages)?|messages(?:\/[^/]+(?:\/seen|\/attachments\/[^/]+)?)?|search|threads\/[^/]+\/messages)$/;
+    /^(folders(?:\/[^/]+\/messages)?|messages(?:\/[^/]+(?:\/seen|\/folder|\/attachments\/[^/]+)?)?|search|threads\/[^/]+\/messages)$/;
   if (!allowed.test(rest)) return json({ error: "not_found" }, 404);
   if (request.method !== "GET" && request.method !== "POST") {
     return json({ error: "method_not_allowed" }, 405);
