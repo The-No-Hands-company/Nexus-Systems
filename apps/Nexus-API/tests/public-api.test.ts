@@ -122,6 +122,7 @@ describe("stable platform API", () => {
 
     const openapi = (await (await fetch(`${base}/api/v1/openapi.json`)).json()) as {
       openapi: string;
+      servers: Array<{ url: string }>;
       paths: Record<string, unknown>;
     };
     expect(openapi.openapi).toBe("3.1.0");
@@ -129,6 +130,8 @@ describe("stable platform API", () => {
     expect(openapi.paths).toHaveProperty("/ipa/v1/apps");
     expect(openapi.paths).toHaveProperty("/ipa/v1/mail/folders");
     expect(Object.hasOwn(openapi.paths, "/api/v1/me")).toBe(false);
+    const composedMeUrl = `${(openapi.servers[0]?.url ?? "").replace(/\/$/, "")}/ipa/v1/me`;
+    expect(composedMeUrl.includes("/ipa/v1/ipa/v1/me")).toBe(false);
   });
 
   it("delegates identity to Auth and preserves the caller credential on the private loopback route", async () => {

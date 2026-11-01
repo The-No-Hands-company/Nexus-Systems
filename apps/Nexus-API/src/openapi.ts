@@ -1,4 +1,4 @@
-import type { NexusApiContract } from "./api-contract";
+import { type NexusApiContract, PUBLIC_API_PREFIX } from "./api-contract";
 
 type OpenApiDocument = {
   openapi: "3.1.0";
@@ -17,6 +17,12 @@ const jsonResponse = (description: string, schema: Record<string, unknown>) => (
   content: { "application/json": { schema } },
 });
 
+function openApiServerUrl(baseUrl: string): string {
+  return baseUrl.endsWith(PUBLIC_API_PREFIX)
+    ? baseUrl.slice(0, -PUBLIC_API_PREFIX.length)
+    : baseUrl;
+}
+
 export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocument {
   const publicSecurity: Array<Record<string, unknown>> = [{}];
   const sessionSecurity = [{ bearerAuth: [] }, { cookieAuth: [] }];
@@ -30,7 +36,7 @@ export function buildOpenApiDocument(contract: NexusApiContract): OpenApiDocumen
       description:
         "Stable platform facade for Nexus applications. Auth owns identity, Cloud owns control-plane state, and application services own their data.",
     },
-    servers: [{ url: contract.service.baseUrl }],
+    servers: [{ url: openApiServerUrl(contract.service.baseUrl) }],
     security: [{ bearerAuth: [] }],
     paths: {
       "/health": {
