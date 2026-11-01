@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MailList from "./MailList";
@@ -34,9 +34,10 @@ function stubFetch(overrides: Record<string, () => Response> = {}) {
     for (const [key, fn] of Object.entries(overrides)) {
       if (u.startsWith(key)) return fn();
     }
-    if (u.includes("/api/v1/mail/folders/")) return jsonResponse(MESSAGES);
-    if (u.includes("/api/v1/mail/folders")) return jsonResponse(FOLDERS);
-    if (u.includes("/api/v1/mail/search")) return jsonResponse([]);
+    if (u.includes("/ipa/mail/folders/")) return jsonResponse(MESSAGES);
+    if (u.includes("/ipa/mail/folders")) return jsonResponse(FOLDERS);
+    if (u.includes("/ipa/mail/search")) return jsonResponse([]);
+    if (u.includes("/ipa/mail/messages/m-1/folder")) return new Response(null, { status: 204 });
     throw new Error(`unexpected fetch: ${u}`);
   });
   vi.stubGlobal("fetch", spy);
@@ -73,7 +74,7 @@ describe("MailList", () => {
     await waitFor(() => expect(screen.getByText("Design review")).toBeTruthy());
     // Landing nowhere would show an empty page on a mailbox full of mail.
     expect(
-      spy.mock.calls.some(([u]) => String(u).includes("/api/v1/mail/folders/f-inbox/messages")),
+      spy.mock.calls.some(([u]) => String(u).includes("/ipa/mail/folders/f-inbox/messages")),
     ).toBe(true);
   });
 
@@ -81,7 +82,7 @@ describe("MailList", () => {
     // An ordinary state for a new account. Telling someone their mail is broken
     // when they simply have no address yet is worse than saying nothing.
     stubFetch({
-      "/api/v1/mail/folders": () =>
+      "/ipa/mail/folders": () =>
         jsonResponse({ error: "no mailbox for this account" }, 404),
     });
     render(
@@ -98,7 +99,7 @@ describe("MailList", () => {
     // An empty list and a broken service look identical to a user unless the
     // page says which it is.
     stubFetch({
-      "/api/v1/mail/folders": () =>
+      "/ipa/mail/folders": () =>
         jsonResponse({ error: "mail_unavailable" }, 503),
     });
     render(
@@ -109,5 +110,22 @@ describe("MailList", () => {
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
     expect(screen.getByText(/unavailable/i)).toBeTruthy();
+  });
+
+  it("moves an Inbox message to Trash from the message list", async () => {
+    const spy = stubFetch();
+    render(
+      <MemoryRouter>
+        <MailList />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Design review");
+    fireEvent.click(screen.getByRole("button", { name: "Move Design review to Trash" }));
+
+    await waitFor(() => expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining("/ipa/mail/messages/m-1/folder"),
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ folder: "trash" }) }),
+    ));
   });
 });

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
-  listMailFolders, listMailMessages, searchMail,
+  listMailFolders, listMailMessages, moveMailMessage, searchMail,
   type MailFolder, type MailSummary,
 } from "../../api";
 import { groupIntoThreads } from "./threads";
@@ -20,6 +20,8 @@ export default function MailList() {
   const query = params.get("q") ?? "";
   const [state, setState] = useState<State>({ kind: "loading" });
   const [draftQuery, setDraftQuery] = useState(query);
+  const [movingId, setMovingId] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +79,24 @@ export default function MailList() {
     );
   }
 
+  const targetFolderId = folderId ?? state.folders.find((f) => f.kind === "inbox")?.id;
+  const currentFolder = state.folders.find((f) => f.id === targetFolderId);
+  const canMoveToTrash = !query && (currentFolder?.kind === "inbox" || currentFolder?.name === "Junk");
+  const moveToTrash = async (id: string) => {
+    try {
+      setMovingId(id);
+      setMoveError(null);
+      await moveMailMessage(id, "trash");
+      setState((current) => current.kind === "ready"
+        ? { ...current, messages: current.messages.filter((message) => message.id !== id) }
+        : current);
+    } catch (e) {
+      setMoveError(e instanceof Error ? e.message : "unknown");
+    } finally {
+      setMovingId(null);
+    }
+  };
+
   return (
     <section className="mx-auto max-w-5xl space-y-4 px-4 py-6 sm:p-8">
       <MailNav folders={state.folders} />
@@ -96,6 +116,7 @@ export default function MailList() {
           className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500"
         />
       </form>
+      {moveError && <p role="alert" className="text-sm text-red-300">Could not move message ({moveError}).</p>}
 
       {/* Grouped into conversations. A mailing list or a long reply chain
           otherwise fills the list with the same subject repeated, which is
@@ -107,10 +128,10 @@ export default function MailList() {
       ) : (
         <ul className="divide-y divide-zinc-800 rounded-lg border border-zinc-800">
           {groupIntoThreads(state.messages).map(({ latest: m, count, anyUnread }) => (
-            <li key={m.thread_id || m.id}>
+            <li key={m.thread_id || m.id} className="flex items-center">
               <Link
                 to={`/mail/m/${m.id}`}
-                className="flex gap-3 px-4 py-3 hover:bg-zinc-900"
+                className="flex min-w-0 flex-1 gap-3 px-4 py-3 hover:bg-zinc-900"
               >
                 {/* The unread marker is a dot rather than bold-everything, so a
                     full inbox does not read as a wall of emphasis. */}
@@ -145,6 +166,17 @@ export default function MailList() {
                   )}
                 </span>
               </Link>
+              {canMoveToTrash && (
+                <button
+                  type="button"
+                  disabled={movingId === m.id}
+                  onClick={() => void moveToTrash(m.id)}
+                  aria-label={`Move ${m.subject || "(no subject)"} to Trash`}
+                  className="mr-3 rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-900 disabled:cursor-wait disabled:opacity-50"
+                >
+                  Trash
+                </button>
+              )}
             </li>
           ))}
         </ul>
