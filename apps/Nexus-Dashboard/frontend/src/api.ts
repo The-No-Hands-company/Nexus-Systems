@@ -14,7 +14,7 @@ import { normalizeCatalogEntry } from "./shell/catalog";
 
 export function platformApiOrigin(): string {
   // Same-origin by default: the dashboard server serves the platform facade
-  // (/api/v1/me, /api/v1/apps) from this very host, so relative URLs reach it
+  // (/ipa/v1/me, /ipa/v1/apps) from this very host, so relative URLs reach it
   // and carry the session cookie without CORS. Set VITE_NEXUS_API_URL only once
   // a dedicated api.<domain> host actually exists to point these calls at.
   return (
@@ -122,7 +122,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function me(): Promise<Me | null> {
   try {
-    const { user } = await platformRequest<{ user: Me }>("/api/v1/me");
+    const { user } = await platformRequest<{ user: Me }>("/ipa/v1/me");
     return user;
   } catch {
     // Not signed in is the common case here, not an error worth surfacing.
@@ -256,7 +256,7 @@ const SHELL_NATIVE_APPS: AppEntry[] = [
 ];
 
 export async function listApps(): Promise<AppEntry[]> {
-  const { apps } = await platformRequest<{ apps: WireAppEntry[] }>("/api/v1/apps");
+  const { apps } = await platformRequest<{ apps: WireAppEntry[] }>("/ipa/v1/apps");
   // The catalog helper is the single frontend normalization boundary. Older
   // Dashboard servers may omit every placement field, so components must not
   // inspect the wire response directly.

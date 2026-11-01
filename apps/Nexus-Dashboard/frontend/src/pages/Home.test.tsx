@@ -11,7 +11,7 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 /**
- * Routes /api/v1/auth/me and /api/apps independently, and answers every other
+ * Routes /ipa/v1/me and /ipa/v1/apps independently, and answers every other
  * fetch (the widgets' calendar/mail/notifications calls) with a rejection —
  * each widget owns its own catch, so this just exercises their error states
  * rather than the happy path, without needing to stub four more endpoints.
@@ -19,12 +19,12 @@ function jsonResponse(body: unknown, status = 200) {
 function stubFetch(signedIn: boolean, role = "user") {
   vi.stubGlobal("fetch", vi.fn(async (url: RequestInfo | URL) => {
     const u = String(url);
-    if (u === "/api/v1/me") {
+    if (u === "/ipa/v1/me") {
       return signedIn
         ? jsonResponse({ user: { id: "u1", username: "ada", email: "a@x.dev", role } })
         : jsonResponse({ error: "unauthenticated" }, 401);
     }
-    if (u === "/api/v1/apps") {
+    if (u === "/ipa/v1/apps") {
       return jsonResponse({
         apps: [
           { id: "nexus-chat", name: "Nexus Chat", description: "Chat", publicUrl: "https://chat.tnhc.dev", path: "/chat", delivery: "framed", health: "healthy", surface: "user-app", releaseState: "released", maturity: "stable", visibility: "default", reviewStatus: "approved", primaryShelf: "everyday" },

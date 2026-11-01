@@ -18,7 +18,7 @@ describe("platformApiOrigin", () => {
 });
 
 describe("me()", () => {
-  it("calls /api/v1/me with credentials include", async () => {
+  it("calls /ipa/v1/me with credentials include", async () => {
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ user: { id: "u1", username: "alice", email: "a@b.com", role: "member" } }), {
         status: 200,
@@ -29,9 +29,10 @@ describe("me()", () => {
     const user = await me();
 
     expect(mockFetch).toHaveBeenCalledOnce();
-    const [url, init] = mockFetch.mock.calls[0];
-    expect(url).toBe("/api/v1/me");
-    expect((init as RequestInit).credentials).toBe("include");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/ipa/v1/me",
+      expect.objectContaining({ credentials: "include" }),
+    );
     expect(user).toMatchObject({ id: "u1", username: "alice" });
   });
 
@@ -66,7 +67,7 @@ describe("listApps()", () => {
     visibility: "default" as const,
   };
 
-  it("calls /api/v1/apps with credentials include", async () => {
+  it("calls /ipa/v1/apps with credentials include", async () => {
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ apps: [releaseApp] }), {
         status: 200,
@@ -77,9 +78,10 @@ describe("listApps()", () => {
     await listApps();
 
     expect(mockFetch).toHaveBeenCalledOnce();
-    const [url, init] = mockFetch.mock.calls[0];
-    expect(url).toBe("/api/v1/apps");
-    expect((init as RequestInit).credentials).toBe("include");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/ipa/v1/apps",
+      expect.objectContaining({ credentials: "include" }),
+    );
   });
 
   describe("moveMailMessage()", () => {
