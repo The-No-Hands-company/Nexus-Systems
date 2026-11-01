@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { listApps, me, platformApiOrigin } from "./api";
+import { listApps, me, moveMailMessage, platformApiOrigin } from "./api";
 
 const mockFetch = vi.fn<typeof fetch>();
 
@@ -80,6 +80,19 @@ describe("listApps()", () => {
     const [url, init] = mockFetch.mock.calls[0];
     expect(url).toBe("/api/v1/apps");
     expect((init as RequestInit).credentials).toBe("include");
+  });
+
+  describe("moveMailMessage()", () => {
+    it("uses the same-origin Dashboard Mail proxy", async () => {
+      mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+      await moveMailMessage("m-1", "trash");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/ipa/mail/messages/m-1/folder",
+        expect.objectContaining({ credentials: "same-origin", method: "POST" }),
+      );
+    });
   });
 
   it("returns normalized app entries", async () => {

@@ -702,43 +702,43 @@ export type MailMessage = {
 export type SendOutcome = { recipient: string; status: string; reason: string | null };
 
 export function listMailFolders() {
-  return platformRequest<MailFolder[]>("/ipa/mail/folders");
+  return request<MailFolder[]>("/ipa/mail/folders");
 }
 
 export function listMailMessages(folderId: string) {
-  return platformRequest<MailSummary[]>(`/ipa/mail/folders/${encodeURIComponent(folderId)}/messages`);
+  return request<MailSummary[]>(`/ipa/mail/folders/${encodeURIComponent(folderId)}/messages`);
 }
 
 export function readMailMessage(id: string) {
-  return platformRequest<MailMessage>(`/ipa/mail/messages/${encodeURIComponent(id)}`);
+  return request<MailMessage>(`/ipa/mail/messages/${encodeURIComponent(id)}`);
 }
 
 export function markMailSeen(id: string, seen: boolean) {
-  return platformRequest<void>(`/ipa/mail/messages/${encodeURIComponent(id)}/seen`, {
+  return request<void>(`/ipa/mail/messages/${encodeURIComponent(id)}/seen`, {
     method: "POST",
     body: JSON.stringify({ seen }),
   });
 }
 
 export function moveMailMessage(id: string, folder: "inbox" | "trash" | "junk") {
-  return platformRequest<void>(`/ipa/mail/messages/${encodeURIComponent(id)}/folder`, {
+  return request<void>(`/ipa/mail/messages/${encodeURIComponent(id)}/folder`, {
     method: "POST",
     body: JSON.stringify({ folder }),
   });
 }
 
 export function threadMessages(threadId: string) {
-  return platformRequest<MailSummary[]>(`/ipa/mail/threads/${encodeURIComponent(threadId)}/messages`);
+  return request<MailSummary[]>(`/ipa/mail/threads/${encodeURIComponent(threadId)}/messages`);
 }
 
-/// The URL an attachment downloads from. Not fetched via platformRequest: the
-/// response is bytes, not JSON, and the browser handles the download itself.
+/// The URL an attachment downloads from. It remains same-origin so the
+/// Dashboard proxy can attach the caller identity; the browser handles bytes.
 export function attachmentUrl(messageId: string, index: number) {
-  return `${platformApiOrigin()}/ipa/mail/messages/${encodeURIComponent(messageId)}/attachments/${index}`;
+  return `/ipa/mail/messages/${encodeURIComponent(messageId)}/attachments/${index}`;
 }
 
 export function searchMail(q: string) {
-  return platformRequest<MailSummary[]>(`/ipa/mail/search?q=${encodeURIComponent(q)}`);
+  return request<MailSummary[]>(`/ipa/mail/search?q=${encodeURIComponent(q)}`);
 }
 
 export type OutgoingAttachment = {
@@ -758,7 +758,7 @@ export function sendMail(body: {
   references?: string[];
   attachments?: OutgoingAttachment[];
 }) {
-  return platformRequest<{ outcomes: SendOutcome[] }>("/ipa/mail/messages", {
+  return request<{ outcomes: SendOutcome[] }>("/ipa/mail/messages", {
     method: "POST",
     body: JSON.stringify(body),
   });
