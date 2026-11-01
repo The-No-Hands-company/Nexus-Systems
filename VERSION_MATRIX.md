@@ -6,6 +6,12 @@
 
 ---
 
+## Public API boundary
+
+External clients use `https://api.tnhc.dev/ipa/v1/...` through the production
+gateway. Public `/api/...` requests return `404`. The `/api/v1/...` examples
+below are private local or service-to-service routes.
+
 ## 1. Service Versions
 
 ### Core Control Plane
