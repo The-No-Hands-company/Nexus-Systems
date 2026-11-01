@@ -23,17 +23,30 @@ export function platformApiOrigin(): string {
   ).replace(/\/+$/, "");
 }
 
+const BROWSER_REQUEST_TIMEOUT_MS = 10_000;
+
 async function platformRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${platformApiOrigin()}${path}`;
+  const timeoutController = new AbortController();
+  const timeout = setTimeout(() => timeoutController.abort(), BROWSER_REQUEST_TIMEOUT_MS);
+  const signal = init?.signal
+    ? AbortSignal.any([init.signal, timeoutController.signal])
+    : timeoutController.signal;
   let res: Response;
   try {
     res = await fetch(url, {
       ...init,
       credentials: "include",
       headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+      signal,
     });
   } catch {
+    if (timeoutController.signal.aborted && !init?.signal?.aborted) {
+      throw new ApiError("timeout", "The server took too long to respond. Please try again.");
+    }
     throw new ApiError("network", "Could not reach the server. Check your connection and try again.");
+  } finally {
+    clearTimeout(timeout);
   }
   const body = await res.json().catch(() => ({}) as Record<string, unknown>);
   if (!res.ok) {

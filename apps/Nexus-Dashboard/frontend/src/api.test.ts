@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { listApps, me, moveMailMessage, platformApiOrigin } from "./api";
+import { ApiError, listApps, me, moveMailMessage, platformApiOrigin } from "./api";
 
 const mockFetch = vi.fn<typeof fetch>();
 
@@ -8,6 +8,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
   mockFetch.mockReset();
 });
 
@@ -111,5 +112,25 @@ describe("listApps()", () => {
     const draw = apps.find((a) => a.id === "nexus-draw");
     expect(draw).toBeDefined();
     expect(draw!.path).toBe("/draw");
+  });
+
+  it("fails with timeout when the platform facade does not answer in time", async () => {
+    vi.useFakeTimers();
+    mockFetch.mockImplementationOnce(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("signal timed out", "AbortError"));
+          });
+        }),
+    );
+
+    const pending = listApps();
+    const rejection = expect(pending).rejects.toEqual(
+      new ApiError("timeout", "The server took too long to respond. Please try again."),
+    );
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    await rejection;
   });
 });

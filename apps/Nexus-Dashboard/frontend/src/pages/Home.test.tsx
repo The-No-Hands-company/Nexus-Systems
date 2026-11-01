@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Home from "./Home";
 
@@ -44,7 +44,34 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("Home", () => {
+  it("turns an identity timeout into a recoverable signed-out home page", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(new DOMException("signal timed out", "AbortError"));
+            });
+          }),
+      ),
+    );
+
+    render(<MemoryRouter><Home /></MemoryRouter>);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(screen.queryByText("Loading…")).toBeNull();
+    expect(screen.getByRole("link", { name: "Sign in" })).toBeTruthy();
+  });
+
   it("shows the dashboard to a signed-in user", async () => {
     stubFetch(true);
     render(<MemoryRouter><Home /></MemoryRouter>);
