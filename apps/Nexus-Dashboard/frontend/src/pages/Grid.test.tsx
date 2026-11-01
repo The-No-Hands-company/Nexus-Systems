@@ -95,7 +95,7 @@ describe("Grid", () => {
 
     render(<MemoryRouter><Grid /></MemoryRouter>);
     await waitFor(() => expect(spy).toHaveBeenCalled());
-    expect(String(spy.mock.calls[0]![0])).toBe("/api/v1/apps");
+    expect(String(spy.mock.calls[0]![0])).toBe("/ipa/v1/apps");
   });
 
   it("shows each app's description so the grid is legible to a newcomer", async () => {
