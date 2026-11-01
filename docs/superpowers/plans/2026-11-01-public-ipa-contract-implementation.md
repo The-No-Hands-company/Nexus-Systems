@@ -4,7 +4,7 @@
 
 **Goal:** Make `/ipa` the only public API prefix, reject public `/api` at the production gate, and prevent the Dashboard from loading indefinitely when identity resolution stalls.
 
-**Architecture:** `deploy/production/proxy.ts` is the sole public ingress contract adapter. It will reject client `/api` requests before routing and translate fixed `/ipa` public paths to existing private `/api` upstream paths. Dashboard browser clients will use same-origin `/ipa` routes; its server continues to use fixed private upstream paths and remains responsible for caller identity injection.
+**Architecture:** `deploy/production/proxy.ts` is the sole public ingress contract adapter. It will reject client `/api` requests before routing and translate only an explicit host-and-prefix table of public `/ipa` facade paths to existing private `/api` upstream paths. Existing Dashboard `/ipa/mail`, `/ipa/calendar`, `/ipa/cloud`, and `/ipa/notifications` paths pass through unchanged because they are already public-to-private proxies. Dashboard browser clients will use same-origin `/ipa` routes; its server continues to use fixed private upstream paths and remains responsible for caller identity injection.
 
 **Tech Stack:** Bun 1.3, TypeScript (strict), Bun test, Vitest, React, Rust/Axum Mail API, Cloudflare Tunnel.
 
@@ -32,9 +32,11 @@
 - Modify: `deploy/production/tests/gate.test.ts`
 
 **Interfaces:**
-- Produces `publicIpaPath(pathname: string): string | null` in `proxy.ts`.
-- `publicIpaPath("/ipa/v1/apps")` returns `"/api/v1/apps"`.
-- `publicIpaPath("/api/v1/apps")` returns `null`.
+- Produces `privateUpstreamPath(host: string, pathname: string): string | null` in `proxy.ts`.
+- `privateUpstreamPath("api.tnhc.dev", "/ipa/v1/apps")` returns `"/api/v1/apps"`.
+- `privateUpstreamPath("app.tnhc.dev", "/ipa/v1/me")` returns `"/api/v1/me"`.
+- `privateUpstreamPath("app.tnhc.dev", "/ipa/mail/folders")` returns `"/ipa/mail/folders"`.
+- `privateUpstreamPath("api.tnhc.dev", "/api/v1/apps")` returns `null`.
 - The existing `gate(request, target)` remains the authentication decision point and receives the original public request.
 
 - [ ] **Step 1: Write the failing proxy contract tests**
@@ -76,16 +78,27 @@ because the proxy currently forwards the browser path unchanged.
 In `proxy.ts`, add:
 
 ```ts
-export function publicIpaPath(pathname: string): string | null {
-  if (!pathname.startsWith("/ipa/")) return null;
-  return `/api/${pathname.slice("/ipa/".length)}`;
+export function privateUpstreamPath(host: string, pathname: string): string | null {
+  if (pathname.startsWith("/api/")) return null;
+  if (host === API_HOST && pathname.startsWith("/ipa/")) {
+    return `/api/${pathname.slice("/ipa/".length)}`;
+  }
+  if (host === `auth.${DOMAIN}` && pathname.startsWith("/ipa/v1/")) {
+    return `/api${pathname.slice("/ipa".length)}`;
+  }
+  if (host === `app.${DOMAIN}` && pathname.startsWith("/ipa/v1/")) {
+    return `/api${pathname.slice("/ipa".length)}`;
+  }
+  return pathname;
 }
 ```
 
 Before calling an upstream, reject requests whose path starts with `/api/`
 using `new Response("Not found", { status: 404 })`. For valid `/ipa/` paths,
-replace only the upstream URL pathname with `publicIpaPath(url.pathname)`;
-preserve the query string, method, and existing fixed-host restrictions.
+replace only the upstream URL pathname with `privateUpstreamPath(host,
+url.pathname)`; preserve the query string, method, and existing fixed-host
+restrictions. Keep the existing Dashboard `/ipa/mail`, `/ipa/calendar`,
+`/ipa/cloud`, and `/ipa/notifications` paths unchanged.
 
 Change `DASHBOARD_TERMINAL_PATH` to `"/ipa/terminal/attach"` and ensure its
 fixed Dashboard upstream receives `"/api/terminal/attach"` rather than a
@@ -201,7 +214,9 @@ git commit -m "feat: publish IPA gateway contract"
 - Modify: `apps/Nexus-Dashboard/tests/terminal-proxy.test.ts`
 
 **Interfaces:**
-- Browser-facing `platformRequest()` calls `/ipa/v1/me` and `/ipa/v1/apps`.
+- Browser-facing `platformRequest()` calls `/ipa/v1/me` and `/ipa/v1/apps`;
+  the production gate translates these to Dashboard's existing private
+  `/api/v1` handlers.
 - Browser-facing Mail, Calendar, Cloud, notification, and terminal calls use
   their existing or migrated `/ipa/...` public routes.
 - Dashboard internal proxy calls remain fixed `/api/...` loopback requests.
@@ -243,8 +258,8 @@ still includes `/api`.
 - [ ] **Step 3: Implement only public URL changes**
 
 Change browser URL literals in `frontend/src/api.ts` from `/api/v1/...` to
-`/ipa/v1/...`. In `src/server.ts`, add the public `/ipa/v1/` dispatch entries
-that map to the existing Dashboard handlers, while leaving its Auth, Mail,
+`/ipa/v1/...`. Do not add Dashboard `/ipa/v1` handlers: the gate translates
+that public prefix to existing Dashboard `/api/v1` handlers. Leave Auth, Mail,
 Cloud, Hosting, Calendar, and terminal upstream URLs as explicit private
 `/api/...` values.
 
