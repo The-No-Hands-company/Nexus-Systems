@@ -270,7 +270,7 @@ const PUBLIC_HOSTS = new Set([AUTH_HOST, API_HOST]);
 /** Paths exempt from the auth gate on ANY host (deploy.sh probes these). */
 const PUBLIC_PATHS = new Set(["/health", "/health/live", "/health/ready"]);
 
-const PUBLIC_CALENDAR_EVENT = /^\/api\/v1\/calendar\/public\/[A-Za-z0-9_-]{43}$/;
+const PUBLIC_CALENDAR_EVENT = /^\/ipa\/v1\/calendar\/public\/[A-Za-z0-9_-]{43}$/;
 const PUBLIC_CALENDAR_SHARE = /^\/share\/[A-Za-z0-9_-]{43}$/;
 
 function isPublicCalendarEvent(req: Request, url: URL): boolean {

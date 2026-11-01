@@ -96,8 +96,18 @@ describe("route policy", () => {
   });
 });
 
+describe("privateUpstreamPath", () => {
+  it("translates only the explicit host-and-prefix contracts", async () => {
+    const { privateUpstreamPath } = await import("../proxy");
+    expect(privateUpstreamPath("api.tnhc.dev", "/ipa/v1/apps")).toBe("/api/v1/apps");
+    expect(privateUpstreamPath("app.tnhc.dev", "/ipa/v1/me")).toBe("/api/v1/me");
+    expect(privateUpstreamPath("app.tnhc.dev", "/ipa/mail/folders")).toBe("/ipa/mail/folders");
+    expect(privateUpstreamPath("api.tnhc.dev", "/api/v1/apps")).toBeNull();
+  });
+});
+
 describe("stable platform API host", () => {
-  it("pins api.tnhc.dev to the loopback Nexus-API service", async () => {
+  it("translates the public IPA prefix before forwarding to the fixed API upstream", async () => {
     const { handleRequest } = await import("../proxy");
     let seenUrl = "";
     const realFetch = globalThis.fetch;
@@ -109,9 +119,29 @@ describe("stable platform API host", () => {
       { preconnect: realFetch.preconnect },
     );
     try {
-      const response = await handleRequest(new Request("http://api.tnhc.dev/api/v1/contract"));
+      const response = await handleRequest(new Request("http://api.tnhc.dev/ipa/v1/contract"));
       expect(response.status).toBe(200);
       expect(seenUrl).toBe("http://127.0.0.1:3036/api/v1/contract");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it("rejects the deprecated public API prefix before forwarding", async () => {
+    const { handleRequest } = await import("../proxy");
+    const realFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = Object.assign(
+      async () => {
+        calls += 1;
+        return Response.json({ service: "nexus-api" });
+      },
+      { preconnect: realFetch.preconnect },
+    );
+    try {
+      const response = await handleRequest(new Request("http://api.tnhc.dev/api/v1/apps"));
+      expect(response.status).toBe(404);
+      expect(calls).toBe(0);
     } finally {
       globalThis.fetch = realFetch;
     }
@@ -135,7 +165,7 @@ describe("stable platform API host", () => {
     );
     try {
       const response = await handleRequest(
-        new Request("http://api.tnhc.dev/api/v1/apps", {
+        new Request("http://api.tnhc.dev/ipa/v1/apps", {
           headers: { origin: "https://app.tnhc.dev" },
         }),
       );
@@ -208,7 +238,7 @@ describe("Dashboard terminal WebSocket routing", () => {
       __setRoutesForTest({
         "app.tnhc.dev": { upstream: "http://client-selected.invalid", requiresAuth: false, kind: "app" },
       });
-      await handleRequest(upgradeRequest("http://app.tnhc.dev/api/terminal/attach?cols=91&rows=27"), {
+      await handleRequest(upgradeRequest("http://app.tnhc.dev/ipa/terminal/attach?cols=91&rows=27"), {
         upgrade(_request, options) {
           data = options.data;
           return true;
@@ -220,7 +250,7 @@ describe("Dashboard terminal WebSocket routing", () => {
         cookie: "nexus_session=browser-session; theme=dark",
         origin: "https://app.tnhc.dev",
       });
-      expect(data?.requestUrl).toBe("http://app.tnhc.dev/api/terminal/attach?cols=91&rows=27");
+      expect(data?.requestUrl).toBe("http://app.tnhc.dev/ipa/terminal/attach?cols=91&rows=27");
     } finally {
       if (previous === undefined) Reflect.deleteProperty(process.env, "DASHBOARD_UPSTREAM");
       else process.env.DASHBOARD_UPSTREAM = previous;
@@ -235,9 +265,10 @@ describe("Dashboard terminal WebSocket routing", () => {
     });
 
     for (const url of [
-      "http://app.tnhc.dev/api/terminal/attach/",
+      "http://app.tnhc.dev/ipa/terminal/attach/",
+      "http://app.tnhc.dev/api/terminal/attach",
       "http://app.tnhc.dev/gateway",
-      "http://www.app.tnhc.dev/api/terminal/attach",
+      "http://www.app.tnhc.dev/ipa/terminal/attach",
       "http://chat.tnhc.dev/api/terminal/attach",
     ]) {
       let data: import("../proxy").WsProxyData | null = null;
@@ -262,7 +293,7 @@ describe("Dashboard terminal WebSocket routing", () => {
     try {
       process.env.DASHBOARD_UPSTREAM = "http://127.0.0.1:43132";
       let missingData: import("../proxy").WsProxyData | null = null;
-      const missing = new Request("http://app.tnhc.dev/api/terminal/attach", {
+      const missing = new Request("http://app.tnhc.dev/ipa/terminal/attach", {
         headers: { connection: "Upgrade", upgrade: "websocket" },
       });
       await handleRequest(missing, {
@@ -276,7 +307,7 @@ describe("Dashboard terminal WebSocket routing", () => {
       process.env.DASHBOARD_UPSTREAM = "https://credential-sink.example";
       let upgraded = false;
       const response = await handleRequest(upgradeRequest(
-        "http://app.tnhc.dev/api/terminal/attach",
+        "http://app.tnhc.dev/ipa/terminal/attach",
       ), {
         upgrade() {
           upgraded = true;

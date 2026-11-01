@@ -91,7 +91,7 @@ const SUPABASE_PUBLIC_PATHS = /^\/(auth|rest|functions)\/v1(\/|$)/;
 function supabaseUpstream(): string { return process.env.SUPABASE_UPSTREAM || "http://172.17.0.1:8000"; }
 function storageUpstream(): string { return process.env.STORAGE_UPSTREAM || "http://127.0.0.1:9010"; }
 function authUpstream(): string { return process.env.AUTH_UPSTREAM_OVERRIDE || FALLBACK_AUTH_UPSTREAM; }
-const DASHBOARD_TERMINAL_PATH = "/api/terminal/attach";
+const DASHBOARD_TERMINAL_PATH = "/ipa/terminal/attach";
 
 // The default backend for the *.<DOMAIN> wildcard. Any on-domain host that is
 // neither a registered app route nor one of the static app fallbacks above is
@@ -275,6 +275,8 @@ export interface WsProxyData {
   identityToken: string | null;
   /** The address the browser asked for, so the upstream gets the same path. */
   requestUrl?: string;
+  /** The translated upstream path when public and private contracts differ. */
+  upstreamPathname?: string;
   /** Forgetful per-visitor tag (never an address) for the upstream. */
   clientTag: string;
   /**
@@ -283,6 +285,20 @@ export interface WsProxyData {
    * was replaced with the fixed Dashboard address.
    */
   dashboardTerminalHeaders?: { cookie?: string; origin?: string };
+}
+
+export function privateUpstreamPath(host: string, pathname: string): string | null {
+  if (pathname.startsWith("/api/")) return null;
+  if ((host === API_HOST || host === `www.${API_HOST}`) && pathname.startsWith("/ipa/")) {
+    return `/api/${pathname.slice("/ipa/".length)}`;
+  }
+  if (host === `auth.${DOMAIN}` && pathname.startsWith("/ipa/v1/")) {
+    return `/api${pathname.slice("/ipa".length)}`;
+  }
+  if (host === `app.${DOMAIN}`) {
+    if (pathname.startsWith("/ipa/v1/")) return `/api${pathname.slice("/ipa".length)}`;
+  }
+  return pathname;
 }
 
 function dashboardUpstream(): string | null {
@@ -600,6 +616,10 @@ async function handleRequestInner(
     if (apiRequest && !fixedApi) {
       return new Response("Nexus API upstream unavailable", { status: 503 });
     }
+    const translatedPath = privateUpstreamPath(host, url.pathname);
+    if (translatedPath === null) {
+      return new Response("Not found", { status: 404 });
+    }
 
     // The one credential-bearing WebSocket route never trusts Cloud's dynamic
     // route table. Cookie and Origin are useful only to Dashboard's own Auth
@@ -684,8 +704,8 @@ async function handleRequestInner(
       fixedKind = "site";
       preserveHost = true;
     } else if (!fixedDashboard && !fixedApi && host === `auth.${DOMAIN}`) {
-      if (AUTH_OWN_PATHS.test(url.pathname)) upstreamUrl = authUpstream();
-      else if (SUPABASE_PUBLIC_PATHS.test(url.pathname)) upstreamUrl = supabaseUpstream();
+      if (AUTH_OWN_PATHS.test(translatedPath)) upstreamUrl = authUpstream();
+      else if (SUPABASE_PUBLIC_PATHS.test(translatedPath)) upstreamUrl = supabaseUpstream();
       else return new Response("Not found", { status: 404 });
       requiresAuth = false;
       fixedKind = "site";
@@ -795,6 +815,7 @@ async function handleRequestInner(
         upstreamUrl,
         identityToken: decision.identityToken,
         requestUrl: req.url,
+        upstreamPathname: translatedPath,
         clientTag: tagFromRequestHeaders(req.headers),
       };
       if (dashboardTerminalRequest) {
@@ -819,6 +840,7 @@ async function handleRequestInner(
       const upstreamObj = new URL(upstreamUrl);
       upstream.hostname = upstreamObj.hostname;
       upstream.port = upstreamObj.port;
+      upstream.pathname = translatedPath;
 
       // The body is re-read into a buffer here, so the inbound framing headers
       // no longer describe it. Forwarding the original content-length (and the
@@ -1008,7 +1030,7 @@ export function startProxy() {
         const target = new URL(upstreamUrl);
         const asked = new URL(ws.data.requestUrl ?? "http://localhost/");
         target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
-        target.pathname = asked.pathname;
+        target.pathname = ws.data.upstreamPathname ?? asked.pathname;
         target.search = asked.search;
 
         // Frames can arrive from the browser before the upstream finishes
