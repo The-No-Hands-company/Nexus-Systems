@@ -36,6 +36,9 @@ and P3 optional AI assistance and templates are separate releases.
 7. Spam is never silently deleted. User action moves a message between Inbox,
    Junk, and Trash; inbound mail is placed in Junk automatically only when the
    sender's DMARC policy is `quarantine`.
+8. External message objects have immutable generation keys. A pending cleanup
+   job may delete only its recorded generation, and a new message must attach a
+   new generation rather than reuse a queued key.
 
 These rules implement the TNHC Charter's promise that deleting user data
 deletes it everywhere TNHC controls, and the zero-retention design's

@@ -170,3 +170,35 @@ git commit -m "docs: record mail lifecycle release"
 - **Spec coverage:** Tasks 1-2 implement private storage, erase, recovery, search, and spam route semantics; Task 3 implements user controls and accessibility; Task 4 covers scheduled purge, validation, staging, founder approval, and changelog.
 - **Placeholder scan:** No TBD/TODO or unspecified tests remain.
 - **Type consistency:** Task 1 store methods are consumed by Task 2; Task 2 HTTP routes are consumed by Task 3 typed Dashboard clients; Task 4 consumes Task 1’s purge method.
+
+### Task 5: Fence external object generations
+
+**Files:**
+- Modify: `apps/Nexus-Email/crates/nexus-mailstore/src/store.rs`
+- Modify: `apps/Nexus-Email/crates/nexus-mailstore/migrations/20261101000006_mail_lifecycle.sql`
+- Modify: `apps/Nexus-Email/crates/nexus-mailsmtp/src/object_cleanup.rs`
+- Test: `apps/Nexus-Email/crates/nexus-mailstore/tests/store.rs`
+
+- [ ] **Step 1: Write the failing key-reuse race test**
+```rust
+#[tokio::test]
+async fn cleanup_never_deletes_a_new_object_generation_after_erasure() {
+    // Queue an old generation, store a new message with equivalent content,
+    // then assert the cleanup worker can delete only the old generation.
+}
+```
+- [ ] **Step 2: Run the test to verify RED**
+Run: `cd apps/Nexus-Email && cargo test -p nexus-mailstore cleanup_never_deletes_a_new_object_generation_after_erasure -- --exact`
+Expected: FAIL because queued jobs name a reusable object key.
+- [ ] **Step 3: Implement immutable generation registry**
+Create durable generation/reference state. Store operations allocate a fresh
+generation for each externally stored object, erasure queues that generation,
+and cleanup claims/deletes only a generation that remains unreferenced.
+- [ ] **Step 4: Verify GREEN**
+Run: `cd apps/Nexus-Email && CARGO_BUILD_JOBS=1 bash ./check.sh`
+Expected: PASS.
+- [ ] **Step 5: Commit**
+```bash
+git add apps/Nexus-Email
+git commit -m "fix: fence mail object cleanup"
+```
