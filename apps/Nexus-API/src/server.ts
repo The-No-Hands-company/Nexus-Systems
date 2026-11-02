@@ -174,15 +174,22 @@ async function forwardMail(request: Request, rest: string, search: string): Prom
   const subject = callerSubject(caller);
   if (!subject) return json({ error: "identity_unavailable" }, 503);
 
-  const allowed =
-    /^(folders(?:\/[^/]+\/messages|\/trash\/empty)?|messages(?:\/[^/]+(?:\/seen|\/folder|\/attachments\/[^/]+)?)?|search|threads\/[^/]+\/messages)$/;
-  if (!allowed.test(rest)) return json({ error: "not_found" }, 404);
-  if (request.method !== "GET" && request.method !== "POST" && request.method !== "DELETE") {
-    return json({ error: "method_not_allowed" }, 405);
-  }
-  if (request.method === "DELETE" && !/^messages\/[^/]+$/.test(rest)) {
-    return json({ error: "method_not_allowed" }, 405);
-  }
+  const routeMethods: Array<{ pattern: RegExp; methods: ReadonlySet<string> }> = [
+    { pattern: /^folders$/, methods: new Set(["GET"]) },
+    { pattern: /^folders\/[^/]+\/messages$/, methods: new Set(["GET"]) },
+    { pattern: /^folders\/trash\/empty$/, methods: new Set(["POST"]) },
+    { pattern: /^messages$/, methods: new Set(["POST"]) },
+    { pattern: /^messages\/[^/]+$/, methods: new Set(["GET", "DELETE"]) },
+    { pattern: /^messages\/[^/]+\/seen$/, methods: new Set(["POST"]) },
+    { pattern: /^messages\/[^/]+\/folder$/, methods: new Set(["POST"]) },
+    { pattern: /^messages\/[^/]+\/attachments\/[^/]+$/, methods: new Set(["GET"]) },
+    { pattern: /^search$/, methods: new Set(["GET"]) },
+    { pattern: /^threads\/[^/]+\/messages$/, methods: new Set(["GET"]) },
+  ];
+
+  const matched = routeMethods.find(({ pattern }) => pattern.test(rest));
+  if (!matched) return json({ error: "not_found" }, 404);
+  if (!matched.methods.has(request.method)) return json({ error: "method_not_allowed" }, 405);
 
   const headers = new Headers({
     accept: request.headers.get("accept") ?? "application/json",

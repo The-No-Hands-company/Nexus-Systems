@@ -37,6 +37,7 @@ describe("delegation trust boundary", () => {
   const previous = new Map<string, string | undefined>();
   const capturedMailSubjects: string[] = [];
   const capturedMailHeaders: Record<string, string>[] = [];
+  const capturedMailMethodsAndPaths: string[] = [];
   const cloudApiKey = "super-secret-cloud-key-test-fixture"; // pragma: allowlist secret
 
   beforeAll(async () => {
@@ -90,6 +91,7 @@ describe("delegation trust boundary", () => {
       capturedMailHeaders.push(headers);
       if (headers["x-nexus-subject"]) capturedMailSubjects.push(headers["x-nexus-subject"]);
       const path = new URL(request.url).pathname;
+      capturedMailMethodsAndPaths.push(`${request.method} ${path}`);
       if (
         path !== "/api/v1/folders" &&
         path !== "/api/v1/messages/message-id/folder" &&
@@ -185,6 +187,26 @@ describe("delegation trust boundary", () => {
       headers: { cookie: "nexus_session=valid" },
     });
     expect(res.status).toBe(204);
+  });
+
+  it("rejects GET empty-trash before Mail", async () => {
+    const before = capturedMailMethodsAndPaths.length;
+    const res = await fetch(`${base}/api/v1/mail/folders/trash/empty`, {
+      method: "GET",
+      headers: { cookie: "nexus_session=valid" },
+    });
+    expect(res.status).toBe(405);
+    expect(capturedMailMethodsAndPaths.length).toBe(before);
+  });
+
+  it("enforces messages/:id methods", async () => {
+    const before = capturedMailMethodsAndPaths.length;
+    const res = await fetch(`${base}/api/v1/mail/messages/message-id`, {
+      method: "POST",
+      headers: { cookie: "nexus_session=valid" },
+    });
+    expect(res.status).toBe(405);
+    expect(capturedMailMethodsAndPaths.length).toBe(before);
   });
 
   it("does not expose the Cloud API key in the catalog response", async () => {

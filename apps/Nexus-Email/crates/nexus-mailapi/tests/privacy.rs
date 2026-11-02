@@ -743,4 +743,63 @@ async fn search_defaults_exclude_junk_and_trash_and_filters_validate() {
         invalid_folder.starts_with("HTTP/1.1 400"),
         "{invalid_folder}"
     );
+
+    let crowded_inbox = api
+        .store
+        .store_message(
+            b"From: sender@example.test\r\nSubject: FloodNeedle inbox keeper\r\n\r\nFloodNeedle",
+            thread,
+            &from,
+            Some("FloodNeedle inbox keeper"),
+            None,
+            None,
+            &[],
+            nexus_mailstore::Transport::Internal,
+            None,
+        )
+        .await
+        .unwrap();
+    api.store
+        .deliver(mailbox.id, crowded_inbox, inbox)
+        .await
+        .unwrap();
+    for i in 0..220 {
+        let noisy = api
+            .store
+            .store_message(
+                format!(
+                    "From: sender@example.test\r\nSubject: FloodNeedle trash {i}\r\n\r\nFloodNeedle"
+                )
+                .as_bytes(),
+                thread,
+                &from,
+                Some(&format!("FloodNeedle trash {i}")),
+                None,
+                None,
+                &[],
+                nexus_mailstore::Transport::Internal,
+                None,
+            )
+            .await
+            .unwrap();
+        api.store.deliver(mailbox.id, noisy, trash).await.unwrap();
+    }
+    let crowded_default = get(
+        api.addr,
+        "/api/v1/search?q=FloodNeedle",
+        &[("X-Nexus-Subject", &subject)],
+    )
+    .await;
+    assert!(
+        crowded_default.starts_with("HTTP/1.1 200"),
+        "{crowded_default}"
+    );
+    assert!(
+        crowded_default.contains("FloodNeedle inbox keeper"),
+        "{crowded_default}"
+    );
+    assert!(
+        !crowded_default.contains("FloodNeedle trash 219"),
+        "{crowded_default}"
+    );
 }

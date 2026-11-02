@@ -583,6 +583,8 @@ impl MailStore {
         &self,
         mailbox_id: Uuid,
         query: &str,
+        folder_ids: &[Uuid],
+        unread: Option<bool>,
         limit: i64,
     ) -> Result<Vec<MessageSummary>> {
         let rows: Vec<SummaryRow> = sqlx::query_as(
@@ -593,12 +595,16 @@ impl MailStore {
                  WHERE mm.mailbox_id = $1
                    AND NOT mm.deleted
                    AND m.search_vector @@ plainto_tsquery('simple', $2)
+                   AND mm.folder_id = ANY($3)
+                   AND ($4::boolean IS NULL OR mm.seen = NOT $4::boolean)
                  ORDER BY ts_rank(m.search_vector, plainto_tsquery('simple', $2)) DESC,
                           m.received_at DESC
-                 LIMIT $3",
+                 LIMIT $5",
         )
         .bind(mailbox_id)
         .bind(query)
+        .bind(folder_ids)
+        .bind(unread)
         .bind(limit.clamp(1, 100))
         .fetch_all(&self.pool)
         .await?;

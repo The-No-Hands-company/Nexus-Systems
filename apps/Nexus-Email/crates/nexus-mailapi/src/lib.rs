@@ -8,7 +8,6 @@
 //! to claim to be anyone, so the bind address is a security control, not a
 //! deployment detail.
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use axum::{
@@ -782,54 +781,54 @@ async fn search(
         .folders(mailbox)
         .await
         .map_err(|e| server(&format!("folders: {e}")))?;
-    let mut allowed_folders = HashSet::new();
+    let mut allowed_folders = Vec::new();
     match q.folder.as_deref() {
         None => {
             for folder in &folders {
                 if matches!(folder.kind, FolderKind::Inbox | FolderKind::Sent) {
-                    allowed_folders.insert(folder.id);
+                    allowed_folders.push(folder.id);
                 }
             }
         }
         Some("inbox") => {
             for folder in &folders {
                 if folder.kind == FolderKind::Inbox {
-                    allowed_folders.insert(folder.id);
+                    allowed_folders.push(folder.id);
                 }
             }
         }
         Some("sent") => {
             for folder in &folders {
                 if folder.kind == FolderKind::Sent {
-                    allowed_folders.insert(folder.id);
+                    allowed_folders.push(folder.id);
                 }
             }
         }
         Some("drafts") => {
             for folder in &folders {
                 if folder.kind == FolderKind::Drafts {
-                    allowed_folders.insert(folder.id);
+                    allowed_folders.push(folder.id);
                 }
             }
         }
         Some("archive") => {
             for folder in &folders {
                 if folder.kind == FolderKind::Archive {
-                    allowed_folders.insert(folder.id);
+                    allowed_folders.push(folder.id);
                 }
             }
         }
         Some("trash") => {
             for folder in &folders {
                 if folder.kind == FolderKind::Trash {
-                    allowed_folders.insert(folder.id);
+                    allowed_folders.push(folder.id);
                 }
             }
         }
         Some("junk") => {
             for folder in &folders {
                 if folder.kind == FolderKind::Custom && folder.name.eq_ignore_ascii_case("Junk") {
-                    allowed_folders.insert(folder.id);
+                    allowed_folders.push(folder.id);
                 }
             }
         }
@@ -839,34 +838,15 @@ async fn search(
             ))
         }
     }
+    if allowed_folders.is_empty() {
+        return Ok(Json(Vec::new()));
+    }
     let hits = state
         .store
-        .search(mailbox, query, 200)
+        .search(mailbox, query, &allowed_folders, q.unread, 50)
         .await
         .map_err(|e| server(&format!("search: {e}")))?;
-    let mut out = Vec::new();
-    for hit in hits {
-        if let Some(unread) = q.unread {
-            if unread == hit.seen {
-                continue;
-            }
-        }
-        let Some(folder) = state
-            .store
-            .message_folder(mailbox, hit.id)
-            .await
-            .map_err(|e| server(&format!("message folder: {e}")))?
-        else {
-            continue;
-        };
-        if allowed_folders.contains(&folder.id) {
-            out.push(SummaryDto::from(hit));
-            if out.len() == 50 {
-                break;
-            }
-        }
-    }
-    Ok(Json(out))
+    Ok(Json(hits.into_iter().map(Into::into).collect()))
 }
 
 async fn thread_messages(
