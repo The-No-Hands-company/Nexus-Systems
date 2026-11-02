@@ -234,6 +234,118 @@ async fn reference_migration_backfills_existing_and_unfinished_messages() {
 }
 
 #[tokio::test]
+async fn submission_migration_recovers_legacy_inflight_work_and_unfinished_submissions() {
+    let s = store().await;
+    let mut tx = s.pool().begin().await.unwrap();
+    let schema = format!("intent_migration_{}", Uuid::now_v7().simple());
+    sqlx::query(&format!("CREATE SCHEMA {schema}"))
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("SELECT set_config('search_path', $1, true)")
+        .bind(&schema)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::raw_sql(
+        "CREATE TABLE messages (id UUID PRIMARY KEY);
+         CREATE TABLE mailbox_messages (id UUID PRIMARY KEY);
+         CREATE TABLE outbound_queue (
+           id UUID PRIMARY KEY, message_id UUID NOT NULL REFERENCES messages(id),
+           recipient TEXT NOT NULL, route TEXT NOT NULL, state TEXT NOT NULL,
+           CONSTRAINT queue_no_duplicate_recipient UNIQUE (message_id, recipient)
+         );
+         CREATE TABLE message_references (
+           id UUID PRIMARY KEY, message_id UUID NOT NULL, kind TEXT NOT NULL,
+           released_at TIMESTAMPTZ, protected_id UUID
+         );
+         CREATE TABLE message_submission_dispositions (
+           id UUID PRIMARY KEY, message_id UUID NOT NULL, recipient TEXT NOT NULL,
+           disposition TEXT NOT NULL, membership_id UUID
+         );",
+    )
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    let message = Uuid::now_v7();
+    let queue = Uuid::now_v7();
+    sqlx::query("INSERT INTO messages VALUES ($1)")
+        .bind(message)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO outbound_queue VALUES ($1, $2, 'outside@example.test', 'smtp', 'delivering')",
+    )
+    .bind(queue)
+    .bind(message)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO message_references VALUES ($1, $2, 'submission', NULL, $1)")
+        .bind(Uuid::now_v7())
+        .bind(message)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("SAVEPOINT inconsistent_legacy")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO message_references VALUES ($1, $2, 'outbound', NULL, $3)")
+        .bind(Uuid::now_v7())
+        .bind(message)
+        .bind(Uuid::now_v7())
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let migration = include_str!("../migrations/20261105000013_submission_intents.sql")
+        .trim()
+        .strip_prefix("BEGIN;")
+        .unwrap()
+        .strip_suffix("COMMIT;")
+        .unwrap();
+    assert!(sqlx::raw_sql(migration).execute(&mut *tx).await.is_err());
+    sqlx::query("ROLLBACK TO SAVEPOINT inconsistent_legacy")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let (created,): (bool,) = sqlx::query_as("SELECT to_regclass('mail_submissions') IS NOT NULL")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    assert!(
+        !created,
+        "inconsistent legacy data must fail before schema changes"
+    );
+    sqlx::raw_sql(migration).execute(&mut *tx).await.unwrap();
+    let (state,): (String,) = sqlx::query_as("SELECT state FROM outbound_queue WHERE id = $1")
+        .bind(queue)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    assert_eq!(state, "pending");
+    let intents: Vec<(String, String)> =
+        sqlx::query_as("SELECT route, state FROM mail_submission_recipients ORDER BY route")
+            .fetch_all(&mut *tx)
+            .await
+            .unwrap();
+    assert_eq!(
+        intents,
+        vec![
+            ("local".into(), "local_pending".into()),
+            ("smtp".into(), "outbound_pending".into()),
+        ]
+    );
+    let (legacy_refs,): (i64,) = sqlx::query_as("SELECT count(*) FROM message_references")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    assert_eq!(legacy_refs, 0);
+    tx.rollback().await.unwrap();
+}
+
+#[tokio::test]
 async fn concurrent_final_membership_erasure_deletes_shared_message_once() {
     let s = store().await;
     let first = s.create_node_mailbox("first").await.unwrap();

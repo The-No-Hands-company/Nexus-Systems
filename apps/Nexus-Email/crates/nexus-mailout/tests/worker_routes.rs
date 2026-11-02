@@ -103,6 +103,14 @@ async fn queued_from_with_copy(
         )
         .await
         .unwrap();
+    MailStore::release_reference_in_transaction(
+        &mut tx,
+        id,
+        MessageReferenceKind::Submission,
+        submission,
+    )
+    .await
+    .unwrap();
     queue
         .enqueue_in_transaction(&mut tx, id, &from.as_string(), rcpt, &route)
         .await
@@ -113,14 +121,6 @@ async fn queued_from_with_copy(
             .await
             .unwrap();
     }
-    MailStore::release_reference_in_transaction(
-        &mut tx,
-        id,
-        MessageReferenceKind::Submission,
-        submission,
-    )
-    .await
-    .unwrap();
     tx.commit().await.unwrap();
     let row: (Uuid, Uuid, String, String, String, String, i32) = sqlx::query_as(
         "SELECT id, message_id, envelope_from, recipient, destination, route, attempts
@@ -130,9 +130,20 @@ async fn queued_from_with_copy(
     .fetch_one(store.pool())
     .await
     .unwrap();
+    let lease_token = Uuid::now_v7();
+    sqlx::query(
+        "UPDATE outbound_queue SET state = 'delivering', lease_token = $2,
+         lease_expires_at = now() + interval '5 minutes' WHERE id = $1",
+    )
+    .bind(row.0)
+    .bind(lease_token)
+    .execute(store.pool())
+    .await
+    .unwrap();
     let item = QueuedDelivery {
-        id: row.0,
+        queue_id: row.0,
         message_id: row.1,
+        lease_token,
         envelope_from: row.2,
         recipient: row.3,
         destination: row.4,

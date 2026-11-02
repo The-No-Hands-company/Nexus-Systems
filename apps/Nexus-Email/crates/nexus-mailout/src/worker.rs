@@ -196,7 +196,7 @@ impl DeliveryWorker {
                 // over a transient database problem, so it is deferred.
                 let _ = self
                     .queue
-                    .mark_attempt_failed(item.id, false, &format!("message unreadable: {e}"))
+                    .mark_attempt_failed(item.queue_id, item.lease_token, false, &format!("message unreadable: {e}"))
                     .await;
                 return;
             }
@@ -228,25 +228,25 @@ impl DeliveryWorker {
         };
 
         let finished = match outcome {
-            Attempt::Delivered => self.queue.mark_delivered(item.id).await.is_ok(),
+            Attempt::Delivered => self.queue.mark_delivered(item.queue_id, item.lease_token).await.is_ok(),
             Attempt::Rejected(reason) => {
-                let dead = self.queue.mark_attempt_failed(item.id, true, &reason).await;
+                let dead = self.queue.mark_attempt_failed(item.queue_id, item.lease_token, true, &reason).await;
                 if matches!(dead, Ok(true)) {
-                    tracing::info!(queue_id = %item.id, "permanent failure; bounce due");
+                    tracing::info!(queue_id = %item.queue_id, "permanent failure; bounce due");
                 }
                 matches!(dead, Ok(true))
             }
             Attempt::Deferred(reason) => {
-                let dead = self.queue.mark_attempt_failed(item.id, false, &reason).await;
+                let dead = self.queue.mark_attempt_failed(item.queue_id, item.lease_token, false, &reason).await;
                 if matches!(dead, Ok(true)) {
-                    tracing::info!(queue_id = %item.id, "gave up after retries; bounce due");
+                    tracing::info!(queue_id = %item.queue_id, "gave up after retries; bounce due");
                 }
                 matches!(dead, Ok(true))
             }
         };
         if finished && self.is_system_mail(&item.envelope_from) {
             if let Err(e) = self.queue.purge_message(item.message_id).await {
-                tracing::warn!(queue_id = %item.id, error = %e, "could not purge finished system mail");
+                tracing::warn!(queue_id = %item.queue_id, error = %e, "could not purge finished system mail");
             }
         }
     }

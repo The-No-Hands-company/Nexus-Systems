@@ -62,25 +62,29 @@ path exists — the ISP lifting the filter, or a peer node with clean egress.
 
 ## Message lifetime and migration
 
-Message creation, recipient routing, mailbox copies and outbound queue entries
-are serialized by a message-row lock and durable reference ledger. A pending
-or in-flight delivery keeps its message even when the last mailbox copy is
-erased. Terminal delivery and final mailbox erasure release their references;
-orphan cleanup also schedules any external-body deletion.
+Recipient routing is resolved before a single transaction persists the
+message, submission, recipient intents, mailbox copies and outbound work.
+Mailbox rows are locked in UUID order. Pending intents retain content after the
+last mailbox copy is erased; terminal queue retention performs checked orphan
+cleanup and schedules any external-body deletion.
 
-The low-level `store_message` API leaves a distinct unfinished submission hold
-for recovery. Callers that complete routing must instead use
-`store_message_in_transaction` with their own submission ID, create all
-mailbox/queue references in that transaction, and release that exact hold only
-after every recipient disposition is durable. An unfinished hold is retained
-until an operator or future recovery worker resolves it.
-Recipient dispositions are persisted with the submission. Local disposition
-records are removed with their mailbox membership, outbound records with the
-finished queue entry, and any remaining records with the message.
+Outbound claims carry a five-minute lease and a fresh token. Completion and
+failure require the token; an expired claim can be reclaimed after a restart.
+Fencing prevents stale workers from changing queue state, but remote delivery
+is still at-least-once if a worker sends and crashes before recording success.
+Local intent records are removed with their membership, and outbound records
+with their finished queue entry.
 
-Apply the message-reference migration with Mail writers stopped; it backfills
-existing mailbox and active queue references and conservatively holds existing
-unreferenced messages. Do not mix old and new writers during rollout.
+Stop all Mail writers before applying the submission-intent migration and do
+not mix old and new writers. It backfills existing queue work and returns
+unfenced in-flight rows to pending. For a message with existing queue work or
+dispositions, an unfinished legacy submission whose recipients cannot be
+reconstructed becomes a `local_pending` intent with no recipient. Other
+unfinished legacy submissions retain their existing hold. An operator must
+reconcile these records before they can be removed. The legacy
+low-level `store_message` hold API remains for old callers, but an unfinished
+legacy hold cannot be attached to an intent-managed submission. New routing
+must use the transactional `Deliverer` rather than that low-level API.
 
 ## Connecting a mail client
 

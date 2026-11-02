@@ -10,6 +10,11 @@ async fn harness() -> (MailStore, Queue) {
     let url = std::env::var("NEXUS_EMAIL_TEST_DATABASE_URL")
         .expect("NEXUS_EMAIL_TEST_DATABASE_URL must be set");
     let pool = PgPoolOptions::new().max_connections(4).connect(&url).await.unwrap();
+    // Queue claims and retention affect all rows in the shared test database.
+    sqlx::query("SELECT pg_advisory_lock(811239651)")
+        .execute(&pool)
+        .await
+        .unwrap();
     (MailStore::new(pool.clone()), Queue::new(pool))
 }
 
@@ -27,14 +32,138 @@ async fn queue_row(store: &MailStore, recipient: &str) -> (Uuid, i32) {
         .unwrap()
 }
 
+async fn claim_for(store: &MailStore, queue: &Queue, id: Uuid) -> Uuid {
+    let existing: Option<(Uuid,)> = sqlx::query_as(
+        "SELECT lease_token FROM outbound_queue WHERE id = $1 AND state = 'delivering'",
+    )
+    .bind(id)
+    .fetch_optional(store.pool())
+    .await
+    .unwrap();
+    if let Some((token,)) = existing {
+        return token;
+    }
+    sqlx::query(
+        "UPDATE outbound_queue SET next_attempt_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(id)
+    .execute(store.pool())
+    .await
+    .unwrap();
+    queue
+        .claim_due(10_000)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|row| row.queue_id == id)
+        .expect("delivery must be claimable")
+        .lease_token
+}
+
 async fn a_message(store: &MailStore) -> Uuid {
     let from = Address::parse("a@test.invalid").unwrap();
     let thread = store.thread_for(None, &[], Some("q")).await.unwrap();
     let raw = format!("Subject: q\r\n\r\n{}", Uuid::now_v7());
-    store
+    let message = store
         .store_message(raw.as_bytes(), thread, &from, Some("q"), None, None, &[], Transport::Internal, None)
         .await
-        .unwrap()
+        .unwrap();
+    finish_submission(store, message).await;
+    message
+}
+
+#[tokio::test]
+async fn expired_delivery_lease_is_reclaimed_after_restart() {
+    let (store, queue) = harness().await;
+    let msg = a_message(&store).await;
+    let rcpt = format!("lease-{}@outside.example", Uuid::now_v7());
+    queue
+        .enqueue(msg, "sender@example.test", &rcpt, &Route::External)
+        .await
+        .unwrap();
+    let (id, _) = queue_row(&store, &rcpt).await;
+    let (has_lease,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.columns
+         WHERE table_schema = current_schema() AND table_name = 'outbound_queue'
+           AND column_name = 'lease_token')",
+    )
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert!(has_lease, "a claim must have a durable fencing token");
+    let first = queue.claim_due(10_000).await.unwrap();
+    assert!(first.iter().any(|row| row.queue_id == id));
+    let (first_token,): (Uuid,) =
+        sqlx::query_as("SELECT lease_token FROM outbound_queue WHERE id = $1")
+            .bind(id)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    sqlx::query(
+        "UPDATE outbound_queue SET lease_expires_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(id)
+    .execute(store.pool())
+    .await
+    .unwrap();
+    let restarted = Queue::new(store.pool().clone());
+    let second = restarted.claim_due(10_000).await.unwrap();
+    assert!(
+        second.iter().any(|row| row.queue_id == id),
+        "expired work must be reclaimed"
+    );
+    let (second_token,): (Uuid,) =
+        sqlx::query_as("SELECT lease_token FROM outbound_queue WHERE id = $1")
+            .bind(id)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_ne!(first_token, second_token);
+    assert!(queue.mark_delivered(id, first_token).await.is_err());
+    assert!(queue
+        .mark_attempt_failed(id, first_token, true, "stale")
+        .await
+        .is_err());
+    let (state, attempts): (String, i32) =
+        sqlx::query_as("SELECT state, attempts FROM outbound_queue WHERE id = $1")
+            .bind(id)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_eq!((state.as_str(), attempts), ("delivering", 0));
+    restarted.mark_delivered(id, second_token).await.unwrap();
+    let (intent,): (String,) =
+        sqlx::query_as("SELECT state FROM mail_submission_recipients WHERE queue_id = $1")
+            .bind(id)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_eq!(intent, "delivered");
+}
+
+#[tokio::test]
+async fn terminal_queue_retention_erases_queue_only_orphan() {
+    let (store, queue) = harness().await;
+    let msg = a_message(&store).await;
+    let rcpt = format!("retention-{}@outside.example", Uuid::now_v7());
+    queue
+        .enqueue(msg, "sender@example.test", &rcpt, &Route::External)
+        .await
+        .unwrap();
+    finish_submission(&store, msg).await;
+    let (id, _) = queue_row(&store, &rcpt).await;
+    let token = claim_for(&store, &queue, id).await;
+    queue.mark_delivered(id, token).await.unwrap();
+    queue
+        .purge_finished(chrono::Duration::zero(), chrono::Duration::zero())
+        .await
+        .unwrap();
+    let (exists,): (bool,) = sqlx::query_as("SELECT EXISTS (SELECT 1 FROM messages WHERE id = $1)")
+        .bind(msg)
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    assert!(!exists, "queue retention must erase the final orphan");
 }
 
 async fn finish_submission(store: &MailStore, message: Uuid) {
@@ -156,6 +285,14 @@ async fn interrupted_reference_transaction_rolls_back_message_and_queue() {
         )
         .await
         .unwrap();
+    MailStore::release_reference_in_transaction(
+        &mut tx,
+        msg,
+        nexus_mailstore::MessageReferenceKind::Submission,
+        submission,
+    )
+    .await
+    .unwrap();
     queue
         .enqueue_in_transaction(
             &mut tx,
@@ -180,7 +317,7 @@ async fn interrupted_reference_transaction_rolls_back_message_and_queue() {
 }
 
 #[tokio::test]
-async fn inconsistent_active_queue_reference_aborts_erasure() {
+async fn inconsistent_active_queue_intent_aborts_erasure() {
     let (store, queue) = harness().await;
     let mailbox = store.create_node_mailbox("inconsistent").await.unwrap();
     let msg = a_message(&store).await;
@@ -196,7 +333,7 @@ async fn inconsistent_active_queue_reference_aborts_erasure() {
         .await
         .unwrap();
     finish_submission(&store, msg).await;
-    sqlx::query("UPDATE message_references SET released_at = now() WHERE message_id = $1 AND kind = 'outbound'")
+    sqlx::query("DELETE FROM mail_submission_recipients WHERE queue_id IN (SELECT id FROM outbound_queue WHERE message_id = $1)")
         .bind(msg).execute(store.pool()).await.unwrap();
 
     assert!(store.erase_membership(mailbox.id, msg).await.is_err());
@@ -213,7 +350,7 @@ async fn inconsistent_active_queue_reference_aborts_erasure() {
 }
 
 #[tokio::test]
-async fn duplicate_queueing_rejects_a_missing_outbound_hold() {
+async fn duplicate_queueing_rejects_a_missing_outbound_intent() {
     let (store, queue) = harness().await;
     let msg = a_message(&store).await;
     let recipient = format!("duplicate-{}@outside.example", Uuid::now_v7());
@@ -221,7 +358,7 @@ async fn duplicate_queueing_rejects_a_missing_outbound_hold() {
         .enqueue(msg, "sender@example.test", &recipient, &Route::External)
         .await
         .unwrap();
-    sqlx::query("UPDATE message_references SET released_at = now() WHERE message_id = $1 AND kind = 'outbound'")
+    sqlx::query("DELETE FROM mail_submission_recipients WHERE queue_id IN (SELECT id FROM outbound_queue WHERE message_id = $1)")
         .bind(msg).execute(store.pool()).await.unwrap();
     assert!(queue
         .enqueue(msg, "sender@example.test", &recipient, &Route::External)
@@ -230,7 +367,7 @@ async fn duplicate_queueing_rejects_a_missing_outbound_hold() {
 }
 
 #[tokio::test]
-async fn outbound_holds_survive_retry_and_release_on_terminal_state() {
+async fn outbound_intents_survive_retry_and_reach_terminal_state() {
     let (store, queue) = harness().await;
     let msg = a_message(&store).await;
     let mailbox = store.create_node_mailbox("outbound cleanup").await.unwrap();
@@ -248,19 +385,25 @@ async fn outbound_holds_survive_retry_and_release_on_terminal_state() {
     finish_submission(&store, msg).await;
     store.erase_membership(mailbox.id, msg).await.unwrap();
     let (id, _) = queue_row(&store, &rcpt).await;
+    let token = claim_for(&store, &queue, id).await;
     assert!(!queue
-        .mark_attempt_failed(id, false, "temporary")
+        .mark_attempt_failed(id, token, false, "temporary")
         .await
         .unwrap());
     let (active,): (i64,) = sqlx::query_as(
-        "SELECT count(*) FROM message_references WHERE message_id = $1 AND kind = 'outbound' AND released_at IS NULL",
-    ).bind(msg).fetch_one(store.pool()).await.unwrap();
+        "SELECT count(*) FROM mail_submission_recipients WHERE queue_id = $1 AND state = 'outbound_pending'",
+    ).bind(id).fetch_one(store.pool()).await.unwrap();
     assert_eq!(active, 1);
-    queue.mark_delivered(id).await.unwrap();
+    let token = claim_for(&store, &queue, id).await;
+    queue.mark_delivered(id, token).await.unwrap();
     let (active,): (i64,) = sqlx::query_as(
-        "SELECT count(*) FROM message_references WHERE message_id = $1 AND kind = 'outbound' AND released_at IS NULL",
-    ).bind(msg).fetch_one(store.pool()).await.unwrap();
+        "SELECT count(*) FROM mail_submission_recipients WHERE queue_id = $1 AND state = 'outbound_pending'",
+    ).bind(id).fetch_one(store.pool()).await.unwrap();
     assert_eq!(active, 0);
+    queue
+        .purge_finished(chrono::Duration::zero(), chrono::Duration::zero())
+        .await
+        .unwrap();
     let (messages, rows): (i64, i64) = sqlx::query_as(
         "SELECT (SELECT count(*) FROM messages WHERE id = $1),
                 (SELECT count(*) FROM outbound_queue WHERE message_id = $1)",
@@ -277,7 +420,7 @@ async fn outbound_holds_survive_retry_and_release_on_terminal_state() {
 }
 
 #[tokio::test]
-async fn terminal_failure_releases_outbound_hold() {
+async fn terminal_failure_transitions_outbound_intent() {
     let (store, queue) = harness().await;
     let msg = a_message(&store).await;
     let rcpt = format!("failed-hold-{}@peer.example", Uuid::now_v7());
@@ -287,14 +430,15 @@ async fn terminal_failure_releases_outbound_hold() {
         .unwrap();
     finish_submission(&store, msg).await;
     let (id, _) = queue_row(&store, &rcpt).await;
+    let token = claim_for(&store, &queue, id).await;
     assert!(queue
-        .mark_attempt_failed(id, true, "permanent")
+        .mark_attempt_failed(id, token, true, "permanent")
         .await
         .unwrap());
     let (active,): (i64,) = sqlx::query_as(
-        "SELECT count(*) FROM message_references WHERE message_id = $1 AND kind = 'outbound' AND released_at IS NULL",
-    ).bind(msg).fetch_one(store.pool()).await.unwrap();
-    assert_eq!(active, 0);
+        "SELECT count(*) FROM mail_submission_recipients WHERE queue_id = $1 AND state = 'failed'",
+    ).bind(id).fetch_one(store.pool()).await.unwrap();
+    assert_eq!(active, 1);
 }
 
 #[test]
@@ -381,7 +525,11 @@ async fn a_temporary_failure_is_rescheduled_not_dropped() {
         .unwrap();
 
     let (id, _) = queue_row(&store, &rcpt).await;
-    let dead = queue.mark_attempt_failed(id, false, "peer unreachable").await.unwrap();
+    let token = claim_for(&store, &queue, id).await;
+    let dead = queue
+        .mark_attempt_failed(id, token, false, "peer unreachable")
+        .await
+        .unwrap();
 
     assert!(!dead, "a first temporary failure must not be terminal");
     let (state, attempts, err): (String, i32, Option<String>) = sqlx::query_as(
@@ -409,7 +557,11 @@ async fn a_permanent_failure_is_terminal_immediately() {
         .unwrap();
 
     let (id, _) = queue_row(&store, &rcpt).await;
-    let dead = queue.mark_attempt_failed(id, true, "no such mailbox").await.unwrap();
+    let token = claim_for(&store, &queue, id).await;
+    let dead = queue
+        .mark_attempt_failed(id, token, true, "no such mailbox")
+        .await
+        .unwrap();
 
     assert!(dead, "a permanent failure must be terminal at once");
     let (state, completed): (String, Option<chrono::DateTime<chrono::Utc>>) =
@@ -439,7 +591,8 @@ async fn retries_run_out_and_the_delivery_dies() {
     // Fail it as many times as the policy allows; the last one must be fatal.
     let mut dead = false;
     for _ in 0..max_attempts() {
-        dead = queue.mark_attempt_failed(id, false, "still unreachable").await.unwrap();
+        let token = claim_for(&store, &queue, id).await;
+        dead = queue.mark_attempt_failed(id, token, false, "still unreachable").await.unwrap();
     }
     assert!(dead, "after {} attempts the delivery must be dead", max_attempts());
 }
@@ -459,10 +612,19 @@ async fn test_purge_finished_when_rows_are_old_enough_should_forget_them_and_kee
         rows.push((label, id, rcpt));
     }
     let id_of = |label: &str| rows.iter().find(|r| r.0 == label).unwrap().1;
-    queue.mark_delivered(id_of("delivered-old")).await.unwrap();
-    queue.mark_delivered(id_of("delivered-new")).await.unwrap();
-    queue.mark_attempt_failed(id_of("failed-old"), true, "no such mailbox").await.unwrap();
-    queue.mark_attempt_failed(id_of("failed-new"), true, "no such mailbox").await.unwrap();
+    for label in ["delivered-old", "delivered-new"] {
+        let id = id_of(label);
+        let token = claim_for(&store, &queue, id).await;
+        queue.mark_delivered(id, token).await.unwrap();
+    }
+    for label in ["failed-old", "failed-new"] {
+        let id = id_of(label);
+        let token = claim_for(&store, &queue, id).await;
+        queue
+            .mark_attempt_failed(id, token, true, "no such mailbox")
+            .await
+            .unwrap();
+    }
     for (label, hours) in [("delivered-old", 2), ("failed-old", 24 * 8), ("failed-new", 24 * 3)] {
         sqlx::query("UPDATE outbound_queue SET completed_at = now() - make_interval(hours => $1) WHERE id = $2")
             .bind(hours).bind(id_of(label)).execute(store.pool()).await.unwrap();

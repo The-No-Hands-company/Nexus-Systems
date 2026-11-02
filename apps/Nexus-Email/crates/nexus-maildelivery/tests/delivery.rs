@@ -14,6 +14,11 @@ async fn harness() -> (Deliverer, MailStore, Queue, String) {
     let url = std::env::var("NEXUS_EMAIL_TEST_DATABASE_URL")
         .expect("NEXUS_EMAIL_TEST_DATABASE_URL must be set");
     let pool = PgPoolOptions::new().max_connections(4).connect(&url).await.unwrap();
+    // Queue claims and retention affect all rows in the shared test database.
+    sqlx::query("SELECT pg_advisory_lock(811239651)")
+        .execute(&pool)
+        .await
+        .unwrap();
     let store = MailStore::new(pool.clone());
     let queue = Queue::new(pool);
     // A domain unique to this test run, so tests can share one database
@@ -34,7 +39,261 @@ fn msg(from: &str, to: &str, subject: &str, body: &str) -> Vec<u8> {
 }
 
 #[tokio::test]
-async fn mixed_submission_leaves_only_durable_mailbox_and_outbound_holds() {
+async fn submission_commits_all_recipient_intents_or_none() {
+    let (d, store, _, local) = harness().await;
+    let mailbox = store.create_node_mailbox("intent recipient").await.unwrap();
+    let sender = Address::parse("sender@example.test").unwrap();
+    let local_address = Address::parse(&format!("local@{local}")).unwrap();
+    let external = Address::parse("person@outside.example").unwrap();
+    store
+        .add_address(mailbox.id, &local_address, true)
+        .await
+        .unwrap();
+    let raw = msg(&sender.as_string(), "mixed", "intents", "body");
+    let outcomes = d
+        .submit(&raw, &sender, &[local_address, external], None)
+        .await
+        .unwrap();
+    assert_eq!(outcomes.len(), 2);
+
+    let (has_intents,): (bool,) =
+        sqlx::query_as("SELECT to_regclass('mail_submission_recipients') IS NOT NULL")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert!(
+        has_intents,
+        "accepted recipients must have durable intent records"
+    );
+    let intents: Vec<(String, String)> = sqlx::query_as(
+        "SELECT r.route, r.state FROM mail_submission_recipients r
+         JOIN mail_submissions s ON s.id = r.submission_id
+         JOIN messages m ON m.id = s.message_id
+         WHERE m.content_hash = encode(sha256($1), 'hex') ORDER BY r.route",
+    )
+    .bind(&raw[..])
+    .fetch_all(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        intents,
+        vec![
+            ("local".to_string(), "delivered".to_string()),
+            ("smtp".to_string(), "outbound_pending".to_string()),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn queue_insert_failure_rolls_back_all_submission_work() {
+    let (d, store, _, local) = harness().await;
+    let mailbox = store
+        .create_node_mailbox("rollback recipient")
+        .await
+        .unwrap();
+    let sender = Address::parse("sender@example.test").unwrap();
+    let local_address = Address::parse(&format!("local@{local}")).unwrap();
+    let suffix = Uuid::now_v7().simple().to_string();
+    let external = Address::parse(&format!("rollback-{suffix}@outside.example")).unwrap();
+    store
+        .add_address(mailbox.id, &local_address, true)
+        .await
+        .unwrap();
+    let subject = format!("rollback-{suffix}");
+    let raw = msg(&sender.as_string(), "mixed", &subject, "body");
+    let function = format!("reject_queue_{suffix}");
+    let trigger = format!("reject_queue_{suffix}");
+    sqlx::raw_sql(&format!(
+        "CREATE FUNCTION {function}() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN RAISE EXCEPTION 'injected queue failure'; END $$;
+         CREATE TRIGGER {trigger} BEFORE INSERT ON outbound_queue
+         FOR EACH ROW WHEN (NEW.recipient = '{}') EXECUTE FUNCTION {function}();",
+        external.as_string(),
+    ))
+    .execute(store.pool())
+    .await
+    .unwrap();
+    let result = d
+        .submit(&raw, &sender, &[local_address, external], None)
+        .await;
+    sqlx::raw_sql(&format!(
+        "DROP TRIGGER {trigger} ON outbound_queue; DROP FUNCTION {function}();",
+    ))
+    .execute(store.pool())
+    .await
+    .unwrap();
+    assert!(result.is_err());
+    let (messages, memberships, threads): (i64, i64, i64) = sqlx::query_as(
+        "SELECT
+           (SELECT count(*) FROM messages WHERE content_hash = encode(sha256($1), 'hex')),
+           (SELECT count(*) FROM mailbox_messages WHERE mailbox_id = $2),
+           (SELECT count(*) FROM threads WHERE subject_normalised = $3)",
+    )
+    .bind(&raw[..])
+    .bind(mailbox.id)
+    .bind(&subject)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!((messages, memberships, threads), (0, 0, 0));
+}
+
+#[tokio::test]
+async fn entirely_rejected_submission_without_sender_copy_does_not_leak_a_message() {
+    let (d, store, _, local) = harness().await;
+    let sender = Address::parse("sender@example.test").unwrap();
+    let missing = Address::parse(&format!("missing@{local}")).unwrap();
+    let raw = msg(
+        &sender.as_string(),
+        &missing.as_string(),
+        "rejected",
+        "body",
+    );
+    let outcomes = d.submit(&raw, &sender, &[missing], None).await.unwrap();
+    assert!(matches!(outcomes[0].disposition, Disposition::Rejected(_)));
+    let (exists,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS (SELECT 1 FROM messages WHERE content_hash = encode(sha256($1), 'hex'))",
+    )
+    .bind(&raw[..])
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert!(!exists);
+}
+
+#[tokio::test]
+async fn retrying_submission_does_not_duplicate_outbound_work() {
+    let (d, store, _, _) = harness().await;
+    let sender = Address::parse("sender@example.test").unwrap();
+    let recipient = Address::parse(&format!("retry-{}@outside.example", Uuid::now_v7())).unwrap();
+    let raw = msg(&sender.as_string(), &recipient.as_string(), "retry", "body");
+    for _ in 0..2 {
+        d.submit(&raw, &sender, std::slice::from_ref(&recipient), None)
+            .await
+            .unwrap();
+    }
+    let (count,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM outbound_queue WHERE recipient = $1")
+            .bind(recipient.as_string())
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_eq!(count, 1, "retry must not create another delivery");
+}
+
+#[tokio::test]
+async fn repeated_envelope_recipients_each_have_a_durable_intent() {
+    let (d, store, _, _) = harness().await;
+    let sender = Address::parse("sender@example.test").unwrap();
+    let recipient = Address::parse(&format!("twice-{}@outside.example", Uuid::now_v7())).unwrap();
+    let raw = msg(&sender.as_string(), &recipient.as_string(), "twice", "body");
+    for _ in 0..2 {
+        d.submit(&raw, &sender, &[recipient.clone(), recipient.clone()], None)
+            .await
+            .unwrap();
+    }
+    let (intents, queue): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM mail_submission_recipients WHERE recipient = $1),
+                (SELECT count(*) FROM outbound_queue WHERE recipient = $1)",
+    )
+    .bind(recipient.as_string())
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!((intents, queue), (2, 2));
+}
+
+#[tokio::test]
+async fn unfinished_legacy_submission_cannot_be_silently_superseded() {
+    let (d, store, _, _) = harness().await;
+    let sender = Address::parse("sender@example.test").unwrap();
+    let recipient = Address::parse("outside@example.test").unwrap();
+    let raw = msg(
+        &sender.as_string(),
+        &recipient.as_string(),
+        "legacy",
+        "body",
+    );
+    let thread = store.thread_for(None, &[], Some("legacy")).await.unwrap();
+    let message = store
+        .store_message(
+            &raw,
+            thread,
+            &sender,
+            Some("legacy"),
+            None,
+            None,
+            &[],
+            nexus_mailstore::Transport::Internal,
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(d.submit(&raw, &sender, &[recipient], None).await.is_err());
+    let (messages, submissions): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM messages WHERE id = $1),
+                (SELECT count(*) FROM mail_submissions WHERE message_id = $1)",
+    )
+    .bind(message)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!((messages, submissions), (1, 0));
+}
+
+#[tokio::test]
+async fn empty_peer_relay_does_not_store_an_orphan() {
+    let (d, store, _, _) = harness().await;
+    let sender = Address::parse("sender@example.test").unwrap();
+    let raw = msg(&sender.as_string(), "nobody", "empty relay", "body");
+    assert!(d.relay_for_peer(&raw, &sender, &[]).await.is_err());
+    let (exists,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS (SELECT 1 FROM messages WHERE content_hash = encode(sha256($1), 'hex'))",
+    )
+    .bind(&raw[..])
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert!(!exists);
+}
+
+#[tokio::test]
+async fn reciprocal_submissions_lock_mailboxes_in_a_consistent_order() {
+    let (d, store, _, local) = harness().await;
+    let left = store.create_node_mailbox("left").await.unwrap();
+    let right = store.create_node_mailbox("right").await.unwrap();
+    let a = Address::parse(&format!("a@{local}")).unwrap();
+    let b = Address::parse(&format!("b@{local}")).unwrap();
+    store.add_address(left.id, &a, true).await.unwrap();
+    store.add_address(right.id, &b, true).await.unwrap();
+    let first = msg(&a.as_string(), &b.as_string(), "one", "a");
+    let second = msg(&b.as_string(), &a.as_string(), "two", "b");
+    let (one, two) = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        tokio::join!(
+            d.submit(&first, &a, std::slice::from_ref(&b), Some(left.id)),
+            d.submit(&second, &b, std::slice::from_ref(&a), Some(right.id))
+        )
+    })
+    .await
+    .expect("reciprocal submissions deadlocked");
+    one.unwrap();
+    two.unwrap();
+    for mailbox in [left.id, right.id] {
+        let inbox = store.folder(mailbox, FolderKind::Inbox).await.unwrap();
+        let (count,): (i64,) = sqlx::query_as(
+            "SELECT count(*) FROM mailbox_messages WHERE mailbox_id = $1 AND folder_id = $2",
+        )
+        .bind(mailbox)
+        .bind(inbox)
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+        assert_eq!(count, 1);
+    }
+}
+
+#[tokio::test]
+async fn mixed_submission_leaves_delivered_and_pending_intents() {
     let (d, store, _, local) = harness().await;
     let mailbox = store.create_node_mailbox("mixed").await.unwrap();
     let sender = Address::parse("sender@example.test").unwrap();
@@ -53,9 +312,10 @@ async fn mixed_submission_leaves_only_durable_mailbox_and_outbound_holds() {
     assert_eq!(outcomes[1].disposition, Disposition::Queued);
 
     let kinds: Vec<(String,)> = sqlx::query_as(
-        "SELECT r.kind FROM message_references r JOIN messages m ON m.id = r.message_id
-         WHERE m.content_hash = encode(sha256($1), 'hex') AND r.released_at IS NULL
-         ORDER BY r.kind",
+        "SELECT r.state FROM mail_submission_recipients r
+         JOIN mail_submissions s ON s.id = r.submission_id
+         JOIN messages m ON m.id = s.message_id
+         WHERE m.content_hash = encode(sha256($1), 'hex') ORDER BY r.state",
     )
     .bind(&raw[..])
     .fetch_all(store.pool())
@@ -63,7 +323,7 @@ async fn mixed_submission_leaves_only_durable_mailbox_and_outbound_holds() {
     .unwrap();
     assert_eq!(
         kinds,
-        vec![("mailbox".to_string(),), ("outbound".to_string(),)]
+        vec![("delivered".to_string(),), ("outbound_pending".to_string(),)]
     );
 }
 
@@ -87,7 +347,15 @@ async fn purging_finished_queue_forgets_outbound_disposition_recipient() {
         .fetch_one(store.pool())
         .await
         .unwrap();
-    queue.mark_delivered(id).await.unwrap();
+    let token = queue
+        .claim_due(10_000)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|row| row.queue_id == id)
+        .unwrap()
+        .lease_token;
+    queue.mark_delivered(id, token).await.unwrap();
     sqlx::query(
         "UPDATE outbound_queue SET completed_at = now() - interval '2 hours' WHERE id = $1",
     )
@@ -100,7 +368,7 @@ async fn purging_finished_queue_forgets_outbound_disposition_recipient() {
         .await
         .unwrap();
     let (remaining,): (i64,) =
-        sqlx::query_as("SELECT count(*) FROM message_submission_dispositions WHERE recipient = $1")
+        sqlx::query_as("SELECT count(*) FROM mail_submission_recipients WHERE recipient = $1")
             .bind(recipient.as_string())
             .fetch_one(store.pool())
             .await
@@ -137,7 +405,9 @@ async fn erasing_mailbox_copy_forgets_its_local_recipient_outcomes() {
     store.erase_membership(receiver.id, message).await.unwrap();
     let (messages, local_outcomes): (i64, i64) = sqlx::query_as(
         "SELECT (SELECT count(*) FROM messages WHERE id = $1),
-                (SELECT count(*) FROM message_submission_dispositions WHERE message_id = $1 AND disposition = 'mailbox')",
+                (SELECT count(*) FROM mail_submission_recipients r
+                 JOIN mail_submissions s ON s.id = r.submission_id
+                 WHERE s.message_id = $1 AND r.route = 'local')",
     ).bind(message).fetch_one(store.pool()).await.unwrap();
     assert_eq!((messages, local_outcomes), (1, 0));
 }
@@ -222,9 +492,10 @@ async fn one_bad_address_does_not_stop_the_others() {
     }
     assert_eq!(store.unseen_count(bob_mb.id).await.unwrap(), 1);
     let dispositions: Vec<(String,)> = sqlx::query_as(
-        "SELECT d.disposition FROM message_submission_dispositions d
-         JOIN messages m ON m.id = d.message_id
-         WHERE m.content_hash = encode(sha256($1), 'hex') ORDER BY d.disposition",
+        "SELECT r.state FROM mail_submission_recipients r
+         JOIN mail_submissions s ON s.id = r.submission_id
+         JOIN messages m ON m.id = s.message_id
+         WHERE m.content_hash = encode(sha256($1), 'hex') ORDER BY r.state",
     )
     .bind(&raw[..])
     .fetch_all(store.pool())
@@ -232,7 +503,7 @@ async fn one_bad_address_does_not_stop_the_others() {
     .unwrap();
     assert_eq!(
         dispositions,
-        vec![("mailbox".to_string(),), ("rejected".to_string(),)]
+        vec![("delivered".to_string(),), ("failed".to_string(),)]
     );
 }
 

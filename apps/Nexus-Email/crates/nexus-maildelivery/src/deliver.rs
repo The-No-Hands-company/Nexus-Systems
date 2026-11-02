@@ -1,7 +1,5 @@
 use nexus_mailmsg::{parse, tree, Limits};
-use nexus_mailstore::{
-    Address, FolderKind, MailStore, MailStoreError, MessageReferenceKind, Transport,
-};
+use nexus_mailstore::{Address, FolderKind, MailStore, MailStoreError, Transport};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
@@ -27,7 +25,6 @@ pub enum Disposition {
 }
 
 struct PreparedMessage {
-    thread_id: Uuid,
     subject: Option<String>,
     msg_id: Option<String>,
     in_reply_to: Option<String>,
@@ -70,7 +67,7 @@ impl Deliverer {
         recipients: &[Address],
         sender_mailbox: Option<Uuid>,
     ) -> Result<Vec<Outcome>> {
-        let prepared = self.prepare(raw).await?;
+        let prepared = self.prepare(raw)?;
         let mut resolved = Vec::with_capacity(recipients.len());
         for rcpt in recipients {
             resolved.push(match self.router.route(rcpt) {
@@ -88,7 +85,6 @@ impl Deliverer {
             Some(mailbox) => Some((mailbox, self.store.folder(mailbox, FolderKind::Sent).await?)),
             None => None,
         };
-        let submission_id = Uuid::now_v7();
         let mut tx = self.store.begin_reference_transaction().await?;
         let message_id = self
             .store_prepared(
@@ -97,22 +93,46 @@ impl Deliverer {
                 from,
                 Transport::Internal,
                 &prepared,
-                submission_id,
             )
             .await?;
+        let submission_id = Self::ensure_submission(&mut tx, message_id).await?;
+        let mut existing_queue = Self::existing_queue(&mut tx, message_id).await?;
+        let mut mailboxes: Vec<Uuid> = resolved
+            .iter()
+            .filter_map(|route| match route {
+                ResolvedRecipient::Local { mailbox, .. } => Some(*mailbox),
+                _ => None,
+            })
+            .collect();
+        if let Some((mailbox, _)) = sender_copy {
+            mailboxes.push(mailbox);
+        }
+        Self::lock_mailboxes(&mut tx, &mailboxes).await?;
         let mut outcomes = Vec::with_capacity(recipients.len());
         for (rcpt, route) in recipients.iter().zip(resolved) {
-            let (outcome, membership_id) = match route {
+            let (outcome, route_name, state, membership_id, queue_id) = match route {
                 ResolvedRecipient::Local { mailbox, folder } => {
                     let membership_id = self
                         .store
                         .deliver_in_transaction(&mut tx, mailbox, message_id, folder)
                         .await?;
-                    (Disposition::DeliveredLocally, Some(membership_id))
+                    (Disposition::DeliveredLocally, "local", "delivered", Some(membership_id), None)
                 }
                 ResolvedRecipient::Queued(route) => {
-                    self.queue
-                        .enqueue_in_transaction(
+                    let route_name = match route {
+                        Route::Federated { .. } => "federated",
+                        Route::External => "smtp",
+                        Route::Local => unreachable!(),
+                    };
+                    if Self::consume_existing(&mut existing_queue, &rcpt.as_string(), route_name) {
+                        outcomes.push(Outcome {
+                            recipient: rcpt.as_string(),
+                            disposition: Disposition::Queued,
+                        });
+                        continue;
+                    }
+                    let queue_id = self.queue
+                        .enqueue_submission_in_transaction(
                             &mut tx,
                             message_id,
                             &from.as_string(),
@@ -120,27 +140,23 @@ impl Deliverer {
                             &route,
                         )
                         .await?;
-                    (Disposition::Queued, None)
+                    (Disposition::Queued, route_name, "outbound_pending", None, Some(queue_id))
                 }
-                ResolvedRecipient::Rejected(reason) => (Disposition::Rejected(reason), None),
-            };
-            let (disposition, reason) = match &outcome {
-                Disposition::DeliveredLocally => ("mailbox", None),
-                Disposition::Queued => ("outbound", None),
-                Disposition::Rejected(reason) => ("rejected", Some(reason.as_str())),
+                ResolvedRecipient::Rejected(reason) =>
+                    (Disposition::Rejected(reason), "local", "failed", None, None),
             };
             sqlx::query(
-                "INSERT INTO message_submission_dispositions
-                 (id, submission_id, message_id, recipient, disposition, reason, membership_id)
+                "INSERT INTO mail_submission_recipients
+                 (id, submission_id, recipient, route, state, membership_id, queue_id)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)",
             )
             .bind(Uuid::now_v7())
             .bind(submission_id)
-            .bind(message_id)
             .bind(rcpt.as_string())
-            .bind(disposition)
-            .bind(reason)
+            .bind(route_name)
+            .bind(state)
             .bind(membership_id)
+            .bind(queue_id)
             .execute(&mut *tx)
             .await?;
             outcomes.push(Outcome {
@@ -154,13 +170,7 @@ impl Deliverer {
                 .deliver_in_transaction(&mut tx, mailbox, message_id, folder)
                 .await?;
         }
-        MailStore::release_reference_in_transaction(
-            &mut tx,
-            message_id,
-            MessageReferenceKind::Submission,
-            submission_id,
-        )
-        .await?;
+        MailStore::erase_orphaned_message_in_transaction(&mut tx, message_id).await?;
         tx.commit().await?;
         Ok(outcomes)
     }
@@ -250,6 +260,12 @@ impl Deliverer {
         from: &Address,
         recipients: &[Address],
     ) -> Result<Uuid> {
+        if recipients.is_empty() {
+            return Err(DeliveryError::Permanent {
+                recipient: String::new(),
+                reason: "no relay recipients".into(),
+            });
+        }
         for rcpt in recipients {
             if self.router.route(rcpt) != Route::External {
                 return Err(DeliveryError::Permanent {
@@ -259,8 +275,7 @@ impl Deliverer {
             }
         }
 
-        let prepared = self.prepare(raw).await?;
-        let submission_id = Uuid::now_v7();
+        let prepared = self.prepare(raw)?;
         let mut tx = self.store.begin_reference_transaction().await?;
         let message_id = self
             .store_prepared(
@@ -269,12 +284,16 @@ impl Deliverer {
                 from,
                 Transport::Federated,
                 &prepared,
-                submission_id,
             )
             .await?;
+        let submission_id = Self::ensure_submission(&mut tx, message_id).await?;
+        let mut existing_queue = Self::existing_queue(&mut tx, message_id).await?;
         for rcpt in recipients {
-            self.queue
-                .enqueue_in_transaction(
+            if Self::consume_existing(&mut existing_queue, &rcpt.as_string(), "smtp") {
+                continue;
+            }
+            let queue_id = self.queue
+                .enqueue_submission_in_transaction(
                     &mut tx,
                     message_id,
                     &from.as_string(),
@@ -282,17 +301,11 @@ impl Deliverer {
                     &Route::External,
                 )
                 .await?;
-            sqlx::query("INSERT INTO message_submission_dispositions (id, submission_id, message_id, recipient, disposition) VALUES ($1, $2, $3, $4, 'outbound')")
-                .bind(Uuid::now_v7()).bind(submission_id).bind(message_id).bind(rcpt.as_string())
+            sqlx::query("INSERT INTO mail_submission_recipients (id, submission_id, recipient, route, state, queue_id) VALUES ($1, $2, $3, 'smtp', 'outbound_pending', $4)")
+                .bind(Uuid::now_v7()).bind(submission_id).bind(rcpt.as_string()).bind(queue_id)
                 .execute(&mut *tx).await?;
         }
-        MailStore::release_reference_in_transaction(
-            &mut tx,
-            message_id,
-            MessageReferenceKind::Submission,
-            submission_id,
-        )
-        .await?;
+        MailStore::erase_orphaned_message_in_transaction(&mut tx, message_id).await?;
         tx.commit().await?;
         Ok(message_id)
     }
@@ -314,32 +327,26 @@ impl Deliverer {
         }
 
         let (mailbox, folder) = self.resolve_local(recipient).await?;
-        let prepared = self.prepare(raw).await?;
-        let submission_id = Uuid::now_v7();
+        let prepared = self.prepare(raw)?;
         let mut tx = self.store.begin_reference_transaction().await?;
         let message_id = self
-            .store_prepared(&mut tx, raw, from, transport, &prepared, submission_id)
+            .store_prepared(&mut tx, raw, from, transport, &prepared)
             .await?;
+        let submission_id = Self::ensure_submission(&mut tx, message_id).await?;
+        Self::lock_mailboxes(&mut tx, &[mailbox]).await?;
         let membership_id = self
             .store
             .deliver_in_transaction(&mut tx, mailbox, message_id, folder)
             .await?;
-        sqlx::query("INSERT INTO message_submission_dispositions (id, submission_id, message_id, recipient, disposition, membership_id) VALUES ($1, $2, $3, $4, 'mailbox', $5)")
-            .bind(Uuid::now_v7()).bind(submission_id).bind(message_id).bind(recipient.as_string())
+        sqlx::query("INSERT INTO mail_submission_recipients (id, submission_id, recipient, route, state, membership_id) VALUES ($1, $2, $3, 'local', 'delivered', $4)")
+            .bind(Uuid::now_v7()).bind(submission_id).bind(recipient.as_string())
             .bind(membership_id)
             .execute(&mut *tx).await?;
-        MailStore::release_reference_in_transaction(
-            &mut tx,
-            message_id,
-            MessageReferenceKind::Submission,
-            submission_id,
-        )
-        .await?;
         tx.commit().await?;
         Ok(message_id)
     }
 
-    async fn prepare(&self, raw: &[u8]) -> Result<PreparedMessage> {
+    fn prepare(&self, raw: &[u8]) -> Result<PreparedMessage> {
         let parsed = parse(raw, Limits::default())?;
         let subject = parsed.headers.get("subject").map(str::to_string);
         let msg_id = parsed.headers.get("message-id").map(str::to_string);
@@ -350,13 +357,7 @@ impl Deliverer {
             .map(|r| r.split_whitespace().map(str::to_string).collect())
             .unwrap_or_default();
 
-        let thread_id = self
-            .store
-            .thread_for(in_reply_to.as_deref(), &references, subject.as_deref())
-            .await?;
-
         Ok(PreparedMessage {
-            thread_id,
             subject,
             msg_id,
             in_reply_to,
@@ -372,14 +373,22 @@ impl Deliverer {
         from: &Address,
         transport: Transport,
         prepared: &PreparedMessage,
-        submission_id: Uuid,
     ) -> Result<Uuid> {
+        let thread_id = self
+            .store
+            .thread_for_in_transaction(
+                tx,
+                prepared.in_reply_to.as_deref(),
+                &prepared.references,
+                prepared.subject.as_deref(),
+            )
+            .await?;
         let message_id = self
             .store
-            .store_message_in_transaction(
+            .store_submission_message_in_transaction(
                 tx,
                 raw,
-                prepared.thread_id,
+                thread_id,
                 from,
                 prepared.subject.as_deref(),
                 prepared.msg_id.as_deref(),
@@ -387,7 +396,6 @@ impl Deliverer {
                 &prepared.references,
                 transport,
                 None,
-                Some(submission_id),
             )
             .await?;
 
@@ -397,5 +405,56 @@ impl Deliverer {
                 .await?;
         }
         Ok(message_id)
+    }
+
+    async fn ensure_submission(
+        tx: &mut Transaction<'_, Postgres>,
+        message_id: Uuid,
+    ) -> Result<Uuid> {
+        Ok(MailStore::ensure_submission_in_transaction(tx, message_id).await?)
+    }
+
+    async fn lock_mailboxes(tx: &mut Transaction<'_, Postgres>, ids: &[Uuid]) -> Result<()> {
+        let locked: Vec<(Uuid,)> =
+            sqlx::query_as("SELECT id FROM mailboxes WHERE id = ANY($1) ORDER BY id FOR UPDATE")
+                .bind(ids)
+                .fetch_all(&mut **tx)
+                .await?;
+        let mut unique = ids.to_vec();
+        unique.sort_unstable();
+        unique.dedup();
+        if locked.len() != unique.len() {
+            return Err(sqlx::Error::RowNotFound.into());
+        }
+        Ok(())
+    }
+
+    async fn existing_queue(
+        tx: &mut Transaction<'_, Postgres>,
+        message_id: Uuid,
+    ) -> Result<Vec<(String, String)>> {
+        Ok(sqlx::query_as(
+            "SELECT recipient, route FROM outbound_queue
+             WHERE message_id = $1 ORDER BY created_at, id",
+        )
+        .bind(message_id)
+        .fetch_all(&mut **tx)
+        .await?)
+    }
+
+    fn consume_existing(
+        existing: &mut Vec<(String, String)>,
+        recipient: &str,
+        route: &str,
+    ) -> bool {
+        if let Some(index) = existing
+            .iter()
+            .position(|(r, t)| r == recipient && t == route)
+        {
+            existing.remove(index);
+            true
+        } else {
+            false
+        }
     }
 }
