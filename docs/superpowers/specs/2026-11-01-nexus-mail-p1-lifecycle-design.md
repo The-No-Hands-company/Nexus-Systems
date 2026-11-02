@@ -36,9 +36,9 @@ and P3 optional AI assistance and templates are separate releases.
 7. Spam is never silently deleted. User action moves a message between Inbox,
    Junk, and Trash; inbound mail is placed in Junk automatically only when the
    sender's DMARC policy is `quarantine`.
-8. External message objects have immutable generation keys. A pending cleanup
-   job may delete only its recorded generation, and a new message must attach a
-   new generation rather than reuse a queued key.
+8. External message objects use store-issued, immutable generation keys. A
+   pending cleanup job may delete only its recorded generation; no caller may
+   choose or reuse an external object key.
 
 These rules implement the TNHC Charter's promise that deleting user data
 deletes it everywhere TNHC controls, and the zero-retention design's
@@ -72,6 +72,31 @@ first, checks remaining references, and removes orphaned message content and
 objects only when the reference count is zero. Retried operations must be
 safe: an already-erased membership is a successful no-op from the caller's
 perspective.
+
+### External-object reservation and cleanup
+
+External-body storage is a two-phase protocol; `store_message` must never
+accept a caller-selected object key. Before an uploader writes bytes, it calls
+the Mail store to reserve an external body. The store creates a durable,
+unique generation ID and returns its opaque key. The uploader conditionally
+creates exactly that key (`If-None-Match: *`, or an equivalent no-overwrite
+operation) and then finalizes the reservation while creating the message.
+
+Finalization is one transaction: it locks the reservation, verifies that it is
+live and unfinalized, writes the message's generation reference, and transitions
+the generation to `referenced`. It records the finalized message ID and
+content hash. A duplicate request returns that ID only when the immutable
+payload metadata matches; a mismatched or expired reservation fails without
+attaching the body. Object storage that cannot conditionally create the
+reserved key cannot be used for Mail bodies.
+
+Reservations expire after a bounded retry window. A finalization failure may
+be retried with the same reservation while it is live. Expired or explicitly
+abandoned reservations become durable cleanup jobs even when no message was
+created, covering an uploaded object after a database failure. Cleanup jobs
+carry the immutable generation ID and delete only their reservation's opaque
+key. Neither retries nor future messages can attach a deleted, queued, or
+expired generation.
 
 ## Service lifecycle
 
@@ -159,7 +184,9 @@ The release requires focused automated coverage for:
 - seven-day expiry, a repeated purge, a restart between batches, and a failed
   migration rollback;
 - shared-message references, attachment/object cleanup only after the final
-  membership is erased, and per-mailbox flag removal;
+  membership is erased, pre-upload reservation, conditional-upload collision,
+  finalization retry, abandoned-reservation cleanup, and per-mailbox flag
+  removal;
 - search relevance, folder/unread filters, mailbox isolation, and search
   exclusion of Trash/Junk by default;
 - user spam disposition, DMARC-quarantine placement, and absence of automatic
