@@ -609,9 +609,10 @@ async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
         .await
         .unwrap();
     let external_key = format!("mail-bodies/opaque-object-{}", unique("generation"));
+    let raw = format!("stored externally {}", unique("body"));
     let message_id = s
         .store_message(
-            b"stored externally",
+            raw.as_bytes(),
             thread,
             &from,
             Some("external-body-delete"),
@@ -629,15 +630,26 @@ async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
     s.erase_membership(mailbox.id, message_id).await.unwrap();
 
     let now = chrono::Utc::now();
+    sqlx::query(
+        "UPDATE object_deletion_queue q
+         SET next_attempt_at = $1
+         FROM object_generations g
+         WHERE q.generation_id = g.id AND g.object_key = $2",
+    )
+    .bind(now - Duration::days(36_500))
+    .bind(&external_key)
+    .execute(s.pool())
+    .await
+    .unwrap();
     let job = s
         .claim_object_deletion_jobs(now, 1)
         .await
         .unwrap()
         .pop()
         .expect("the erased generation is queued");
-    assert!(
-        job.object_key.starts_with(&format!("{external_key}/")),
-        "external objects must use an immutable generation key"
+    assert_eq!(
+        job.object_key, external_key,
+        "external cleanup must use the exact key already uploaded by the caller"
     );
 
     s.retry_object_deletion(job.id, now).await.unwrap();
@@ -671,73 +683,39 @@ async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
 }
 
 #[tokio::test]
-async fn cleanup_never_deletes_a_new_object_generation_after_erasure() {
+async fn external_body_keeps_the_uploaded_object_key() {
     let s = store().await;
-    let mailbox = s
-        .create_identity_mailbox(&unique("usr"), "Alice")
-        .await
-        .unwrap();
     let from = Address::parse("sender@example.test").unwrap();
-    let raw = b"equivalent externally stored content";
-    let external_key = "mail-bodies/content-address";
-
-    let first_thread = s
-        .thread_for(None, &[], Some("old-generation"))
+    let external_key = format!("mail-bodies/content-address-{}", unique("key"));
+    let raw = format!("externally uploaded content {}", unique("body"));
+    let thread = s
+        .thread_for(None, &[], Some("external-body"))
         .await
         .unwrap();
-    let first = s
+    let message = s
         .store_message(
-            raw,
-            first_thread,
+            raw.as_bytes(),
+            thread,
             &from,
-            Some("old-generation"),
+            Some("external-body"),
             None,
             None,
             &[],
             Transport::Internal,
-            Some(external_key),
+            Some(&external_key),
         )
         .await
         .unwrap();
-    let inbox = s.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
-    s.deliver(mailbox.id, first, inbox).await.unwrap();
-    s.erase_membership(mailbox.id, first).await.unwrap();
-
-    let queued = s
-        .claim_object_deletion_jobs(chrono::Utc::now(), 1)
-        .await
-        .unwrap()
-        .pop()
-        .expect("erasing the old message queues its generation");
-
-    let second_thread = s
-        .thread_for(None, &[], Some("new-generation"))
-        .await
-        .unwrap();
-    let second = s
-        .store_message(
-            raw,
-            second_thread,
-            &from,
-            Some("new-generation"),
-            None,
-            None,
-            &[],
-            Transport::Internal,
-            Some(external_key),
-        )
-        .await
-        .unwrap();
-    let new_generation: (String,) =
+    let stored_key: (String,) =
         sqlx::query_as("SELECT body_object_key FROM messages WHERE id = $1")
-            .bind(second)
+            .bind(message)
             .fetch_one(s.pool())
             .await
             .unwrap();
 
-    assert_ne!(
-        queued.object_key, new_generation.0,
-        "the queued cleanup must name the erased generation, never a reusable key"
+    assert_eq!(
+        stored_key.0, external_key,
+        "store_message must preserve the key of bytes already uploaded by its caller"
     );
 }
 

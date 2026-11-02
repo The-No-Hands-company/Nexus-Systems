@@ -246,8 +246,9 @@ impl MailStore {
         }
 
         // Over the inline limit the caller must have written the bytes to
-        // object storage and passed the key. Refusing here rather than
-        // silently inlining a huge body keeps the size policy in one place.
+        // object storage and passed the key. Keys are immutable: a supplied
+        // key is retained unchanged and cannot be registered again, because a
+        // later upload could otherwise race queued cleanup for the old body.
         let (inline, key): (Option<&[u8]>, Option<&str>) =
             if raw.len() <= INLINE_BODY_LIMIT && object_key.is_none() {
                 (Some(raw), None)
@@ -256,18 +257,22 @@ impl MailStore {
             };
 
         let id = Uuid::now_v7();
-        let generation =
-            key.map(|base_key| (Uuid::now_v7(), format!("{base_key}/{}", Uuid::now_v7())));
+        let generation_id = key.map(|_| Uuid::now_v7());
         let mut tx = self.pool.begin().await?;
-        if let Some((generation_id, generation_key)) = &generation {
-            sqlx::query(
+        if let (Some(generation_id), Some(object_key)) = (generation_id, key) {
+            let registered: Option<(Uuid,)> = sqlx::query_as(
                 "INSERT INTO object_generations (id, object_key, lifecycle_state, created_at)
-                 VALUES ($1, $2, 'referenced', now())",
+                 VALUES ($1, $2, 'referenced', now())
+                 ON CONFLICT (object_key) DO NOTHING
+                 RETURNING id",
             )
             .bind(generation_id)
-            .bind(generation_key)
-            .execute(&mut *tx)
+            .bind(object_key)
+            .fetch_optional(&mut *tx)
             .await?;
+            if registered.is_none() {
+                return Err(MailStoreError::ObjectKeyAlreadyRegistered);
+            }
         }
         sqlx::query(
             "INSERT INTO messages (id, content_hash, rfc822_msg_id, thread_id, in_reply_to,
@@ -286,8 +291,8 @@ impl MailStore {
         .bind(transport.as_str())
         .bind(raw.len() as i64)
         .bind(inline)
-        .bind(generation.as_ref().map(|(_, generation_key)| generation_key))
-        .bind(generation.as_ref().map(|(generation_id, _)| generation_id))
+        .bind(key)
+        .bind(generation_id)
         .execute(&mut *tx)
         .await?;
 

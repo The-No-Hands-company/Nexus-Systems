@@ -15,6 +15,9 @@ pub enum MailStoreError {
     /// tell the two apart to choose between a 550 and a 451.
     #[error("no mailbox routes this address")]
     NoSuchAddress(String),
+
+    #[error("object storage key is already registered")]
+    ObjectKeyAlreadyRegistered,
 }
 
 impl MailStoreError {

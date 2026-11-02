@@ -6,6 +6,8 @@
 
 CREATE TABLE IF NOT EXISTS object_generations (
     id              UUID PRIMARY KEY,
+    -- The upload contract supplies this key after bytes are already present.
+    -- Reserve it forever: reuse could race cleanup for its old generation.
     object_key      TEXT NOT NULL UNIQUE,
     lifecycle_state TEXT NOT NULL CHECK (lifecycle_state IN ('referenced', 'cleanup_queued', 'deleted')),
     created_at      TIMESTAMPTZ NOT NULL
