@@ -19,5 +19,10 @@ pub mod store;
 
 pub use address::Address;
 pub use error::{MailStoreError, Result};
-pub use models::{Body, Flags, Folder, FolderKind, Mailbox, Message, OwnerKind, Transport};
-pub use store::{content_hash, normalise_subject, ImapMessage, MailStore, MessageSummary, INLINE_BODY_LIMIT};
+pub use models::{
+    Body, ExternalBodyReservation, Flags, Folder, FolderKind, Mailbox, Message, OwnerKind,
+    Transport,
+};
+pub use store::{
+    content_hash, normalise_subject, ImapMessage, MailStore, MessageSummary, INLINE_BODY_LIMIT,
+};

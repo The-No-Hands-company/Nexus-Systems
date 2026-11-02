@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -216,6 +216,31 @@ impl MailStore {
 }
 
 impl MailStore {
+    pub async fn reserve_external_body(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<ExternalBodyReservation> {
+        let generation_id = Uuid::now_v7();
+        let object_key = format!("mail-bodies/{generation_id}");
+        let expires_at = now + Duration::minutes(15);
+        sqlx::query(
+            "INSERT INTO object_generations
+             (id, object_key, lifecycle_state, created_at, reservation_expires_at)
+             VALUES ($1, $2, 'reserved', $3, $4)",
+        )
+        .bind(generation_id)
+        .bind(&object_key)
+        .bind(now)
+        .bind(expires_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(ExternalBodyReservation {
+            generation_id,
+            object_key,
+            expires_at,
+        })
+    }
+
     /// Store a message once, content-addressed.
     ///
     /// Returns the existing id if this exact content is already stored: the
@@ -232,48 +257,47 @@ impl MailStore {
         in_reply_to: Option<&str>,
         references: &[String],
         transport: Transport,
-        object_key: Option<&str>,
+        reservation: Option<&ExternalBodyReservation>,
     ) -> Result<Uuid> {
+        if raw.len() > INLINE_BODY_LIMIT && reservation.is_none() {
+            return Err(MailStoreError::ExternalBodyReservationRequired);
+        }
+
         let hash = content_hash(raw);
+        let now = Utc::now();
+        let mut tx = self.pool.begin().await?;
+
+        let mut reserved_key: Option<String> = None;
+        let mut generation_id: Option<Uuid> = None;
+        if let Some(reservation) = reservation {
+            let object_key =
+                Self::lock_live_external_body_reservation(&mut tx, reservation, now).await?;
+            reserved_key = Some(object_key);
+            generation_id = Some(reservation.generation_id);
+        }
 
         if let Some((existing,)) =
             sqlx::query_as::<_, (Uuid,)>("SELECT id FROM messages WHERE content_hash = $1")
                 .bind(&hash)
-                .fetch_optional(&self.pool)
+                .fetch_optional(&mut *tx)
                 .await?
         {
+            if let (Some(generation_id), Some(object_key)) =
+                (generation_id, reserved_key.as_deref())
+            {
+                Self::queue_reserved_generation_cleanup(&mut tx, generation_id, object_key, now)
+                    .await?;
+            }
+            tx.commit().await?;
             return Ok(existing);
         }
 
-        // Over the inline limit the caller must have written the bytes to
-        // object storage and passed the key. Keys are immutable: a supplied
-        // key is retained unchanged and cannot be registered again, because a
-        // later upload could otherwise race queued cleanup for the old body.
-        let (inline, key): (Option<&[u8]>, Option<&str>) =
-            if raw.len() <= INLINE_BODY_LIMIT && object_key.is_none() {
-                (Some(raw), None)
-            } else {
-                (None, object_key)
-            };
-
         let id = Uuid::now_v7();
-        let generation_id = key.map(|_| Uuid::now_v7());
-        let mut tx = self.pool.begin().await?;
-        if let (Some(generation_id), Some(object_key)) = (generation_id, key) {
-            let registered: Option<(Uuid,)> = sqlx::query_as(
-                "INSERT INTO object_generations (id, object_key, lifecycle_state, created_at)
-                 VALUES ($1, $2, 'referenced', now())
-                 ON CONFLICT (object_key) DO NOTHING
-                 RETURNING id",
-            )
-            .bind(generation_id)
-            .bind(object_key)
-            .fetch_optional(&mut *tx)
-            .await?;
-            if registered.is_none() {
-                return Err(MailStoreError::ObjectKeyAlreadyRegistered);
-            }
-        }
+        let inline = if reserved_key.is_some() {
+            None
+        } else {
+            Some(raw)
+        };
         sqlx::query(
             "INSERT INTO messages (id, content_hash, rfc822_msg_id, thread_id, in_reply_to,
                                    references_ids, subject, from_address, transport,
@@ -291,10 +315,31 @@ impl MailStore {
         .bind(transport.as_str())
         .bind(raw.len() as i64)
         .bind(inline)
-        .bind(key)
+        .bind(reserved_key.as_deref())
         .bind(generation_id)
         .execute(&mut *tx)
         .await?;
+
+        if let (Some(generation_id), Some(object_key)) = (generation_id, reserved_key.as_deref()) {
+            let updated = sqlx::query(
+                "UPDATE object_generations
+                 SET lifecycle_state = 'referenced',
+                     reservation_expires_at = NULL,
+                     finalized_message_id = $2
+                 WHERE id = $1
+                   AND object_key = $3
+                   AND lifecycle_state = 'reserved'
+                   AND finalized_message_id IS NULL",
+            )
+            .bind(generation_id)
+            .bind(id)
+            .bind(object_key)
+            .execute(&mut *tx)
+            .await?;
+            if updated.rows_affected() != 1 {
+                return Err(MailStoreError::ExternalBodyReservationFinalized);
+            }
+        }
 
         sqlx::query("UPDATE threads SET last_activity_at = $1 WHERE id = $2")
             .bind(Utc::now())
@@ -304,6 +349,94 @@ impl MailStore {
 
         tx.commit().await?;
         Ok(id)
+    }
+
+    async fn lock_live_external_body_reservation(
+        tx: &mut Transaction<'_, Postgres>,
+        reservation: &ExternalBodyReservation,
+        now: DateTime<Utc>,
+    ) -> Result<String> {
+        let row: Option<(String, String, Option<DateTime<Utc>>, Option<Uuid>)> = sqlx::query_as(
+            "SELECT object_key, lifecycle_state, reservation_expires_at, finalized_message_id
+             FROM object_generations
+             WHERE id = $1
+             FOR UPDATE",
+        )
+        .bind(reservation.generation_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+        let Some((object_key, lifecycle_state, reservation_expires_at, finalized_message_id)) = row
+        else {
+            return Err(MailStoreError::ExternalBodyReservationMissing);
+        };
+        if object_key != reservation.object_key {
+            return Err(MailStoreError::ExternalBodyReservationUnavailable);
+        }
+        if finalized_message_id.is_some() {
+            return Err(MailStoreError::ExternalBodyReservationFinalized);
+        }
+        if lifecycle_state != "reserved" {
+            return match lifecycle_state.as_str() {
+                "referenced" => Err(MailStoreError::ExternalBodyReservationFinalized),
+                _ => Err(MailStoreError::ExternalBodyReservationUnavailable),
+            };
+        }
+        let Some(expires_at) = reservation_expires_at else {
+            return Err(MailStoreError::ExternalBodyReservationUnavailable);
+        };
+        if expires_at <= now {
+            return Err(MailStoreError::ExternalBodyReservationExpired);
+        }
+        Ok(object_key)
+    }
+
+    async fn queue_reserved_generation_cleanup(
+        tx: &mut Transaction<'_, Postgres>,
+        generation_id: Uuid,
+        object_key: &str,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        let queued: Option<(Uuid,)> = sqlx::query_as(
+            "UPDATE object_generations
+             SET lifecycle_state = 'cleanup_queued',
+                 reservation_expires_at = NULL
+             WHERE id = $1
+               AND object_key = $2
+               AND lifecycle_state = 'reserved'
+               AND finalized_message_id IS NULL
+             RETURNING id",
+        )
+        .bind(generation_id)
+        .bind(object_key)
+        .fetch_optional(&mut **tx)
+        .await?;
+
+        if queued.is_none() {
+            return Err(MailStoreError::ExternalBodyReservationUnavailable);
+        }
+
+        Self::enqueue_object_deletion_job(tx, generation_id, object_key, now).await
+    }
+
+    async fn enqueue_object_deletion_job(
+        tx: &mut Transaction<'_, Postgres>,
+        generation_id: Uuid,
+        object_key: &str,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO object_deletion_queue
+             (id, generation_id, object_key, next_attempt_at, created_at)
+             VALUES ($1, $2, $3, $4, $4)
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(Uuid::now_v7())
+        .bind(generation_id)
+        .bind(object_key)
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
+        Ok(())
     }
 
     /// Put an already-stored message into a mailbox's folder.
@@ -938,6 +1071,37 @@ impl MailStore {
         Ok(purged)
     }
 
+    pub async fn queue_expired_external_body_reservations(
+        &self,
+        now: DateTime<Utc>,
+        limit: i64,
+    ) -> Result<u64> {
+        let mut tx = self.pool.begin().await?;
+        let rows: Vec<(Uuid, String)> = sqlx::query_as(
+            "SELECT id, object_key
+             FROM object_generations
+             WHERE lifecycle_state = 'reserved'
+               AND reservation_expires_at IS NOT NULL
+               AND reservation_expires_at <= $1
+               AND finalized_message_id IS NULL
+             ORDER BY reservation_expires_at, created_at
+             FOR UPDATE SKIP LOCKED
+             LIMIT $2",
+        )
+        .bind(now)
+        .bind(limit.clamp(1, 1_000))
+        .fetch_all(&mut *tx)
+        .await?;
+
+        for (generation_id, object_key) in &rows {
+            Self::queue_reserved_generation_cleanup(&mut tx, *generation_id, object_key, now)
+                .await?;
+        }
+
+        tx.commit().await?;
+        Ok(rows.len() as u64)
+    }
+
     /// Lease queued external-body deletions to the object-storage owner.
     ///
     /// Leases recover automatically after five minutes, so a process crash
@@ -1074,17 +1238,8 @@ impl MailStore {
             .fetch_optional(&mut **tx)
             .await?;
             if let Some((object_key,)) = generation {
-                sqlx::query(
-                    "INSERT INTO object_deletion_queue
-                     (id, generation_id, object_key, next_attempt_at, created_at)
-                 VALUES ($1, $2, $3, now(), now())
-                 ON CONFLICT DO NOTHING",
-                )
-                .bind(Uuid::now_v7())
-                .bind(generation_id)
-                .bind(object_key)
-                .execute(&mut **tx)
-                .await?;
+                Self::enqueue_object_deletion_job(tx, generation_id, &object_key, Utc::now())
+                    .await?;
             }
         }
         Ok(())

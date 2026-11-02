@@ -24,6 +24,10 @@ where
     F: FnMut(String) -> Fut,
     Fut: Future<Output = std::result::Result<(), ()>>,
 {
+    store
+        .queue_expired_external_body_reservations(now, limit)
+        .await?;
+
     let jobs = store.claim_object_deletion_jobs(now, limit).await?;
     let mut stats = ObjectDeletionPass {
         deleted: 0,

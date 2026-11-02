@@ -11,7 +11,10 @@
 //! ends up green while proving nothing.
 
 use chrono::Duration;
-use nexus_mailstore::{Address, FolderKind, MailStore, Transport};
+use nexus_mailstore::{
+    Address, ExternalBodyReservation, FolderKind, MailStore, MailStoreError, Transport,
+    INLINE_BODY_LIMIT,
+};
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
@@ -608,7 +611,8 @@ async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
         .thread_for(None, &[], Some("external-body-delete"))
         .await
         .unwrap();
-    let external_key = format!("mail-bodies/opaque-object-{}", unique("generation"));
+    let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    let external_key = reservation.object_key.clone();
     let raw = format!("stored externally {}", unique("body"));
     let message_id = s
         .store_message(
@@ -620,7 +624,7 @@ async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
             None,
             &[],
             Transport::Internal,
-            Some(&external_key),
+            Some(&reservation),
         )
         .await
         .unwrap();
@@ -683,10 +687,11 @@ async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
 }
 
 #[tokio::test]
-async fn external_body_keeps_the_uploaded_object_key() {
+async fn external_body_keeps_the_reserved_object_key() {
     let s = store().await;
     let from = Address::parse("sender@example.test").unwrap();
-    let external_key = format!("mail-bodies/content-address-{}", unique("key"));
+    let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    let external_key = reservation.object_key.clone();
     let raw = format!("externally uploaded content {}", unique("body"));
     let thread = s
         .thread_for(None, &[], Some("external-body"))
@@ -702,7 +707,7 @@ async fn external_body_keeps_the_uploaded_object_key() {
             None,
             &[],
             Transport::Internal,
-            Some(&external_key),
+            Some(&reservation),
         )
         .await
         .unwrap();
@@ -717,6 +722,69 @@ async fn external_body_keeps_the_uploaded_object_key() {
         stored_key.0, external_key,
         "store_message must preserve the key of bytes already uploaded by its caller"
     );
+}
+
+#[tokio::test]
+async fn externally_stored_body_rejects_a_caller_selected_key() {
+    let s = store().await;
+    let from = Address::parse("sender@example.test").unwrap();
+    let thread = s.thread_for(None, &[], Some("reserved")).await.unwrap();
+    let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    let caller_selected = ExternalBodyReservation {
+        generation_id: reservation.generation_id,
+        object_key: unique("caller-selected-key"),
+        expires_at: reservation.expires_at,
+    };
+    let result = s
+        .store_message(
+            &vec![b'x'; INLINE_BODY_LIMIT + 1],
+            thread,
+            &from,
+            Some("reserved"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            Some(&caller_selected),
+        )
+        .await;
+    assert!(matches!(
+        result,
+        Err(MailStoreError::ExternalBodyReservationUnavailable)
+    ));
+}
+
+#[tokio::test]
+async fn expired_uploaded_reservation_is_queued_without_affecting_live_body() {
+    let s = store().await;
+    let expired = s
+        .reserve_external_body(chrono::Utc::now() - Duration::minutes(16))
+        .await
+        .unwrap();
+    let live = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+
+    assert_eq!(
+        s.queue_expired_external_body_reservations(chrono::Utc::now(), 10)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let (expired_jobs,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM object_deletion_queue WHERE generation_id = $1")
+            .bind(expired.generation_id)
+            .fetch_one(s.pool())
+            .await
+            .unwrap();
+    let (live_jobs,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM object_deletion_queue WHERE generation_id = $1")
+            .bind(live.generation_id)
+            .fetch_one(s.pool())
+            .await
+            .unwrap();
+
+    assert_eq!(expired_jobs, 1);
+    assert_eq!(live_jobs, 0);
 }
 
 #[tokio::test]

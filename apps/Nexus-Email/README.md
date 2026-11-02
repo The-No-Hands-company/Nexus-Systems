@@ -348,7 +348,10 @@ the lifecycle schema before starting a build that requires it.
 
 Large message bodies and attachments use the ecosystem's S3-compatible object
 storage settings: `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, and
-`S3_BUCKET`. Final message erasure creates a durable deletion job in the same
-database transaction; `nexus-mailsmtpd` deletes the object and removes the job
-only after MinIO/S3 confirms success. Failures contain no object key or mail
-content in logs and remain queued for retry.
+`S3_BUCKET`. External bodies are reserved first: Mail issues the immutable
+`mail-bodies/<generation-id>` key, and callers must upload that exact key with
+a no-overwrite write (`If-None-Match: *` or equivalent) before finalizing
+`store_message`. Final message erasure and expired reservations create durable
+deletion jobs in the same database transaction; `nexus-mailsmtpd` deletes the
+object and removes the job only after MinIO/S3 confirms success. Failures
+contain no object key or mail content in logs and remain queued for retry.

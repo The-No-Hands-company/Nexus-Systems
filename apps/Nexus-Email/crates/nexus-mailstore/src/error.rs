@@ -16,8 +16,20 @@ pub enum MailStoreError {
     #[error("no mailbox routes this address")]
     NoSuchAddress(String),
 
-    #[error("object storage key is already registered")]
-    ObjectKeyAlreadyRegistered,
+    #[error("external body reservation is required")]
+    ExternalBodyReservationRequired,
+
+    #[error("external body reservation does not exist")]
+    ExternalBodyReservationMissing,
+
+    #[error("external body reservation has expired")]
+    ExternalBodyReservationExpired,
+
+    #[error("external body reservation is already finalized")]
+    ExternalBodyReservationFinalized,
+
+    #[error("external body reservation is no longer usable")]
+    ExternalBodyReservationUnavailable,
 }
 
 impl MailStoreError {

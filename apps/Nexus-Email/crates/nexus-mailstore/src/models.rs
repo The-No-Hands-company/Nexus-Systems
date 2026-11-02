@@ -104,6 +104,13 @@ pub enum Body {
     Object { key: String },
 }
 
+#[derive(Debug, Clone)]
+pub struct ExternalBodyReservation {
+    pub generation_id: Uuid,
+    pub object_key: String,
+    pub expires_at: DateTime<Utc>,
+}
+
 /// A message as stored: immutable, content-addressed, owned by no mailbox.
 /// Mailbox membership lives in `mailbox_messages`.
 #[derive(Debug, Clone)]
