@@ -14,10 +14,10 @@ work but does not release it until all safety acceptance criteria pass.
 ## Non-negotiable invariants
 
 1. A message is deleted only after its final mailbox membership and every
-   active outbound delivery reference are gone.
-2. Concurrent membership erasure, delivery creation, delivery completion, and
-   message cleanup serialize on the message row. No interleaving may leak an
-   unreachable message or cancel a delivery.
+   non-terminal recipient intent are gone.
+2. Concurrent membership erasure, submission, delivery completion, and message
+   cleanup serialize in one lock order. No interleaving may leak an unreachable
+   message, cancel a delivery, or deadlock reciprocal sends.
 3. Empty Trash permanently erases every current Trash membership, including an
    IMAP `\Deleted` membership that is hidden from display listings.
 4. An external object key is store-issued, unique, and never reused. Cleanup
@@ -35,35 +35,42 @@ work but does not release it until all safety acceptance criteria pass.
 
 ## Message reference model
 
-`messages` remains the shared immutable message row. A new
-`message_references` ledger is the authoritative lifetime boundary. Each
-active row names one `message_id`, a kind (`submission`, `mailbox`, or
-`outbound`), and the immutable ID of the membership or queue row it protects.
-Released rows are retained only as non-content audit state until message
-cleanup; active rows prevent cleanup.
+`messages` remains the shared immutable message row. A new `mail_submissions`
+row is created atomically with a message, and one
+`mail_submission_recipients` intent is created for every envelope recipient.
+The intent records its resolved route and one state: `local_pending`,
+`outbound_pending`, `delivered`, or `failed`. It is the authoritative
+lifetime record; mailbox memberships and outbound queue rows are materialized
+work derived from it, not independent holds.
 
-Message creation atomically creates a `submission` hold. The router replaces
-that hold with mailbox and outbound holds in the same transaction that creates
-the corresponding `mailbox_messages` or `outbound_queue` row. It releases the
-submission hold only after every recipient disposition is durable. A crash
-therefore retains the message behind an unfinished hold rather than exposing a
-creation-before-queue window; a recovery worker resumes or reports the
-unfinished submission without deleting it.
+Submission first parses and resolves every recipient. It then locks the
+message and all local destination mailboxes in ascending UUID order, writes
+the message, submission, and recipient intents, creates local memberships and
+outbound queue rows, and commits once. A crash before commit creates nothing;
+a crash after commit leaves complete durable recipient intents. A submission
+is never exposed in a half-routed state.
 
-Every operation that can create or release a reference locks the message row
-first with `SELECT ... FOR UPDATE`. Explicit erase, Empty Trash, expiry purge,
-delivery completion, and terminal delivery failure release their matching
-ledger row in the same transaction as the protected row's state change.
-Orphan cleanup deletes only while holding that lock and finding no active
-ledger references. It cross-checks the membership and active queue tables
-before deletion to detect an inconsistent ledger as a database error, never
-as permission to erase.
+Outbound work uses a fenced lease. Claiming selects `outbound_pending` intents
+whose queue row is pending or whose delivery lease expired, atomically assigns
+a new lease token and expiry, and marks the queue row delivering. Completion
+or terminal failure requires that lease token, updates both the queue row and
+recipient intent in one transaction, then performs checked orphan cleanup.
+Restart reclaims expired leases; it never leaves a delivery permanently
+`delivering`.
+
+Every lifecycle operation acquires locks in this order: message row, object
+generation row when present, then mailbox rows in ascending UUID order.
+Explicit erase, Empty Trash, expiry purge, queue completion, terminal queue
+retention purge, and external-body finalization all use this order. Orphan
+cleanup runs while holding the message lock and deletes only when there is no
+mailbox membership and no recipient intent in `local_pending` or
+`outbound_pending`. It treats inconsistent queue/intent state as a database
+error, never as permission to erase.
 
 Queue foreign keys must not cascade-delete active work when a message is
-erased. A queue operation retains its ledger reference until terminal
-completion, then releases it atomically. This serializes both creation and
-removal instead of relying on `READ COMMITTED` observations of another
-transaction's uncommitted membership.
+erased. Terminal queue retention purge performs the checked orphan transition
+under the message lock, so queue-only peer relays cannot retain content after
+their last terminal record expires.
 
 ## External-body protocol
 
@@ -136,10 +143,14 @@ details or message content appear in operational logs.
 
 Automated coverage must prove:
 
-- final mailbox erase does not remove a pending or delivering outbound queue
-  reference;
+- final mailbox erase does not remove a pending or leased outbound recipient
+  intent;
 - concurrent final membership erasures result in exactly one cleanup and no
   unreachable message;
+- reciprocal sends do not deadlock, and an expired delivery lease is reclaimed
+  after restart;
+- terminal queue retention performs the final orphan check for queue-only
+  messages;
 - Empty Trash erases visible and IMAP-deleted Trash memberships;
 - finalized and deduplicated reservation retries are idempotent only for
   matching immutable metadata;
