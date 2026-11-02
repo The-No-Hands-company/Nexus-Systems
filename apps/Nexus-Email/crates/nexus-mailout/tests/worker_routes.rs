@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use nexus_maildelivery::{FederatedHandoff, FederatedTransport, HandoffOutcome, Queue, QueuedDelivery, Route};
 use nexus_mailauth::{public_key_record, verify_with_key, Canon, DkimSigner};
 use nexus_mailout::{DeliveryWorker, Egress, WorkerConfig};
-use nexus_mailstore::{Address, MailStore, Transport};
+use nexus_mailstore::{Address, FolderKind, MailStore, MessageReferenceKind, Transport};
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
@@ -57,6 +57,17 @@ async fn queued_from(
     rcpt: &str,
     route: Route,
 ) -> (QueuedDelivery, Vec<u8>) {
+    queued_from_with_copy(store, queue, from, rcpt, route, true).await
+}
+
+async fn queued_from_with_copy(
+    store: &MailStore,
+    queue: &Queue,
+    from: &str,
+    rcpt: &str,
+    route: Route,
+    keep_copy: bool,
+) -> (QueuedDelivery, Vec<u8>) {
     let from = Address::parse(from).unwrap();
     let thread = store.thread_for(None, &[], Some("w")).await.unwrap();
     let raw = format!(
@@ -65,11 +76,52 @@ async fn queued_from(
         Uuid::now_v7().simple()
     )
     .into_bytes();
+    let mailbox = if keep_copy {
+        let mailbox = store.create_node_mailbox("worker sender").await.unwrap();
+        Some((
+            mailbox.id,
+            store.folder(mailbox.id, FolderKind::Sent).await.unwrap(),
+        ))
+    } else {
+        None
+    };
+    let submission = Uuid::now_v7();
+    let mut tx = store.begin_reference_transaction().await.unwrap();
     let id = store
-        .store_message(&raw, thread, &from, Some("w"), None, None, &[], Transport::Internal, None)
+        .store_message_in_transaction(
+            &mut tx,
+            &raw,
+            thread,
+            &from,
+            Some("w"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            None,
+            Some(submission),
+        )
         .await
         .unwrap();
-    queue.enqueue(id, &from.as_string(), rcpt, &route).await.unwrap();
+    queue
+        .enqueue_in_transaction(&mut tx, id, &from.as_string(), rcpt, &route)
+        .await
+        .unwrap();
+    if let Some((mailbox, folder)) = mailbox {
+        store
+            .deliver_in_transaction(&mut tx, mailbox, id, folder)
+            .await
+            .unwrap();
+    }
+    MailStore::release_reference_in_transaction(
+        &mut tx,
+        id,
+        MessageReferenceKind::Submission,
+        submission,
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
     let row: (Uuid, Uuid, String, String, String, String, i32) = sqlx::query_as(
         "SELECT id, message_id, envelope_from, recipient, destination, route, attempts
            FROM outbound_queue WHERE recipient = $1",
@@ -324,7 +376,8 @@ async fn test_process_when_system_mail_is_delivered_should_delete_message_and_qu
     let (store, queue) = setup().await;
     let sender = unique("system.test");
     let rcpt = unique("gmail.example");
-    let (item, _) = queued_from(&store, &queue, &sender, &rcpt, Route::External).await;
+    let (item, _) =
+        queued_from_with_copy(&store, &queue, &sender, &rcpt, Route::External, false).await;
     let message_id = item.message_id;
     let worker = DeliveryWorker::new(store.clone(), queue, purging_config(&sender))
         .with_transport(FakeTransport::answering(HandoffOutcome::Delivered));
@@ -342,7 +395,8 @@ async fn test_process_when_system_mail_is_rejected_should_delete_it() {
     let (store, queue) = setup().await;
     let sender = unique("system.test");
     let rcpt = unique("gmail.example");
-    let (item, _) = queued_from(&store, &queue, &sender, &rcpt, Route::External).await;
+    let (item, _) =
+        queued_from_with_copy(&store, &queue, &sender, &rcpt, Route::External, false).await;
     let message_id = item.message_id;
     let worker = DeliveryWorker::new(store.clone(), queue, purging_config(&sender))
         .with_transport(FakeTransport::answering(HandoffOutcome::Rejected("no such user".into())));
@@ -357,7 +411,8 @@ async fn test_process_when_system_mail_is_deferred_should_keep_it_for_the_retry(
     let (store, queue) = setup().await;
     let sender = unique("system.test");
     let rcpt = unique("gmail.example");
-    let (item, _) = queued_from(&store, &queue, &sender, &rcpt, Route::External).await;
+    let (item, _) =
+        queued_from_with_copy(&store, &queue, &sender, &rcpt, Route::External, false).await;
     let message_id = item.message_id;
     let worker = DeliveryWorker::new(store.clone(), queue, purging_config(&sender))
         .with_transport(FakeTransport::answering(HandoffOutcome::Deferred("peer down".into())));

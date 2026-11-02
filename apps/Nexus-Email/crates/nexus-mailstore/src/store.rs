@@ -24,6 +24,23 @@ pub struct ObjectDeletionJob {
     pub object_key: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageReferenceKind {
+    Submission,
+    Mailbox,
+    Outbound,
+}
+
+impl MessageReferenceKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Submission => "submission",
+            Self::Mailbox => "mailbox",
+            Self::Outbound => "outbound",
+        }
+    }
+}
+
 enum StoreReservationLock {
     Live { object_key: String },
     Finalized { message_id: Uuid },
@@ -64,6 +81,99 @@ impl MailStore {
 
     pub fn pool(&self) -> &PgPool {
         &self.pool
+    }
+
+    pub async fn begin_reference_transaction(&self) -> Result<Transaction<'_, Postgres>> {
+        Ok(self.pool.begin().await?)
+    }
+
+    pub async fn lock_message_in_transaction(
+        tx: &mut Transaction<'_, Postgres>,
+        message_id: Uuid,
+    ) -> Result<bool> {
+        let row: Option<(Uuid,)> =
+            sqlx::query_as("SELECT id FROM messages WHERE id = $1 FOR UPDATE")
+                .bind(message_id)
+                .fetch_optional(&mut **tx)
+                .await?;
+        Ok(row.is_some())
+    }
+
+    pub async fn create_reference_in_transaction(
+        tx: &mut Transaction<'_, Postgres>,
+        message_id: Uuid,
+        kind: MessageReferenceKind,
+        protected_id: Uuid,
+    ) -> Result<()> {
+        if !Self::lock_message_in_transaction(tx, message_id).await? {
+            return Err(sqlx::Error::RowNotFound.into());
+        }
+        let inserted = sqlx::query(
+            "INSERT INTO message_references (id, message_id, kind, protected_id)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (kind, protected_id) DO UPDATE SET released_at = NULL
+             WHERE message_references.message_id = EXCLUDED.message_id",
+        )
+        .bind(Uuid::now_v7())
+        .bind(message_id)
+        .bind(kind.as_str())
+        .bind(protected_id)
+        .execute(&mut **tx)
+        .await?;
+        if inserted.rows_affected() != 1 {
+            return Err(
+                sqlx::Error::Protocol("reference belongs to another message".into()).into(),
+            );
+        }
+        Ok(())
+    }
+
+    pub async fn release_reference_in_transaction(
+        tx: &mut Transaction<'_, Postgres>,
+        message_id: Uuid,
+        kind: MessageReferenceKind,
+        protected_id: Uuid,
+    ) -> Result<()> {
+        if !Self::lock_message_in_transaction(tx, message_id).await? {
+            return Err(sqlx::Error::RowNotFound.into());
+        }
+        let result = sqlx::query(
+            "UPDATE message_references SET released_at = now()
+             WHERE message_id = $1 AND kind = $2 AND protected_id = $3 AND released_at IS NULL",
+        )
+        .bind(message_id)
+        .bind(kind.as_str())
+        .bind(protected_id)
+        .execute(&mut **tx)
+        .await?;
+        if result.rows_affected() != 1 {
+            return Err(sqlx::Error::Protocol("missing active message reference".into()).into());
+        }
+        Ok(())
+    }
+
+    pub async fn require_reference_in_transaction(
+        tx: &mut Transaction<'_, Postgres>,
+        message_id: Uuid,
+        kind: MessageReferenceKind,
+        protected_id: Uuid,
+    ) -> Result<()> {
+        if !Self::lock_message_in_transaction(tx, message_id).await? {
+            return Err(sqlx::Error::RowNotFound.into());
+        }
+        let (active,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS (SELECT 1 FROM message_references
+             WHERE message_id = $1 AND kind = $2 AND protected_id = $3 AND released_at IS NULL)",
+        )
+        .bind(message_id)
+        .bind(kind.as_str())
+        .bind(protected_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        if !active {
+            return Err(sqlx::Error::Protocol("missing active message reference".into()).into());
+        }
+        Ok(())
     }
 
     /// Create a mailbox owned by an ecosystem identity, with the standard
@@ -264,21 +374,59 @@ impl MailStore {
         transport: Transport,
         reservation: Option<&ExternalBodyReservation>,
     ) -> Result<Uuid> {
+        let mut tx = self.begin_reference_transaction().await?;
+        let id = self
+            .store_message_in_transaction(
+                &mut tx,
+                raw,
+                thread_id,
+                from,
+                subject,
+                rfc822_msg_id,
+                in_reply_to,
+                references,
+                transport,
+                reservation,
+                None,
+            )
+            .await?;
+        tx.commit().await?;
+        Ok(id)
+    }
+
+    /// Store the message and a submission hold atomically. A caller that
+    /// routes multiple recipients supplies a distinct hold ID per submission.
+    /// The standalone API creates a distinct recoverable hold per call; use
+    /// this transaction-aware API with a caller-provided ID to release it.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn store_message_in_transaction(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        raw: &[u8],
+        thread_id: Uuid,
+        from: &Address,
+        subject: Option<&str>,
+        rfc822_msg_id: Option<&str>,
+        in_reply_to: Option<&str>,
+        references: &[String],
+        transport: Transport,
+        reservation: Option<&ExternalBodyReservation>,
+        submission_id: Option<Uuid>,
+    ) -> Result<Uuid> {
         if raw.len() > INLINE_BODY_LIMIT && reservation.is_none() {
             return Err(MailStoreError::ExternalBodyReservationRequired);
         }
 
         let hash = content_hash(raw);
+        let submission_id = submission_id.unwrap_or_else(Uuid::now_v7);
         let size_bytes = raw.len() as i64;
         let from_address = from.as_string();
         let now = Utc::now();
-        let mut tx = self.pool.begin().await?;
-
         let mut reserved_key: Option<String> = None;
         let mut generation_id: Option<Uuid> = None;
         if let Some(reservation) = reservation {
             match Self::lock_store_message_reservation(
-                &mut tx,
+                tx,
                 reservation,
                 now,
                 &hash,
@@ -298,25 +446,37 @@ impl MailStore {
                     generation_id = Some(reservation.generation_id);
                 }
                 StoreReservationLock::Finalized { message_id } => {
-                    tx.commit().await?;
+                    Self::create_reference_in_transaction(
+                        tx,
+                        message_id,
+                        MessageReferenceKind::Submission,
+                        submission_id,
+                    )
+                    .await?;
                     return Ok(message_id);
                 }
             }
         }
 
-        if let Some((existing,)) =
-            sqlx::query_as::<_, (Uuid,)>("SELECT id FROM messages WHERE content_hash = $1")
-                .bind(&hash)
-                .fetch_optional(&mut *tx)
-                .await?
+        if let Some((existing,)) = sqlx::query_as::<_, (Uuid,)>(
+            "SELECT id FROM messages WHERE content_hash = $1 FOR UPDATE",
+        )
+        .bind(&hash)
+        .fetch_optional(&mut **tx)
+        .await?
         {
             if let (Some(generation_id), Some(object_key)) =
                 (generation_id, reserved_key.as_deref())
             {
-                Self::queue_reserved_generation_cleanup(&mut tx, generation_id, object_key, now)
-                    .await?;
+                Self::queue_reserved_generation_cleanup(tx, generation_id, object_key, now).await?;
             }
-            tx.commit().await?;
+            Self::create_reference_in_transaction(
+                tx,
+                existing,
+                MessageReferenceKind::Submission,
+                submission_id,
+            )
+            .await?;
             return Ok(existing);
         }
 
@@ -330,7 +490,8 @@ impl MailStore {
             "INSERT INTO messages (id, content_hash, rfc822_msg_id, thread_id, in_reply_to,
                                    references_ids, subject, from_address, transport,
                                    size_bytes, body_inline, body_object_key, body_object_generation_id)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+             ON CONFLICT (content_hash) DO NOTHING",
         )
         .bind(id)
         .bind(&hash)
@@ -345,8 +506,29 @@ impl MailStore {
         .bind(inline)
         .bind(reserved_key.as_deref())
         .bind(generation_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
+
+        let (stored_id,): (Uuid,) =
+            sqlx::query_as("SELECT id FROM messages WHERE content_hash = $1 FOR UPDATE")
+                .bind(&hash)
+                .fetch_one(&mut **tx)
+                .await?;
+        if stored_id != id {
+            if let (Some(generation_id), Some(object_key)) =
+                (generation_id, reserved_key.as_deref())
+            {
+                Self::queue_reserved_generation_cleanup(tx, generation_id, object_key, now).await?;
+            }
+            Self::create_reference_in_transaction(
+                tx,
+                stored_id,
+                MessageReferenceKind::Submission,
+                submission_id,
+            )
+            .await?;
+            return Ok(stored_id);
+        }
 
         if let (Some(generation_id), Some(object_key)) = (generation_id, reserved_key.as_deref()) {
             let updated = sqlx::query(
@@ -362,7 +544,7 @@ impl MailStore {
             .bind(generation_id)
             .bind(id)
             .bind(object_key)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
             if updated.rows_affected() != 1 {
                 return Err(MailStoreError::ExternalBodyReservationFinalized);
@@ -372,10 +554,16 @@ impl MailStore {
         sqlx::query("UPDATE threads SET last_activity_at = $1 WHERE id = $2")
             .bind(Utc::now())
             .bind(thread_id)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
 
-        tx.commit().await?;
+        Self::create_reference_in_transaction(
+            tx,
+            id,
+            MessageReferenceKind::Submission,
+            submission_id,
+        )
+        .await?;
         Ok(id)
     }
 
@@ -627,7 +815,23 @@ impl MailStore {
     /// only the membership row is new, which is why one message can sit in
     /// many mailboxes with independent read state.
     pub async fn deliver(&self, mailbox_id: Uuid, message_id: Uuid, folder_id: Uuid) -> Result<()> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.begin_reference_transaction().await?;
+        self.deliver_in_transaction(&mut tx, mailbox_id, message_id, folder_id)
+            .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn deliver_in_transaction(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        mailbox_id: Uuid,
+        message_id: Uuid,
+        folder_id: Uuid,
+    ) -> Result<Uuid> {
+        if !Self::lock_message_in_transaction(tx, message_id).await? {
+            return Err(sqlx::Error::RowNotFound.into());
+        }
 
         // Claim the next UID under a row lock. Two concurrent deliveries to one
         // mailbox reading uid_next before either writes would hand out the same
@@ -637,25 +841,51 @@ impl MailStore {
             "UPDATE mailboxes SET uid_next = uid_next + 1 WHERE id = $1 RETURNING uid_next - 1",
         )
         .bind(mailbox_id)
-        .fetch_one(&mut *tx)
+        .fetch_one(&mut **tx)
         .await?;
 
-        sqlx::query(
+        let membership: Option<(Uuid,)> = sqlx::query_as(
             "INSERT INTO mailbox_messages (mailbox_id, message_id, folder_id, uid)
              VALUES ($1, $2, $3, $4)
-             ON CONFLICT (mailbox_id, message_id) DO NOTHING",
+             ON CONFLICT (mailbox_id, message_id) DO NOTHING
+             RETURNING id",
         )
         .bind(mailbox_id)
         .bind(message_id)
         .bind(folder_id)
         .bind(uid)
-        .execute(&mut *tx)
+        .fetch_optional(&mut **tx)
         .await?;
 
+        let id = if let Some((id,)) = membership {
+            Self::create_reference_in_transaction(
+                tx,
+                message_id,
+                MessageReferenceKind::Mailbox,
+                id,
+            )
+            .await?;
+            id
+        } else {
+            let (id,): (Uuid,) = sqlx::query_as(
+                "SELECT id FROM mailbox_messages WHERE mailbox_id = $1 AND message_id = $2",
+            )
+            .bind(mailbox_id)
+            .bind(message_id)
+            .fetch_one(&mut **tx)
+            .await?;
+            Self::require_reference_in_transaction(
+                tx,
+                message_id,
+                MessageReferenceKind::Mailbox,
+                id,
+            )
+            .await?;
+            id
+        };
         // The UID is spent even if the insert was a no-op. Rolling it back
         // would let a later message reuse it, and IMAP forbids reuse outright.
-        tx.commit().await?;
-        Ok(())
+        Ok(id)
     }
 
     /// What IMAP needs to open a folder.
@@ -854,6 +1084,19 @@ impl MailStore {
     /// storage depend on the message-format crate and give two places an
     /// opinion about what a message means.
     pub async fn set_search_text(&self, message_id: Uuid, text: &str) -> Result<()> {
+        let mut tx = self.begin_reference_transaction().await?;
+        self.set_search_text_in_transaction(&mut tx, message_id, text)
+            .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn set_search_text_in_transaction(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        message_id: Uuid,
+        text: &str,
+    ) -> Result<()> {
         // Truncated: indexing an entire mail archive's worth of quoted replies
         // makes the index enormous and the results worse, since every message
         // in a thread then matches every term in it.
@@ -861,7 +1104,7 @@ impl MailStore {
         sqlx::query("UPDATE messages SET search_text = $1 WHERE id = $2")
             .bind(clipped)
             .bind(message_id)
-            .execute(&self.pool)
+            .execute(&mut **tx)
             .await?;
         Ok(())
     }
@@ -1152,20 +1395,30 @@ impl MailStore {
     /// Erase one mailbox's membership and delete shared content only after the
     /// final membership is gone.
     pub async fn erase_membership(&self, mailbox_id: Uuid, message_id: Uuid) -> Result<()> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.begin_reference_transaction().await?;
+        if !Self::lock_message_in_transaction(&mut tx, message_id).await? {
+            return Ok(());
+        }
 
         let deleted: Option<(Uuid,)> = sqlx::query_as(
             "DELETE FROM mailbox_messages
              WHERE mailbox_id = $1 AND message_id = $2
-             RETURNING message_id",
+             RETURNING id",
         )
         .bind(mailbox_id)
         .bind(message_id)
         .fetch_optional(&mut *tx)
         .await?;
 
-        if deleted.is_some() {
-            Self::erase_orphaned_message(&mut tx, message_id).await?;
+        if let Some((id,)) = deleted {
+            Self::release_reference_in_transaction(
+                &mut tx,
+                message_id,
+                MessageReferenceKind::Mailbox,
+                id,
+            )
+            .await?;
+            Self::erase_orphaned_message_in_transaction(&mut tx, message_id).await?;
         }
 
         tx.commit().await?;
@@ -1178,7 +1431,10 @@ impl MailStore {
     /// here is authoritative. A restore between the listing and deletion is
     /// therefore retained.
     pub async fn erase_trash_membership(&self, mailbox_id: Uuid, message_id: Uuid) -> Result<bool> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.begin_reference_transaction().await?;
+        if !Self::lock_message_in_transaction(&mut tx, message_id).await? {
+            return Ok(false);
+        }
         let deleted: Option<(Uuid,)> = sqlx::query_as(
             "DELETE FROM mailbox_messages mm
              USING folders f
@@ -1187,15 +1443,22 @@ impl MailStore {
                AND mm.folder_id = f.id
                AND f.mailbox_id = mm.mailbox_id
                AND f.kind = 'trash'
-             RETURNING mm.message_id",
+             RETURNING mm.id",
         )
         .bind(mailbox_id)
         .bind(message_id)
         .fetch_optional(&mut *tx)
         .await?;
 
-        if deleted.is_some() {
-            Self::erase_orphaned_message(&mut tx, message_id).await?;
+        if let Some((id,)) = deleted {
+            Self::release_reference_in_transaction(
+                &mut tx,
+                message_id,
+                MessageReferenceKind::Mailbox,
+                id,
+            )
+            .await?;
+            Self::erase_orphaned_message_in_transaction(&mut tx, message_id).await?;
         }
 
         tx.commit().await?;
@@ -1223,7 +1486,10 @@ impl MailStore {
 
         let mut purged = 0_u64;
         for (mailbox_id, message_id) in rows {
-            let mut tx = self.pool.begin().await?;
+            let mut tx = self.begin_reference_transaction().await?;
+            if !Self::lock_message_in_transaction(&mut tx, message_id).await? {
+                continue;
+            }
             let deleted: Option<(Uuid,)> = sqlx::query_as(
                 "DELETE FROM mailbox_messages mm
                  USING folders f
@@ -1234,7 +1500,7 @@ impl MailStore {
                    AND f.kind = 'trash'
                    AND mm.trash_expires_at IS NOT NULL
                    AND mm.trash_expires_at <= $3
-                 RETURNING mm.message_id",
+                 RETURNING mm.id",
             )
             .bind(mailbox_id)
             .bind(message_id)
@@ -1242,8 +1508,15 @@ impl MailStore {
             .fetch_optional(&mut *tx)
             .await?;
 
-            if deleted.is_some() {
-                Self::erase_orphaned_message(&mut tx, message_id).await?;
+            if let Some((id,)) = deleted {
+                Self::release_reference_in_transaction(
+                    &mut tx,
+                    message_id,
+                    MessageReferenceKind::Mailbox,
+                    id,
+                )
+                .await?;
+                Self::erase_orphaned_message_in_transaction(&mut tx, message_id).await?;
                 purged += 1;
             }
 
@@ -1388,15 +1661,89 @@ impl MailStore {
         Ok(())
     }
 
-    async fn erase_orphaned_message(
+    /// Finish an erasure deferred while another reference was still active.
+    /// Queue-only messages retain their terminal delivery history as before.
+    pub async fn finish_deferred_erasure_in_transaction(
         tx: &mut Transaction<'_, Postgres>,
         message_id: Uuid,
     ) -> Result<()> {
+        let (erasure_requested,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS (SELECT 1 FROM message_references
+             WHERE message_id = $1 AND kind = 'mailbox' AND released_at IS NOT NULL)",
+        )
+        .bind(message_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        if erasure_requested {
+            Self::erase_orphaned_message_in_transaction(tx, message_id).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn erase_orphaned_message_in_transaction(
+        tx: &mut Transaction<'_, Postgres>,
+        message_id: Uuid,
+    ) -> Result<bool> {
+        if !Self::lock_message_in_transaction(tx, message_id).await? {
+            return Ok(false);
+        }
+        let (inconsistent,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS (
+                 SELECT 1 FROM mailbox_messages mm WHERE mm.message_id = $1
+                 AND NOT EXISTS (
+                     SELECT 1 FROM message_references r
+                     WHERE r.message_id = $1 AND r.kind = 'mailbox'
+                       AND r.protected_id = mm.id AND r.released_at IS NULL
+                 )
+             ) OR EXISTS (
+                 SELECT 1 FROM outbound_queue q WHERE q.message_id = $1
+                   AND q.state IN ('pending', 'delivering')
+                   AND NOT EXISTS (
+                     SELECT 1 FROM message_references r
+                     WHERE r.message_id = $1 AND r.kind = 'outbound'
+                       AND r.protected_id = q.id AND r.released_at IS NULL
+                   )
+             )",
+        )
+        .bind(message_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        if inconsistent {
+            return Err(sqlx::Error::Protocol("unprotected message reference".into()).into());
+        }
+        let (active,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS (SELECT 1 FROM message_references
+                            WHERE message_id = $1 AND released_at IS NULL)",
+        )
+        .bind(message_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        if active {
+            return Ok(false);
+        }
+        sqlx::query(
+            "DELETE FROM outbound_queue WHERE message_id = $1 AND state IN ('delivered', 'failed')",
+        )
+        .bind(message_id)
+        .execute(&mut **tx)
+        .await?;
+        sqlx::query(
+            "DELETE FROM message_references WHERE message_id = $1 AND released_at IS NOT NULL",
+        )
+        .bind(message_id)
+        .execute(&mut **tx)
+        .await?;
         let deleted: Option<(Option<Uuid>,)> = sqlx::query_as(
             "DELETE FROM messages
              WHERE id = $1
                AND NOT EXISTS (
+                 SELECT 1 FROM message_references WHERE message_id = $1 AND released_at IS NULL
+               )
+               AND NOT EXISTS (
                  SELECT 1 FROM mailbox_messages WHERE message_id = $1
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM outbound_queue WHERE message_id = $1 AND state IN ('pending', 'delivering')
                )
              RETURNING body_object_generation_id",
         )
@@ -1424,7 +1771,7 @@ impl MailStore {
                     .await?;
             }
         }
-        Ok(())
+        Ok(deleted.is_some())
     }
 
     pub async fn mailbox_for_subject(&self, subject: &str) -> Result<Option<Uuid>> {

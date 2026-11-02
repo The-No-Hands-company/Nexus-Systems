@@ -24,5 +24,6 @@ pub use models::{
     Transport,
 };
 pub use store::{
-    content_hash, normalise_subject, ImapMessage, MailStore, MessageSummary, INLINE_BODY_LIMIT,
+    content_hash, normalise_subject, ImapMessage, MailStore, MessageReferenceKind, MessageSummary,
+    INLINE_BODY_LIMIT,
 };

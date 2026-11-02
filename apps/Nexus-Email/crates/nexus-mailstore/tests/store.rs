@@ -36,6 +36,249 @@ fn unique(prefix: &str) -> String {
     format!("{prefix}-{}", Uuid::now_v7().simple())
 }
 
+async fn finish_submission(store: &MailStore, message: Uuid) {
+    let mut tx = store.pool().begin().await.unwrap();
+    sqlx::query("SELECT id FROM messages WHERE id = $1 FOR UPDATE")
+        .bind(message)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE message_references SET released_at = now()
+         WHERE message_id = $1 AND kind = 'submission' AND released_at IS NULL",
+    )
+    .bind(message)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+}
+
+#[tokio::test]
+async fn unfinished_submission_hold_prevents_orphan_cleanup_after_restart() {
+    let s = store().await;
+    let mailbox = s.create_node_mailbox("unfinished").await.unwrap();
+    let from = Address::parse("sender@example.test").unwrap();
+    let thread = s.thread_for(None, &[], None).await.unwrap();
+    let msg = s
+        .store_message(
+            unique("unfinished").as_bytes(),
+            thread,
+            &from,
+            None,
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            None,
+        )
+        .await
+        .unwrap();
+    let inbox = s.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    s.deliver(mailbox.id, msg, inbox).await.unwrap();
+    let restarted = MailStore::new(s.pool().clone());
+    restarted.erase_membership(mailbox.id, msg).await.unwrap();
+
+    let kinds: Vec<(String,)> = sqlx::query_as(
+        "SELECT kind FROM message_references WHERE message_id = $1 AND released_at IS NULL",
+    )
+    .bind(msg)
+    .fetch_all(s.pool())
+    .await
+    .unwrap();
+    assert_eq!(kinds, vec![("submission".to_string(),)]);
+    let (count,): (i64,) = sqlx::query_as("SELECT count(*) FROM messages WHERE id = $1")
+        .bind(msg)
+        .fetch_one(s.pool())
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[tokio::test]
+async fn duplicate_delivery_rejects_a_missing_membership_hold() {
+    let s = store().await;
+    let mailbox = s.create_node_mailbox("missing hold").await.unwrap();
+    let from = Address::parse("sender@example.test").unwrap();
+    let thread = s.thread_for(None, &[], None).await.unwrap();
+    let msg = s
+        .store_message(
+            unique("missing-hold").as_bytes(),
+            thread,
+            &from,
+            None,
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            None,
+        )
+        .await
+        .unwrap();
+    let inbox = s.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    s.deliver(mailbox.id, msg, inbox).await.unwrap();
+    sqlx::query("UPDATE message_references SET released_at = now() WHERE message_id = $1 AND kind = 'mailbox'")
+        .bind(msg).execute(s.pool()).await.unwrap();
+    assert!(s.deliver(mailbox.id, msg, inbox).await.is_err());
+}
+
+#[tokio::test]
+async fn deduplicated_submissions_have_independent_holds() {
+    let s = store().await;
+    let from = Address::parse("sender@example.test").unwrap();
+    let thread = s.thread_for(None, &[], None).await.unwrap();
+    let raw = unique("concurrent-submission");
+    let (first, second) = tokio::join!(
+        s.store_message(
+            raw.as_bytes(),
+            thread,
+            &from,
+            None,
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            None
+        ),
+        s.store_message(
+            raw.as_bytes(),
+            thread,
+            &from,
+            None,
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            None
+        ),
+    );
+    let first = first.unwrap();
+    let second = second.unwrap();
+    assert_eq!(first, second);
+    let (active,): (i64,) = sqlx::query_as(
+        "SELECT count(*) FROM message_references WHERE message_id = $1 AND kind = 'submission' AND released_at IS NULL",
+    ).bind(first).fetch_one(s.pool()).await.unwrap();
+    assert_eq!(
+        active, 2,
+        "one submission must not release another submission's hold"
+    );
+}
+
+#[tokio::test]
+async fn reference_migration_backfills_existing_and_unfinished_messages() {
+    let s = store().await;
+    let mut tx = s.pool().begin().await.unwrap();
+    let schema = format!("reference_test_{}", Uuid::now_v7().simple());
+    sqlx::query(&format!("CREATE SCHEMA {schema}"))
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("SELECT set_config('search_path', $1, true)")
+        .bind(&schema)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::raw_sql(
+        "CREATE TABLE messages (id UUID PRIMARY KEY);
+         CREATE TABLE mailbox_messages (mailbox_id UUID, message_id UUID REFERENCES messages(id));
+         CREATE TABLE outbound_queue (
+             id UUID PRIMARY KEY, message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
+             state TEXT NOT NULL
+         );",
+    )
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    let mailbox_message = Uuid::now_v7();
+    let queue_message = Uuid::now_v7();
+    let orphan = Uuid::now_v7();
+    let terminal = Uuid::now_v7();
+    for id in [mailbox_message, queue_message, orphan, terminal] {
+        sqlx::query("INSERT INTO messages (id) VALUES ($1)")
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+    }
+    sqlx::query("INSERT INTO mailbox_messages (mailbox_id, message_id) VALUES ($1, $2)")
+        .bind(Uuid::now_v7())
+        .bind(mailbox_message)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO outbound_queue (id, message_id, state) VALUES ($1, $2, 'delivering'), ($3, $4, 'delivered')")
+        .bind(Uuid::now_v7()).bind(queue_message).bind(Uuid::now_v7()).bind(terminal)
+        .execute(&mut *tx).await.unwrap();
+    sqlx::raw_sql(include_str!(
+        "../migrations/20261104000010_message_reference_safety.sql"
+    ))
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    for (message, kind) in [
+        (mailbox_message, "mailbox"),
+        (queue_message, "outbound"),
+        (orphan, "submission"),
+        (terminal, "submission"),
+    ] {
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT kind FROM message_references WHERE message_id = $1 AND released_at IS NULL",
+        )
+        .bind(message)
+        .fetch_all(&mut *tx)
+        .await
+        .unwrap();
+        assert_eq!(rows, vec![(kind.to_string(),)]);
+    }
+    tx.rollback().await.unwrap();
+}
+
+#[tokio::test]
+async fn concurrent_final_membership_erasure_deletes_shared_message_once() {
+    let s = store().await;
+    let first = s.create_node_mailbox("first").await.unwrap();
+    let second = s.create_node_mailbox("second").await.unwrap();
+    let from = Address::parse("sender@example.test").unwrap();
+    let thread = s.thread_for(None, &[], None).await.unwrap();
+    let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    let msg = s
+        .store_message(
+            unique("concurrent-erase").as_bytes(),
+            thread,
+            &from,
+            None,
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            Some(&reservation),
+        )
+        .await
+        .unwrap();
+    for mailbox in [first.id, second.id] {
+        let inbox = s.folder(mailbox, FolderKind::Inbox).await.unwrap();
+        s.deliver(mailbox, msg, inbox).await.unwrap();
+    }
+    finish_submission(&s, msg).await;
+
+    let (a, b) = tokio::join!(
+        s.erase_membership(first.id, msg),
+        s.erase_membership(second.id, msg)
+    );
+    a.unwrap();
+    b.unwrap();
+    let (messages, jobs): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM messages WHERE id = $1),
+                (SELECT count(*) FROM object_deletion_queue WHERE generation_id = $2)",
+    )
+    .bind(msg)
+    .bind(reservation.generation_id)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert_eq!((messages, jobs), (0, 1));
+}
+
 #[tokio::test]
 async fn one_message_lands_in_many_mailboxes_without_being_copied() {
     // The central claim of the schema. If this regresses, every message
@@ -284,6 +527,7 @@ async fn trash_membership_expires_after_seven_days_and_last_copy_is_erased() {
     let bob_trash = s.folder(bob.id, FolderKind::Trash).await.unwrap();
     s.deliver(alice.id, msg, alice_inbox).await.unwrap();
     s.deliver(bob.id, msg, bob_inbox).await.unwrap();
+    finish_submission(&s, msg).await;
 
     s.erase_membership(alice.id, msg).await.unwrap();
 
@@ -631,6 +875,7 @@ async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
     let inbox = s.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
     s.deliver(mailbox.id, message_id, inbox).await.unwrap();
 
+    finish_submission(&s, message_id).await;
     s.erase_membership(mailbox.id, message_id).await.unwrap();
 
     let now = chrono::Utc::now();

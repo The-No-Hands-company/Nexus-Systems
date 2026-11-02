@@ -34,6 +34,115 @@ fn msg(from: &str, to: &str, subject: &str, body: &str) -> Vec<u8> {
 }
 
 #[tokio::test]
+async fn mixed_submission_leaves_only_durable_mailbox_and_outbound_holds() {
+    let (d, store, _, local) = harness().await;
+    let mailbox = store.create_node_mailbox("mixed").await.unwrap();
+    let sender = Address::parse("sender@example.test").unwrap();
+    let local_address = Address::parse(&format!("local@{local}")).unwrap();
+    let external = Address::parse("someone@outside.example").unwrap();
+    store
+        .add_address(mailbox.id, &local_address, true)
+        .await
+        .unwrap();
+    let raw = msg(&sender.as_string(), "mixed", "mixed", "body");
+    let outcomes = d
+        .submit(&raw, &sender, &[local_address, external], None)
+        .await
+        .unwrap();
+    assert_eq!(outcomes[0].disposition, Disposition::DeliveredLocally);
+    assert_eq!(outcomes[1].disposition, Disposition::Queued);
+
+    let kinds: Vec<(String,)> = sqlx::query_as(
+        "SELECT r.kind FROM message_references r JOIN messages m ON m.id = r.message_id
+         WHERE m.content_hash = encode(sha256($1), 'hex') AND r.released_at IS NULL
+         ORDER BY r.kind",
+    )
+    .bind(&raw[..])
+    .fetch_all(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        kinds,
+        vec![("mailbox".to_string(),), ("outbound".to_string(),)]
+    );
+}
+
+#[tokio::test]
+async fn purging_finished_queue_forgets_outbound_disposition_recipient() {
+    let (d, store, queue, local) = harness().await;
+    let sender_mailbox = store.create_node_mailbox("sender").await.unwrap();
+    let sender = Address::parse(&format!("sender@{local}")).unwrap();
+    let recipient = Address::parse(&format!("purge-{}@outside.example", Uuid::now_v7())).unwrap();
+    let raw = msg(
+        &sender.as_string(),
+        &recipient.as_string(),
+        "privacy",
+        "body",
+    );
+    d.submit(&raw, &sender, &[recipient.clone()], Some(sender_mailbox.id))
+        .await
+        .unwrap();
+    let (id,): (Uuid,) = sqlx::query_as("SELECT id FROM outbound_queue WHERE recipient = $1")
+        .bind(recipient.as_string())
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    queue.mark_delivered(id).await.unwrap();
+    sqlx::query(
+        "UPDATE outbound_queue SET completed_at = now() - interval '2 hours' WHERE id = $1",
+    )
+    .bind(id)
+    .execute(store.pool())
+    .await
+    .unwrap();
+    queue
+        .purge_finished(chrono::Duration::hours(1), chrono::Duration::days(7))
+        .await
+        .unwrap();
+    let (remaining,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM message_submission_dispositions WHERE recipient = $1")
+            .bind(recipient.as_string())
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_eq!(
+        remaining, 0,
+        "queue retention must also forget its durable recipient outcome"
+    );
+}
+
+#[tokio::test]
+async fn erasing_mailbox_copy_forgets_its_local_recipient_outcomes() {
+    let (d, store, _, local) = harness().await;
+    let sender_mailbox = store.create_node_mailbox("sender").await.unwrap();
+    let receiver = store.create_node_mailbox("receiver").await.unwrap();
+    let sender = Address::parse(&format!("sender@{local}")).unwrap();
+    let first = Address::parse(&format!("first@{local}")).unwrap();
+    let second = Address::parse(&format!("second@{local}")).unwrap();
+    store.add_address(receiver.id, &first, true).await.unwrap();
+    store
+        .add_address(receiver.id, &second, false)
+        .await
+        .unwrap();
+    let raw = msg(&sender.as_string(), "local", "privacy", "body");
+    d.submit(&raw, &sender, &[first, second], Some(sender_mailbox.id))
+        .await
+        .unwrap();
+    let (message,): (Uuid,) =
+        sqlx::query_as("SELECT id FROM messages WHERE content_hash = encode(sha256($1), 'hex')")
+            .bind(&raw[..])
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    store.erase_membership(receiver.id, message).await.unwrap();
+    let (messages, local_outcomes): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM messages WHERE id = $1),
+                (SELECT count(*) FROM message_submission_dispositions WHERE message_id = $1 AND disposition = 'mailbox')",
+    ).bind(message).fetch_one(store.pool()).await.unwrap();
+    assert_eq!((messages, local_outcomes), (1, 0));
+}
+
+#[tokio::test]
 async fn a_local_message_arrives_in_the_recipients_inbox() {
     let (d, store, _, local) = harness().await;
 
@@ -112,6 +221,19 @@ async fn one_bad_address_does_not_stop_the_others() {
         other => panic!("expected a rejection, got {other:?}"),
     }
     assert_eq!(store.unseen_count(bob_mb.id).await.unwrap(), 1);
+    let dispositions: Vec<(String,)> = sqlx::query_as(
+        "SELECT d.disposition FROM message_submission_dispositions d
+         JOIN messages m ON m.id = d.message_id
+         WHERE m.content_hash = encode(sha256($1), 'hex') ORDER BY d.disposition",
+    )
+    .bind(&raw[..])
+    .fetch_all(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        dispositions,
+        vec![("mailbox".to_string(),), ("rejected".to_string(),)]
+    );
 }
 
 #[tokio::test]

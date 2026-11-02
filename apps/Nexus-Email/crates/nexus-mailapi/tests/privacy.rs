@@ -6,7 +6,7 @@ use std::sync::{Arc, Once};
 
 use nexus_mailapi::{router, AppState};
 use nexus_maildelivery::{Deliverer, Queue, Router};
-use nexus_mailstore::{Address, MailStore};
+use nexus_mailstore::{Address, MailStore, MessageReferenceKind};
 use sqlx::postgres::PgPoolOptions;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -438,9 +438,12 @@ async fn permanent_delete_and_empty_trash_are_idempotent_and_mailbox_scoped() {
         .thread_for(None, &[], Some("Shared"))
         .await
         .unwrap();
+    let shared_submission = Uuid::now_v7();
+    let mut tx = api.store.begin_reference_transaction().await.unwrap();
     let shared = api
         .store
-        .store_message(
+        .store_message_in_transaction(
+            &mut tx,
             b"From: sender@example.test\r\nSubject: Shared\r\n\r\nbody",
             thread,
             &from,
@@ -450,17 +453,27 @@ async fn permanent_delete_and_empty_trash_are_idempotent_and_mailbox_scoped() {
             &[],
             nexus_mailstore::Transport::Internal,
             None,
+            Some(shared_submission),
         )
         .await
         .unwrap();
     api.store
-        .deliver(owner.id, shared, owner_trash)
+        .deliver_in_transaction(&mut tx, owner.id, shared, owner_trash)
         .await
         .unwrap();
     api.store
-        .deliver(other.id, shared, other_inbox)
+        .deliver_in_transaction(&mut tx, other.id, shared, other_inbox)
         .await
         .unwrap();
+    MailStore::release_reference_in_transaction(
+        &mut tx,
+        shared,
+        MessageReferenceKind::Submission,
+        shared_submission,
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
 
     let owner_only = delete(
         api.addr,
@@ -519,9 +532,12 @@ async fn permanent_delete_and_empty_trash_are_idempotent_and_mailbox_scoped() {
         .thread_for(None, &[], Some("Lonely"))
         .await
         .unwrap();
+    let lonely_submission = Uuid::now_v7();
+    let mut tx = api.store.begin_reference_transaction().await.unwrap();
     let lonely = api
         .store
-        .store_message(
+        .store_message_in_transaction(
+            &mut tx,
             b"From: sender@example.test\r\nSubject: Lonely\r\n\r\nbody",
             lonely_thread,
             &from,
@@ -531,17 +547,27 @@ async fn permanent_delete_and_empty_trash_are_idempotent_and_mailbox_scoped() {
             &[],
             nexus_mailstore::Transport::Internal,
             None,
+            Some(lonely_submission),
         )
         .await
         .unwrap();
     api.store
-        .deliver(owner.id, lonely, owner_trash)
+        .deliver_in_transaction(&mut tx, owner.id, lonely, owner_trash)
         .await
         .unwrap();
     api.store
-        .deliver(other.id, lonely, other_trash)
+        .deliver_in_transaction(&mut tx, other.id, lonely, other_trash)
         .await
         .unwrap();
+    MailStore::release_reference_in_transaction(
+        &mut tx,
+        lonely,
+        MessageReferenceKind::Submission,
+        lonely_submission,
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
 
     let empty = post(
         api.addr,

@@ -1,5 +1,8 @@
 use nexus_mailmsg::{parse, tree, Limits};
-use nexus_mailstore::{Address, FolderKind, MailStore, MailStoreError, Transport};
+use nexus_mailstore::{
+    Address, FolderKind, MailStore, MailStoreError, MessageReferenceKind, Transport,
+};
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::error::{DeliveryError, Result};
@@ -20,6 +23,21 @@ pub enum Disposition {
     /// Accepted into the outbound queue for a peer or the outside world.
     Queued,
     /// Refused outright, with a reason the sender can act on.
+    Rejected(String),
+}
+
+struct PreparedMessage {
+    thread_id: Uuid,
+    subject: Option<String>,
+    msg_id: Option<String>,
+    in_reply_to: Option<String>,
+    references: Vec<String>,
+    search_text: Option<String>,
+}
+
+enum ResolvedRecipient {
+    Local { mailbox: Uuid, folder: Uuid },
+    Queued(Route),
     Rejected(String),
 }
 
@@ -52,67 +70,98 @@ impl Deliverer {
         recipients: &[Address],
         sender_mailbox: Option<Uuid>,
     ) -> Result<Vec<Outcome>> {
-        let parsed = parse(raw, Limits::default())?;
-        let subject = parsed.headers.get("subject").map(str::to_string);
-        let msg_id = parsed.headers.get("message-id").map(str::to_string);
-        let in_reply_to = parsed.headers.get("in-reply-to").map(str::to_string);
-        let references: Vec<String> = parsed
-            .headers
-            .get("references")
-            .map(|r| r.split_whitespace().map(str::to_string).collect())
-            .unwrap_or_default();
-
-        let thread_id = self
-            .store
-            .thread_for(in_reply_to.as_deref(), &references, subject.as_deref())
-            .await?;
-
-        // Stored once, before any routing. Every recipient — local, federated
-        // or external — references this single row.
-        let message_id = self
-            .store
-            .store_message(
-                raw,
-                thread_id,
-                from,
-                subject.as_deref(),
-                msg_id.as_deref(),
-                in_reply_to.as_deref(),
-                &references,
-                Transport::Internal,
-                None,
-            )
-            .await?;
-
-        if let Some(text) = Self::searchable_text(raw) {
-            self.store.set_search_text(message_id, &text).await?;
-        }
-
-        let mut outcomes = Vec::with_capacity(recipients.len());
+        let prepared = self.prepare(raw).await?;
+        let mut resolved = Vec::with_capacity(recipients.len());
         for rcpt in recipients {
-            let outcome = match self.router.route(rcpt) {
-                Route::Local => match self.deliver_local(message_id, rcpt).await {
-                    Ok(()) => Disposition::DeliveredLocally,
-                    Err(DeliveryError::Permanent { reason, .. }) => Disposition::Rejected(reason),
+            resolved.push(match self.router.route(rcpt) {
+                Route::Local => match self.resolve_local(rcpt).await {
+                    Ok((mailbox, folder)) => ResolvedRecipient::Local { mailbox, folder },
+                    Err(DeliveryError::Permanent { reason, .. }) => {
+                        ResolvedRecipient::Rejected(reason)
+                    }
                     Err(e) => return Err(e),
                 },
-                route => {
-                    self.queue
-                        .enqueue(message_id, &from.as_string(), &rcpt.as_string(), &route)
+                route => ResolvedRecipient::Queued(route),
+            });
+        }
+        let sender_copy = match sender_mailbox {
+            Some(mailbox) => Some((mailbox, self.store.folder(mailbox, FolderKind::Sent).await?)),
+            None => None,
+        };
+        let submission_id = Uuid::now_v7();
+        let mut tx = self.store.begin_reference_transaction().await?;
+        let message_id = self
+            .store_prepared(
+                &mut tx,
+                raw,
+                from,
+                Transport::Internal,
+                &prepared,
+                submission_id,
+            )
+            .await?;
+        let mut outcomes = Vec::with_capacity(recipients.len());
+        for (rcpt, route) in recipients.iter().zip(resolved) {
+            let (outcome, membership_id) = match route {
+                ResolvedRecipient::Local { mailbox, folder } => {
+                    let membership_id = self
+                        .store
+                        .deliver_in_transaction(&mut tx, mailbox, message_id, folder)
                         .await?;
-                    Disposition::Queued
+                    (Disposition::DeliveredLocally, Some(membership_id))
                 }
+                ResolvedRecipient::Queued(route) => {
+                    self.queue
+                        .enqueue_in_transaction(
+                            &mut tx,
+                            message_id,
+                            &from.as_string(),
+                            &rcpt.as_string(),
+                            &route,
+                        )
+                        .await?;
+                    (Disposition::Queued, None)
+                }
+                ResolvedRecipient::Rejected(reason) => (Disposition::Rejected(reason), None),
             };
-            outcomes.push(Outcome { recipient: rcpt.as_string(), disposition: outcome });
+            let (disposition, reason) = match &outcome {
+                Disposition::DeliveredLocally => ("mailbox", None),
+                Disposition::Queued => ("outbound", None),
+                Disposition::Rejected(reason) => ("rejected", Some(reason.as_str())),
+            };
+            sqlx::query(
+                "INSERT INTO message_submission_dispositions
+                 (id, submission_id, message_id, recipient, disposition, reason, membership_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            )
+            .bind(Uuid::now_v7())
+            .bind(submission_id)
+            .bind(message_id)
+            .bind(rcpt.as_string())
+            .bind(disposition)
+            .bind(reason)
+            .bind(membership_id)
+            .execute(&mut *tx)
+            .await?;
+            outcomes.push(Outcome {
+                recipient: rcpt.as_string(),
+                disposition: outcome,
+            });
         }
 
-        // The sender keeps a copy. Same message row again — a sent message is
-        // not a second copy of itself.
-        if let Some(mailbox) = sender_mailbox {
-            let sent = self.store.folder(mailbox, FolderKind::Sent).await?;
-            self.store.deliver(mailbox, message_id, sent).await?;
+        if let Some((mailbox, folder)) = sender_copy {
+            self.store
+                .deliver_in_transaction(&mut tx, mailbox, message_id, folder)
+                .await?;
         }
-
+        MailStore::release_reference_in_transaction(
+            &mut tx,
+            message_id,
+            MessageReferenceKind::Submission,
+            submission_id,
+        )
+        .await?;
+        tx.commit().await?;
         Ok(outcomes)
     }
 
@@ -140,8 +189,7 @@ impl Deliverer {
         })
     }
 
-    /// Deliver an already-stored message into a local mailbox's INBOX.
-    async fn deliver_local(&self, message_id: Uuid, rcpt: &Address) -> Result<()> {
+    async fn resolve_local(&self, rcpt: &Address) -> Result<(Uuid, Uuid)> {
         let mailbox = match self.store.resolve(rcpt).await {
             Ok(id) => id,
             // "No mailbox here" is a permanent answer, not an error: the
@@ -157,8 +205,7 @@ impl Deliverer {
         };
 
         let inbox = self.store.folder(mailbox, FolderKind::Inbox).await?;
-        self.store.deliver(mailbox, message_id, inbox).await?;
-        Ok(())
+        Ok((mailbox, inbox))
     }
 
     /// Accept a message that arrived over SMTP from the outside world.
@@ -212,12 +259,41 @@ impl Deliverer {
             }
         }
 
-        let message_id = self.store_incoming(raw, from, Transport::Federated).await?;
+        let prepared = self.prepare(raw).await?;
+        let submission_id = Uuid::now_v7();
+        let mut tx = self.store.begin_reference_transaction().await?;
+        let message_id = self
+            .store_prepared(
+                &mut tx,
+                raw,
+                from,
+                Transport::Federated,
+                &prepared,
+                submission_id,
+            )
+            .await?;
         for rcpt in recipients {
             self.queue
-                .enqueue(message_id, &from.as_string(), &rcpt.as_string(), &Route::External)
+                .enqueue_in_transaction(
+                    &mut tx,
+                    message_id,
+                    &from.as_string(),
+                    &rcpt.as_string(),
+                    &Route::External,
+                )
                 .await?;
+            sqlx::query("INSERT INTO message_submission_dispositions (id, submission_id, message_id, recipient, disposition) VALUES ($1, $2, $3, $4, 'outbound')")
+                .bind(Uuid::now_v7()).bind(submission_id).bind(message_id).bind(rcpt.as_string())
+                .execute(&mut *tx).await?;
         }
+        MailStore::release_reference_in_transaction(
+            &mut tx,
+            message_id,
+            MessageReferenceKind::Submission,
+            submission_id,
+        )
+        .await?;
+        tx.commit().await?;
         Ok(message_id)
     }
 
@@ -237,13 +313,33 @@ impl Deliverer {
             });
         }
 
-        let message_id = self.store_incoming(raw, from, transport).await?;
-        self.deliver_local(message_id, recipient).await?;
+        let (mailbox, folder) = self.resolve_local(recipient).await?;
+        let prepared = self.prepare(raw).await?;
+        let submission_id = Uuid::now_v7();
+        let mut tx = self.store.begin_reference_transaction().await?;
+        let message_id = self
+            .store_prepared(&mut tx, raw, from, transport, &prepared, submission_id)
+            .await?;
+        let membership_id = self
+            .store
+            .deliver_in_transaction(&mut tx, mailbox, message_id, folder)
+            .await?;
+        sqlx::query("INSERT INTO message_submission_dispositions (id, submission_id, message_id, recipient, disposition, membership_id) VALUES ($1, $2, $3, $4, 'mailbox', $5)")
+            .bind(Uuid::now_v7()).bind(submission_id).bind(message_id).bind(recipient.as_string())
+            .bind(membership_id)
+            .execute(&mut *tx).await?;
+        MailStore::release_reference_in_transaction(
+            &mut tx,
+            message_id,
+            MessageReferenceKind::Submission,
+            submission_id,
+        )
+        .await?;
+        tx.commit().await?;
         Ok(message_id)
     }
 
-    /// Parse, thread, store and index a message that arrived from elsewhere.
-    async fn store_incoming(&self, raw: &[u8], from: &Address, transport: Transport) -> Result<Uuid> {
+    async fn prepare(&self, raw: &[u8]) -> Result<PreparedMessage> {
         let parsed = parse(raw, Limits::default())?;
         let subject = parsed.headers.get("subject").map(str::to_string);
         let msg_id = parsed.headers.get("message-id").map(str::to_string);
@@ -259,25 +355,47 @@ impl Deliverer {
             .thread_for(in_reply_to.as_deref(), &references, subject.as_deref())
             .await?;
 
+        Ok(PreparedMessage {
+            thread_id,
+            subject,
+            msg_id,
+            in_reply_to,
+            references,
+            search_text: Self::searchable_text(raw),
+        })
+    }
+
+    async fn store_prepared(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        raw: &[u8],
+        from: &Address,
+        transport: Transport,
+        prepared: &PreparedMessage,
+        submission_id: Uuid,
+    ) -> Result<Uuid> {
         let message_id = self
             .store
-            .store_message(
+            .store_message_in_transaction(
+                tx,
                 raw,
-                thread_id,
+                prepared.thread_id,
                 from,
-                subject.as_deref(),
-                msg_id.as_deref(),
-                in_reply_to.as_deref(),
-                &references,
+                prepared.subject.as_deref(),
+                prepared.msg_id.as_deref(),
+                prepared.in_reply_to.as_deref(),
+                &prepared.references,
                 transport,
                 None,
+                Some(submission_id),
             )
             .await?;
 
-        if let Some(text) = Self::searchable_text(raw) {
-            self.store.set_search_text(message_id, &text).await?;
+        if let Some(text) = &prepared.search_text {
+            self.store
+                .set_search_text_in_transaction(tx, message_id, text)
+                .await?;
         }
-
         Ok(message_id)
     }
 }

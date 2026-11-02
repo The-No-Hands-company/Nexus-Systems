@@ -2,7 +2,7 @@
 //! declared dead and the sender told.
 
 use nexus_maildelivery::{backoff_for, max_attempts, Queue, Route};
-use nexus_mailstore::{Address, MailStore, Transport};
+use nexus_mailstore::{Address, FolderKind, MailStore, Transport};
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
@@ -35,6 +35,266 @@ async fn a_message(store: &MailStore) -> Uuid {
         .store_message(raw.as_bytes(), thread, &from, Some("q"), None, None, &[], Transport::Internal, None)
         .await
         .unwrap()
+}
+
+async fn finish_submission(store: &MailStore, message: Uuid) {
+    let mut tx = store.pool().begin().await.unwrap();
+    sqlx::query("SELECT id FROM messages WHERE id = $1 FOR UPDATE")
+        .bind(message)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE message_references SET released_at = now() WHERE message_id = $1 AND kind = 'submission' AND released_at IS NULL")
+        .bind(message).execute(&mut *tx).await.unwrap();
+    tx.commit().await.unwrap();
+}
+
+#[tokio::test]
+async fn erasing_final_mailbox_copy_keeps_pending_outbound_delivery() {
+    let (store, queue) = harness().await;
+    let mailbox = store.create_node_mailbox("reference safety").await.unwrap();
+    let msg = a_message(&store).await;
+    let inbox = store.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    store.deliver(mailbox.id, msg, inbox).await.unwrap();
+    queue
+        .enqueue(
+            msg,
+            "a@test.invalid",
+            "recipient@peer.example",
+            &Route::External,
+        )
+        .await
+        .unwrap();
+    finish_submission(&store, msg).await;
+
+    store.erase_membership(mailbox.id, msg).await.unwrap();
+
+    let (messages, pending): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM messages WHERE id = $1),
+                (SELECT count(*) FROM outbound_queue WHERE message_id = $1 AND state = 'pending')",
+    )
+    .bind(msg)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        (messages, pending),
+        (1, 1),
+        "pending delivery must retain its message"
+    );
+}
+
+#[tokio::test]
+async fn erasure_waits_for_uncommitted_queue_reference() {
+    let (store, queue) = harness().await;
+    let mailbox = store.create_node_mailbox("queue race").await.unwrap();
+    let msg = a_message(&store).await;
+    let inbox = store.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    store.deliver(mailbox.id, msg, inbox).await.unwrap();
+    finish_submission(&store, msg).await;
+    let mut tx = store.begin_reference_transaction().await.unwrap();
+    let (blocker,): (i32,) = sqlx::query_as("SELECT pg_backend_pid()")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    queue
+        .enqueue_in_transaction(
+            &mut tx,
+            msg,
+            "a@test.invalid",
+            "race@peer.example",
+            &Route::External,
+        )
+        .await
+        .unwrap();
+    let other = store.clone();
+    let eraser = tokio::spawn(async move { other.erase_membership(mailbox.id, msg).await });
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            assert!(!eraser.is_finished(), "erasure must wait for the queue transaction");
+            let (blocked,): (bool,) = sqlx::query_as(
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)))",
+            ).bind(blocker).fetch_one(store.pool()).await.unwrap();
+            if blocked { break; }
+            tokio::task::yield_now().await;
+        }
+    }).await.expect("eraser never reached the message row lock");
+    tx.commit().await.unwrap();
+    eraser.await.unwrap().unwrap();
+    let (messages, pending): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM messages WHERE id = $1),
+                (SELECT count(*) FROM outbound_queue WHERE message_id = $1 AND state = 'pending')",
+    )
+    .bind(msg)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!((messages, pending), (1, 1));
+}
+
+#[tokio::test]
+async fn interrupted_reference_transaction_rolls_back_message_and_queue() {
+    let (store, queue) = harness().await;
+    let from = Address::parse("sender@example.test").unwrap();
+    let thread = store.thread_for(None, &[], None).await.unwrap();
+    let raw = format!("interrupted-{}", Uuid::now_v7());
+    let submission = Uuid::now_v7();
+    let mut tx = store.begin_reference_transaction().await.unwrap();
+    let msg = store
+        .store_message_in_transaction(
+            &mut tx,
+            raw.as_bytes(),
+            thread,
+            &from,
+            None,
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            None,
+            Some(submission),
+        )
+        .await
+        .unwrap();
+    queue
+        .enqueue_in_transaction(
+            &mut tx,
+            msg,
+            &from.as_string(),
+            "outside@example.test",
+            &Route::External,
+        )
+        .await
+        .unwrap();
+    tx.rollback().await.unwrap();
+    let (messages, references, rows): (i64, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM messages WHERE id = $1),
+                (SELECT count(*) FROM message_references WHERE message_id = $1),
+                (SELECT count(*) FROM outbound_queue WHERE message_id = $1)",
+    )
+    .bind(msg)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!((messages, references, rows), (0, 0, 0));
+}
+
+#[tokio::test]
+async fn inconsistent_active_queue_reference_aborts_erasure() {
+    let (store, queue) = harness().await;
+    let mailbox = store.create_node_mailbox("inconsistent").await.unwrap();
+    let msg = a_message(&store).await;
+    let inbox = store.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    store.deliver(mailbox.id, msg, inbox).await.unwrap();
+    queue
+        .enqueue(
+            msg,
+            "a@test.invalid",
+            "missing-hold@peer.example",
+            &Route::External,
+        )
+        .await
+        .unwrap();
+    finish_submission(&store, msg).await;
+    sqlx::query("UPDATE message_references SET released_at = now() WHERE message_id = $1 AND kind = 'outbound'")
+        .bind(msg).execute(store.pool()).await.unwrap();
+
+    assert!(store.erase_membership(mailbox.id, msg).await.is_err());
+    let (messages, memberships, queue_rows): (i64, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM messages WHERE id = $1),
+                (SELECT count(*) FROM mailbox_messages WHERE message_id = $1),
+                (SELECT count(*) FROM outbound_queue WHERE message_id = $1 AND state = 'pending')",
+    )
+    .bind(msg)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!((messages, memberships, queue_rows), (1, 1, 1));
+}
+
+#[tokio::test]
+async fn duplicate_queueing_rejects_a_missing_outbound_hold() {
+    let (store, queue) = harness().await;
+    let msg = a_message(&store).await;
+    let recipient = format!("duplicate-{}@outside.example", Uuid::now_v7());
+    queue
+        .enqueue(msg, "sender@example.test", &recipient, &Route::External)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE message_references SET released_at = now() WHERE message_id = $1 AND kind = 'outbound'")
+        .bind(msg).execute(store.pool()).await.unwrap();
+    assert!(queue
+        .enqueue(msg, "sender@example.test", &recipient, &Route::External)
+        .await
+        .is_err());
+}
+
+#[tokio::test]
+async fn outbound_holds_survive_retry_and_release_on_terminal_state() {
+    let (store, queue) = harness().await;
+    let msg = a_message(&store).await;
+    let mailbox = store.create_node_mailbox("outbound cleanup").await.unwrap();
+    let inbox = store.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    store.deliver(mailbox.id, msg, inbox).await.unwrap();
+    let rcpt = format!("hold-{}@peer.example", Uuid::now_v7());
+    queue
+        .enqueue(msg, "a@test.invalid", &rcpt, &Route::External)
+        .await
+        .unwrap();
+    queue
+        .enqueue(msg, "a@test.invalid", &rcpt, &Route::External)
+        .await
+        .unwrap();
+    finish_submission(&store, msg).await;
+    store.erase_membership(mailbox.id, msg).await.unwrap();
+    let (id, _) = queue_row(&store, &rcpt).await;
+    assert!(!queue
+        .mark_attempt_failed(id, false, "temporary")
+        .await
+        .unwrap());
+    let (active,): (i64,) = sqlx::query_as(
+        "SELECT count(*) FROM message_references WHERE message_id = $1 AND kind = 'outbound' AND released_at IS NULL",
+    ).bind(msg).fetch_one(store.pool()).await.unwrap();
+    assert_eq!(active, 1);
+    queue.mark_delivered(id).await.unwrap();
+    let (active,): (i64,) = sqlx::query_as(
+        "SELECT count(*) FROM message_references WHERE message_id = $1 AND kind = 'outbound' AND released_at IS NULL",
+    ).bind(msg).fetch_one(store.pool()).await.unwrap();
+    assert_eq!(active, 0);
+    let (messages, rows): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM messages WHERE id = $1),
+                (SELECT count(*) FROM outbound_queue WHERE message_id = $1)",
+    )
+    .bind(msg)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        (messages, rows),
+        (0, 0),
+        "terminal delivery must clean up an orphan"
+    );
+}
+
+#[tokio::test]
+async fn terminal_failure_releases_outbound_hold() {
+    let (store, queue) = harness().await;
+    let msg = a_message(&store).await;
+    let rcpt = format!("failed-hold-{}@peer.example", Uuid::now_v7());
+    queue
+        .enqueue(msg, "a@test.invalid", &rcpt, &Route::External)
+        .await
+        .unwrap();
+    finish_submission(&store, msg).await;
+    let (id, _) = queue_row(&store, &rcpt).await;
+    assert!(queue
+        .mark_attempt_failed(id, true, "permanent")
+        .await
+        .unwrap());
+    let (active,): (i64,) = sqlx::query_as(
+        "SELECT count(*) FROM message_references WHERE message_id = $1 AND kind = 'outbound' AND released_at IS NULL",
+    ).bind(msg).fetch_one(store.pool()).await.unwrap();
+    assert_eq!(active, 0);
 }
 
 #[test]

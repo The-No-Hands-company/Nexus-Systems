@@ -60,6 +60,28 @@ path exists — the ISP lifting the filter, or a peer node with clean egress.
 - `crates/nexus-mailfed` — federation: node keys, signed handoffs, the ingest
   listener, the HTTP transport, and `nexus-mailctl`.
 
+## Message lifetime and migration
+
+Message creation, recipient routing, mailbox copies and outbound queue entries
+are serialized by a message-row lock and durable reference ledger. A pending
+or in-flight delivery keeps its message even when the last mailbox copy is
+erased. Terminal delivery and final mailbox erasure release their references;
+orphan cleanup also schedules any external-body deletion.
+
+The low-level `store_message` API leaves a distinct unfinished submission hold
+for recovery. Callers that complete routing must instead use
+`store_message_in_transaction` with their own submission ID, create all
+mailbox/queue references in that transaction, and release that exact hold only
+after every recipient disposition is durable. An unfinished hold is retained
+until an operator or future recovery worker resolves it.
+Recipient dispositions are persisted with the submission. Local disposition
+records are removed with their mailbox membership, outbound records with the
+finished queue entry, and any remaining records with the message.
+
+Apply the message-reference migration with Mail writers stopped; it backfills
+existing mailbox and active queue references and conservatively holds existing
+unreferenced messages. Do not mix old and new writers during rollout.
+
 ## Connecting a mail client
 
 The daemon serves IMAP on `127.0.0.1:2143`, **plaintext**. There is no TLS in it,

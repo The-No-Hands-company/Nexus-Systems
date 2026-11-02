@@ -1,5 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
-use sqlx::PgPool;
+use nexus_mailstore::{MailStore, MessageReferenceKind};
+use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::error::Result;
@@ -57,6 +58,21 @@ impl Queue {
         recipient: &str,
         route: &Route,
     ) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        self.enqueue_in_transaction(&mut tx, message_id, envelope_from, recipient, route)
+            .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn enqueue_in_transaction(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        message_id: Uuid,
+        envelope_from: &str,
+        recipient: &str,
+        route: &Route,
+    ) -> Result<()> {
         let (route_name, destination) = match route {
             Route::Federated { node } => ("federated", node.clone()),
             Route::External => (
@@ -68,19 +84,49 @@ impl Queue {
             Route::Local => return Ok(()),
         };
 
-        sqlx::query(
+        if !MailStore::lock_message_in_transaction(tx, message_id).await? {
+            return Err(sqlx::Error::RowNotFound.into());
+        }
+        let id = Uuid::now_v7();
+        let inserted = sqlx::query(
             "INSERT INTO outbound_queue (id, message_id, envelope_from, recipient, destination, route)
              VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (message_id, recipient) DO NOTHING",
         )
-        .bind(Uuid::now_v7())
+        .bind(id)
         .bind(message_id)
         .bind(envelope_from)
         .bind(recipient)
         .bind(destination)
         .bind(route_name)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
+        if inserted.rows_affected() == 1 {
+            MailStore::create_reference_in_transaction(
+                tx,
+                message_id,
+                MessageReferenceKind::Outbound,
+                id,
+            )
+            .await?;
+        } else {
+            let (existing_id, state): (Uuid, String) = sqlx::query_as(
+                "SELECT id, state FROM outbound_queue WHERE message_id = $1 AND recipient = $2",
+            )
+            .bind(message_id)
+            .bind(recipient)
+            .fetch_one(&mut **tx)
+            .await?;
+            if state == "pending" || state == "delivering" {
+                MailStore::require_reference_in_transaction(
+                    tx,
+                    message_id,
+                    MessageReferenceKind::Outbound,
+                    existing_id,
+                )
+                .await?;
+            }
+        }
         Ok(())
     }
 
@@ -113,12 +159,36 @@ impl Queue {
     }
 
     pub async fn mark_delivered(&self, id: Uuid) -> Result<()> {
-        sqlx::query(
-            "UPDATE outbound_queue SET state = 'delivered', completed_at = now() WHERE id = $1",
+        let mut tx = self.pool.begin().await?;
+        let message: Option<(Uuid,)> =
+            sqlx::query_as("SELECT message_id FROM outbound_queue WHERE id = $1")
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        let Some((message_id,)) = message else {
+            return Ok(());
+        };
+        if !MailStore::lock_message_in_transaction(&mut tx, message_id).await? {
+            return Err(sqlx::Error::RowNotFound.into());
+        }
+        let updated = sqlx::query(
+            "UPDATE outbound_queue SET state = 'delivered', completed_at = now()
+             WHERE id = $1 AND state IN ('pending', 'delivering')",
         )
         .bind(id)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
+        if updated.rows_affected() == 1 {
+            MailStore::release_reference_in_transaction(
+                &mut tx,
+                message_id,
+                MessageReferenceKind::Outbound,
+                id,
+            )
+            .await?;
+            MailStore::finish_deferred_erasure_in_transaction(&mut tx, message_id).await?;
+        }
+        tx.commit().await?;
         Ok(())
     }
 
@@ -132,32 +202,33 @@ impl Queue {
         failed_after: chrono::Duration,
     ) -> Result<u64> {
         let now = Utc::now();
-        let purged = sqlx::query(
-            "DELETE FROM outbound_queue
-              WHERE (state = 'delivered' AND completed_at < $1)
-                 OR (state = 'failed' AND completed_at < $2)",
+        let (purged,): (i64,) = sqlx::query_as(
+            "WITH removed AS (
+                 DELETE FROM outbound_queue
+                 WHERE (state = 'delivered' AND completed_at < $1)
+                    OR (state = 'failed' AND completed_at < $2)
+                 RETURNING message_id, recipient
+             ), forgotten AS (
+                 DELETE FROM message_submission_dispositions d
+                 USING removed r
+                 WHERE d.message_id = r.message_id AND d.recipient = r.recipient
+                   AND d.disposition = 'outbound'
+             )
+             SELECT count(*) FROM removed",
         )
         .bind(now - delivered_after)
         .bind(now - failed_after)
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await?;
-        Ok(purged.rows_affected())
+        Ok(purged as u64)
     }
 
-    /// Delete a finished message and, through the cascade, its queue rows and
-    /// recipient list. Refuses while any delivery of it is still pending or in
-    /// flight, so a message to several recipients is never removed under a
-    /// retry. Used for platform mail, which keeps nothing once it is done.
+    /// Delete a finished orphan and its terminal queue rows, never active work.
     pub async fn purge_message(&self, message_id: Uuid) -> Result<bool> {
-        let deleted = sqlx::query(
-            "DELETE FROM messages m WHERE m.id = $1
-               AND NOT EXISTS (SELECT 1 FROM outbound_queue q
-                                WHERE q.message_id = m.id AND q.state IN ('pending', 'delivering'))",
-        )
-        .bind(message_id)
-        .execute(&self.pool)
-        .await?;
-        Ok(deleted.rows_affected() > 0)
+        let mut tx = self.pool.begin().await?;
+        let deleted = MailStore::erase_orphaned_message_in_transaction(&mut tx, message_id).await?;
+        tx.commit().await?;
+        Ok(deleted)
     }
 
     /// Record a failed attempt.
@@ -179,11 +250,22 @@ impl Queue {
     ) -> Result<bool> {
         let mut tx = self.pool.begin().await?;
 
-        let (attempts,): (i32,) =
-            sqlx::query_as("SELECT attempts FROM outbound_queue WHERE id = $1 FOR UPDATE")
+        let (message_id,): (Uuid,) =
+            sqlx::query_as("SELECT message_id FROM outbound_queue WHERE id = $1")
                 .bind(id)
                 .fetch_one(&mut *tx)
                 .await?;
+        if !MailStore::lock_message_in_transaction(&mut tx, message_id).await? {
+            return Err(sqlx::Error::RowNotFound.into());
+        }
+        let (attempts, state): (i32, String) =
+            sqlx::query_as("SELECT attempts, state FROM outbound_queue WHERE id = $1 FOR UPDATE")
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
+        if state == "failed" || state == "delivered" {
+            return Ok(state == "failed");
+        }
 
         // The attempt being recorded is the one that just failed, so the next
         // delay is indexed by the count after incrementing.
@@ -216,6 +298,14 @@ impl Queue {
                 .bind(id)
                 .execute(&mut *tx)
                 .await?;
+                MailStore::release_reference_in_transaction(
+                    &mut tx,
+                    message_id,
+                    MessageReferenceKind::Outbound,
+                    id,
+                )
+                .await?;
+                MailStore::finish_deferred_erasure_in_transaction(&mut tx, message_id).await?;
                 true
             }
         };
