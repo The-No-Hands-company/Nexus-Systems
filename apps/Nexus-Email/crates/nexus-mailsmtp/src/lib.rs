@@ -9,6 +9,7 @@
 pub mod authenticator;
 pub mod command;
 pub mod inbound;
+pub mod object_cleanup;
 pub mod policy;
 pub mod purge;
 pub mod server;

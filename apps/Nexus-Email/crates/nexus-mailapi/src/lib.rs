@@ -581,7 +581,7 @@ async fn empty_trash(
         for message in batch {
             state
                 .store
-                .erase_membership(mailbox, message.id)
+                .erase_trash_membership(mailbox, message.id)
                 .await
                 .map_err(|e| server(&format!("erase_membership: {e}")))?;
         }

@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::address::Address;
@@ -12,6 +12,16 @@ use crate::models::*;
 /// that carry no attachment, so the common read is a single query, while the
 /// bytes that actually make mail large never enter the database.
 pub const INLINE_BODY_LIMIT: usize = 256 * 1024;
+
+/// A leased deletion of an object that held a message body or attachments.
+///
+/// The object key stays in the durable queue until the object-storage owner
+/// confirms deletion. It is intentionally not logged by this crate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObjectDeletionJob {
+    pub id: Uuid,
+    pub object_key: String,
+}
 
 pub fn content_hash(raw: &[u8]) -> String {
     hex::encode(Sha256::digest(raw))
@@ -819,20 +829,41 @@ impl MailStore {
         .await?;
 
         if deleted.is_some() {
-            sqlx::query(
-                "DELETE FROM messages
-                 WHERE id = $1
-                   AND NOT EXISTS (
-                     SELECT 1 FROM mailbox_messages WHERE message_id = $1
-                   )",
-            )
-            .bind(message_id)
-            .execute(&mut *tx)
-            .await?;
+            Self::erase_orphaned_message(&mut tx, message_id).await?;
         }
 
         tx.commit().await?;
         Ok(())
+    }
+
+    /// Delete one membership only if it is still in this mailbox's Trash.
+    ///
+    /// Empty Trash first obtains a display batch, but the folder predicate
+    /// here is authoritative. A restore between the listing and deletion is
+    /// therefore retained.
+    pub async fn erase_trash_membership(&self, mailbox_id: Uuid, message_id: Uuid) -> Result<bool> {
+        let mut tx = self.pool.begin().await?;
+        let deleted: Option<(Uuid,)> = sqlx::query_as(
+            "DELETE FROM mailbox_messages mm
+             USING folders f
+             WHERE mm.mailbox_id = $1
+               AND mm.message_id = $2
+               AND mm.folder_id = f.id
+               AND f.mailbox_id = mm.mailbox_id
+               AND f.kind = 'trash'
+             RETURNING mm.message_id",
+        )
+        .bind(mailbox_id)
+        .bind(message_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        if deleted.is_some() {
+            Self::erase_orphaned_message(&mut tx, message_id).await?;
+        }
+
+        tx.commit().await?;
+        Ok(deleted.is_some())
     }
 
     /// Permanently erase expired Trash memberships in bounded batches.
@@ -876,16 +907,7 @@ impl MailStore {
             .await?;
 
             if deleted.is_some() {
-                sqlx::query(
-                    "DELETE FROM messages
-                     WHERE id = $1
-                       AND NOT EXISTS (
-                         SELECT 1 FROM mailbox_messages WHERE message_id = $1
-                       )",
-                )
-                .bind(message_id)
-                .execute(&mut *tx)
-                .await?;
+                Self::erase_orphaned_message(&mut tx, message_id).await?;
                 purged += 1;
             }
 
@@ -893,6 +915,102 @@ impl MailStore {
         }
 
         Ok(purged)
+    }
+
+    /// Lease queued external-body deletions to the object-storage owner.
+    ///
+    /// Leases recover automatically after five minutes, so a process crash
+    /// cannot lose an object deletion. The caller must report success with
+    /// `complete_object_deletion` or explicitly schedule a retry.
+    pub async fn claim_object_deletion_jobs(
+        &self,
+        now: DateTime<Utc>,
+        limit: i64,
+    ) -> Result<Vec<ObjectDeletionJob>> {
+        let rows = sqlx::query_as(
+            "WITH candidates AS (
+                 SELECT id
+                 FROM object_deletion_queue
+                 WHERE next_attempt_at <= $1
+                   AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
+                 ORDER BY next_attempt_at, created_at
+                 FOR UPDATE SKIP LOCKED
+                 LIMIT $2
+             ),
+             claimed AS (
+                 UPDATE object_deletion_queue q
+                 SET lease_expires_at = $1 + interval '5 minutes',
+                     attempts = q.attempts + 1
+                 FROM candidates c
+                 WHERE q.id = c.id
+                 RETURNING q.id, q.object_key
+             )
+             SELECT id, object_key FROM claimed",
+        )
+        .bind(now)
+        .bind(limit.clamp(1, 1_000))
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|(id, object_key)| ObjectDeletionJob { id, object_key })
+            .collect())
+    }
+
+    /// Mark an object deletion as confirmed by the object-storage owner.
+    pub async fn complete_object_deletion(&self, job_id: Uuid) -> Result<()> {
+        sqlx::query("DELETE FROM object_deletion_queue WHERE id = $1")
+            .bind(job_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Release a failed deletion for retry without recording failure content.
+    pub async fn retry_object_deletion(&self, job_id: Uuid, now: DateTime<Utc>) -> Result<()> {
+        sqlx::query(
+            "UPDATE object_deletion_queue
+             SET lease_expires_at = NULL,
+                 next_attempt_at = $2 + interval '1 minute'
+             WHERE id = $1",
+        )
+        .bind(job_id)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn erase_orphaned_message(
+        tx: &mut Transaction<'_, Postgres>,
+        message_id: Uuid,
+    ) -> Result<()> {
+        let deleted: Option<(Option<String>,)> = sqlx::query_as(
+            "DELETE FROM messages
+             WHERE id = $1
+               AND NOT EXISTS (
+                 SELECT 1 FROM mailbox_messages WHERE message_id = $1
+               )
+             RETURNING body_object_key",
+        )
+        .bind(message_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+
+        if let Some((Some(object_key),)) = deleted {
+            sqlx::query(
+                "INSERT INTO object_deletion_queue
+                     (id, object_key, next_attempt_at, created_at)
+                 VALUES ($1, $2, now(), now())
+                 ON CONFLICT (object_key) DO NOTHING",
+            )
+            .bind(Uuid::now_v7())
+            .bind(object_key)
+            .execute(&mut **tx)
+            .await?;
+        }
+        Ok(())
     }
 
     pub async fn mailbox_for_subject(&self, subject: &str) -> Result<Option<Uuid>> {

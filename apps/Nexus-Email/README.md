@@ -328,3 +328,27 @@ cargo test -p nexus-mailstore
 (`nexus-mailfed/tests/two_nodes.rs`) also needs the role to be allowed to
 `CREATE DATABASE`: each node gets its own freshly migrated database, dropped
 afterwards.
+
+### Rolling back the lifecycle migration
+
+The lifecycle migration has a matching, manually applied rollback script. Stop
+Mail processes that use `trash_expires_at`, take the normal database backup,
+then run this exact file against the target database:
+
+```bash
+docker exec -i nexus-systems-postgres-1 psql -v ON_ERROR_STOP=1 -U nexus -d nexus_email \
+  < docs/migration-rollbacks/20261101000006_mail_lifecycle.sql
+```
+
+The script drops only `mailbox_messages_trash_expiry_idx` and
+`mailbox_messages.trash_expires_at`. Reapply the numbered migration to restore
+the lifecycle schema before starting a build that requires it.
+
+### External body deletion
+
+Large message bodies and attachments use the ecosystem's S3-compatible object
+storage settings: `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, and
+`S3_BUCKET`. Final message erasure creates a durable deletion job in the same
+database transaction; `nexus-mailsmtpd` deletes the object and removes the job
+only after MinIO/S3 confirms success. Failures contain no object key or mail
+content in logs and remain queued for retry.

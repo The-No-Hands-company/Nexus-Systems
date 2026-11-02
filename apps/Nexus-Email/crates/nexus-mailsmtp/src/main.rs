@@ -16,6 +16,7 @@ use nexus_mailimap::ImapServer;
 use nexus_mailout::{DeliveryWorker, Egress, SmtpRelayConfig, WorkerConfig};
 use nexus_mailsmtp::authenticator::AuthService;
 use nexus_mailsmtp::inbound::{AuthenticatingSink, PolicyMode};
+use nexus_mailsmtp::object_cleanup::run_object_deletion_pass;
 use nexus_mailsmtp::policy::MailboxPolicy;
 use nexus_mailsmtp::purge::run_bounded_purge_pass;
 use nexus_mailsmtp::{Limits, Role, SmtpServer};
@@ -241,6 +242,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let purge_interval_secs = setting_parse::<u64>("NEXUS_EMAIL_TRASH_PURGE_INTERVAL_SECS", 300)?;
     let purge_batch_size = setting_parse::<i64>("NEXUS_EMAIL_TRASH_PURGE_BATCH_SIZE", 128)?;
     let purge_max_batches = setting_parse::<u32>("NEXUS_EMAIL_TRASH_PURGE_MAX_BATCHES", 4)?;
+    let object_delete_batch_size =
+        setting_parse::<i64>("NEXUS_EMAIL_OBJECT_DELETE_BATCH_SIZE", 32)?;
+    let object_store = match (
+        setting("S3_ENDPOINT"),
+        setting("S3_ACCESS_KEY"),
+        setting("S3_SECRET_KEY"),
+        setting("S3_BUCKET"),
+    ) {
+        (Some(endpoint), Some(access_key), Some(secret_key), Some(bucket)) => {
+            let credentials = aws_credential_types::Credentials::new(
+                access_key,
+                secret_key,
+                None,
+                None,
+                "nexus-mail",
+            );
+            let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+                .credentials_provider(credentials)
+                .region(aws_config::Region::new(
+                    setting("AWS_REGION").unwrap_or_else(|| "us-east-1".into()),
+                ))
+                .endpoint_url(endpoint)
+                .load()
+                .await;
+            Some((aws_sdk_s3::Client::new(&config), bucket))
+        }
+        _ => None,
+    };
     tracing::info!(%mx_bind, %submission_bind, %imap_bind, %hostname, ?mode, "nexus-mailsmtpd listening");
     tracing::info!(
         %federation_bind,
@@ -276,6 +305,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    let object_cleanup_store = store.clone();
     let purge = async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(purge_interval_secs.max(1)));
         loop {
@@ -315,6 +345,53 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    let object_cleanup = async move {
+        let Some((client, bucket)) = object_store else {
+            tracing::warn!(
+                "object deletion queue is disabled until S3_ENDPOINT, S3_ACCESS_KEY, \
+                 S3_SECRET_KEY, and S3_BUCKET are configured"
+            );
+            std::future::pending::<()>().await;
+            return;
+        };
+        let mut ticker = tokio::time::interval(Duration::from_secs(purge_interval_secs.max(1)));
+        loop {
+            ticker.tick().await;
+            match run_object_deletion_pass(
+                &object_cleanup_store,
+                sqlx::types::chrono::Utc::now(),
+                object_delete_batch_size,
+                {
+                    let client = client.clone();
+                    let bucket = bucket.clone();
+                    move |object_key| {
+                        let client = client.clone();
+                        let bucket = bucket.clone();
+                        async move {
+                            client
+                                .delete_object()
+                                .bucket(bucket)
+                                .key(object_key)
+                                .send()
+                                .await
+                                .map(|_| ())
+                                .map_err(|_| ())
+                        }
+                    }
+                },
+            )
+            .await
+            {
+                Ok(stats) => tracing::info!(
+                    deleted = stats.deleted,
+                    failed = stats.failed,
+                    "object deletion pass complete"
+                ),
+                Err(_) => tracing::warn!("object deletion pass database operation failed"),
+            }
+        }
+    };
+
     tokio::select! {
         r = mx.serve(mx_listener) => r?,
         r = submission.serve(sub_listener) => r?,
@@ -323,6 +400,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ = worker.run() => {},
         _ = prune => {},
         _ = purge => {},
+        _ = object_cleanup => {},
     }
     Ok(())
 }

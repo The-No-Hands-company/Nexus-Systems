@@ -236,12 +236,20 @@ async fn a_delivered_message_becomes_searchable_by_its_body() {
     let raw = msg(&alice.as_string(), &bob.as_string(), "Nothing distinctive", &format!("the word is {needle} ok"));
     d.submit(&raw, &alice, &[bob], Some(alice_mb.id)).await.unwrap();
 
-    let hits = store.search(bob_mb.id, &needle, 10).await.unwrap();
+    let bob_inbox = store.folder(bob_mb.id, FolderKind::Inbox).await.unwrap();
+    let hits = store
+        .search(bob_mb.id, &needle, &[bob_inbox], None, 10)
+        .await
+        .unwrap();
     assert_eq!(hits.len(), 1, "the body text should be searchable");
 
     // And it must not leak across mailboxes: Alice holds only her Sent copy,
     // which is the same message row — so scoping search by membership matters.
-    let sender_hits = store.search(alice_mb.id, &needle, 10).await.unwrap();
+    let alice_sent = store.folder(alice_mb.id, FolderKind::Sent).await.unwrap();
+    let sender_hits = store
+        .search(alice_mb.id, &needle, &[alice_sent], None, 10)
+        .await
+        .unwrap();
     assert_eq!(sender_hits.len(), 1, "the sender's own copy is hers to find");
 }
 
@@ -263,8 +271,13 @@ async fn search_does_not_return_another_mailboxs_mail() {
     let raw = msg(&alice.as_string(), &bob.as_string(), "private", &format!("contains {needle}"));
     d.submit(&raw, &alice, &[bob], Some(alice_mb.id)).await.unwrap();
 
+    let outsider_inbox = store.folder(outsider.id, FolderKind::Inbox).await.unwrap();
     assert!(
-        store.search(outsider.id, &needle, 10).await.unwrap().is_empty(),
+        store
+            .search(outsider.id, &needle, &[outsider_inbox], None, 10)
+            .await
+            .unwrap()
+            .is_empty(),
         "a third party must not find mail they do not hold"
     );
 }

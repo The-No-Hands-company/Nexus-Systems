@@ -539,3 +539,179 @@ async fn migration_backfill_keeps_existing_trash_for_at_least_seven_days() {
         "backfill must retain existing Trash for at least seven days from migration activation"
     );
 }
+
+#[tokio::test]
+async fn empty_trash_does_not_erase_a_membership_restored_after_listing() {
+    let s = store().await;
+    let mailbox = s
+        .create_identity_mailbox(&unique("usr"), "Alice")
+        .await
+        .unwrap();
+    let from = Address::parse("sender@example.test").unwrap();
+    let thread = s
+        .thread_for(None, &[], Some("empty-trash-race"))
+        .await
+        .unwrap();
+    let message_id = s
+        .store_message(
+            unique("empty-trash-race").as_bytes(),
+            thread,
+            &from,
+            Some("empty-trash-race"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            None,
+        )
+        .await
+        .unwrap();
+    let inbox = s.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    let trash = s.folder(mailbox.id, FolderKind::Trash).await.unwrap();
+    s.deliver(mailbox.id, message_id, trash).await.unwrap();
+
+    let listed = s.list_folder(mailbox.id, trash, 200, 0).await.unwrap();
+    assert_eq!(
+        listed.len(),
+        1,
+        "the stale Empty Trash batch must contain it"
+    );
+
+    s.move_to_folder(mailbox.id, message_id, inbox)
+        .await
+        .unwrap();
+    assert!(
+        !s.erase_trash_membership(mailbox.id, message_id)
+            .await
+            .unwrap(),
+        "the conditional deletion must reject a membership restored after listing"
+    );
+    assert_eq!(
+        s.message_folder(mailbox.id, message_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .id,
+        inbox
+    );
+}
+
+#[tokio::test]
+async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
+    let s = store().await;
+    let mailbox = s
+        .create_identity_mailbox(&unique("usr"), "Alice")
+        .await
+        .unwrap();
+    let from = Address::parse("sender@example.test").unwrap();
+    let thread = s
+        .thread_for(None, &[], Some("external-body-delete"))
+        .await
+        .unwrap();
+    let message_id = s
+        .store_message(
+            b"stored externally",
+            thread,
+            &from,
+            Some("external-body-delete"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            Some("mail-bodies/opaque-object"),
+        )
+        .await
+        .unwrap();
+    let inbox = s.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    s.deliver(mailbox.id, message_id, inbox).await.unwrap();
+
+    s.erase_membership(mailbox.id, message_id).await.unwrap();
+
+    let now = chrono::Utc::now();
+    let jobs = s.claim_object_deletion_jobs(now, 1).await.unwrap();
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].object_key, "mail-bodies/opaque-object");
+
+    s.retry_object_deletion(jobs[0].id, now).await.unwrap();
+    assert!(
+        s.claim_object_deletion_jobs(now, 1)
+            .await
+            .unwrap()
+            .is_empty(),
+        "a failed deletion must remain durably queued until its retry delay"
+    );
+    let retry = s
+        .claim_object_deletion_jobs(now + Duration::minutes(2), 1)
+        .await
+        .unwrap();
+    assert_eq!(
+        retry.len(),
+        1,
+        "the queued external object must become retryable"
+    );
+    s.complete_object_deletion(retry[0].id).await.unwrap();
+    assert!(
+        s.claim_object_deletion_jobs(now + Duration::minutes(4), 1)
+            .await
+            .unwrap()
+            .is_empty(),
+        "only a successful object-store deletion may remove the durable job"
+    );
+}
+
+#[tokio::test]
+async fn lifecycle_migration_rollback_removes_and_restores_its_column_and_index() {
+    let down = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../docs/migration-rollbacks/20261101000006_mail_lifecycle.sql"
+    ))
+    .expect("the lifecycle migration must supply its rollback script");
+    assert!(down.contains("DROP INDEX IF EXISTS mailbox_messages_trash_expiry_idx"));
+    assert!(down.contains("DROP COLUMN IF EXISTS trash_expires_at"));
+
+    let up = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/migrations/20261101000006_mail_lifecycle.sql"
+    ))
+    .unwrap();
+    let s = store().await;
+    let mut tx = s.pool().begin().await.unwrap();
+    for statement in down
+        .split(';')
+        .filter(|statement| !statement.trim().is_empty())
+    {
+        sqlx::query(statement).execute(&mut *tx).await.unwrap();
+    }
+
+    let (column_removed,): (bool,) = sqlx::query_as(
+        "SELECT NOT EXISTS (
+             SELECT 1
+             FROM information_schema.columns
+             WHERE table_name = 'mailbox_messages'
+               AND column_name = 'trash_expires_at'
+         )",
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    let (index_removed,): (bool,) = sqlx::query_as(
+        "SELECT NOT EXISTS (
+             SELECT 1
+             FROM pg_indexes
+             WHERE schemaname = current_schema()
+               AND indexname = 'mailbox_messages_trash_expiry_idx'
+         )",
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    assert!(column_removed && index_removed);
+
+    for statement in up
+        .split(';')
+        .filter(|statement| !statement.trim().is_empty())
+    {
+        sqlx::query(statement).execute(&mut *tx).await.unwrap();
+    }
+    tx.rollback().await.unwrap();
+}
