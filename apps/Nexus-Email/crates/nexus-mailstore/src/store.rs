@@ -548,6 +548,12 @@ impl MailStore {
         }
 
         let hash = content_hash(raw);
+        // Serialize identical inserts before taking a thread lock, so a
+        // concurrent deduplication never waits on a message while holding it.
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 811239652))")
+            .bind(&hash)
+            .execute(&mut **tx)
+            .await?;
         let submission_id = submission_id.unwrap_or_else(Uuid::now_v7);
         let size_bytes = raw.len() as i64;
         let from_address = from.as_string();
@@ -602,6 +608,30 @@ impl MailStore {
                     MessageReferenceKind::Submission, submission_id).await?;
             }
             return Ok(existing);
+        }
+
+        loop {
+            let thread: Option<(Uuid,)> =
+                sqlx::query_as("SELECT id FROM threads WHERE id = $1 FOR UPDATE")
+                    .bind(thread_id)
+                    .fetch_optional(&mut **tx)
+                    .await?;
+            if thread.is_some() {
+                break;
+            }
+            if in_reply_to.is_none() && references.is_empty() {
+                return Err(sqlx::Error::RowNotFound.into());
+            }
+            // The referenced parent may have been erased after thread lookup.
+            sqlx::query(
+                "INSERT INTO threads (id, subject_normalised, last_activity_at)
+                 VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING",
+            )
+            .bind(thread_id)
+            .bind(normalise_subject(subject.unwrap_or_default()))
+            .bind(Utc::now())
+            .execute(&mut **tx)
+            .await?;
         }
 
         let id = Uuid::now_v7();
@@ -1861,6 +1891,14 @@ impl MailStore {
         tx: &mut Transaction<'_, Postgres>,
         thread_id: Uuid,
     ) -> Result<()> {
+        let thread: Option<(Uuid,)> =
+            sqlx::query_as("SELECT id FROM threads WHERE id = $1 FOR UPDATE")
+                .bind(thread_id)
+                .fetch_optional(&mut **tx)
+                .await?;
+        if thread.is_none() {
+            return Ok(());
+        }
         sqlx::query(
             "DELETE FROM threads WHERE id = $1
              AND NOT EXISTS (SELECT 1 FROM messages WHERE thread_id = $1)",

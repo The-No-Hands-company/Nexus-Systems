@@ -73,6 +73,86 @@ async fn a_message(store: &MailStore) -> Uuid {
 }
 
 #[tokio::test]
+async fn lease_expiring_while_renewal_waits_for_row_lock_is_not_renewed() {
+    let (store, queue) = harness().await;
+    let msg = a_message(&store).await;
+    let rcpt = format!("wait-lease-{}@outside.example", Uuid::now_v7());
+    queue
+        .enqueue(msg, "sender@example.test", &rcpt, &Route::External)
+        .await
+        .unwrap();
+    let (id, _) = queue_row(&store, &rcpt).await;
+    let token = claim_for(&store, &queue, id).await;
+    sqlx::query("UPDATE outbound_queue SET lease_expires_at = clock_timestamp() + interval '3 seconds' WHERE id = $1")
+        .bind(id).execute(store.pool()).await.unwrap();
+
+    let mut blocker = store.pool().begin().await.unwrap();
+    sqlx::query("SELECT id FROM outbound_queue WHERE id = $1 FOR UPDATE")
+        .bind(id)
+        .fetch_one(&mut *blocker)
+        .await
+        .unwrap();
+    let (blocker_pid,): (i32,) = sqlx::query_as("SELECT pg_backend_pid()")
+        .fetch_one(&mut *blocker)
+        .await
+        .unwrap();
+    let worker_queue = queue.clone();
+    let renewal = tokio::spawn(async move { worker_queue.renew_claim(id, token).await });
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let (waiting,): (bool,) = sqlx::query_as(
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)))",
+            ).bind(blocker_pid).fetch_one(store.pool()).await.unwrap();
+            if waiting { break; }
+            assert!(!renewal.is_finished(), "renewal must wait for the queue row lock");
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }).await.expect("renewal did not reach the row lock");
+    tokio::time::timeout(std::time::Duration::from_secs(8), async {
+        loop {
+            let (expired,): (bool,) = sqlx::query_as(
+                "SELECT lease_expires_at <= clock_timestamp() FROM outbound_queue WHERE id = $1",
+            )
+            .bind(id)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+            if expired {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("lease did not expire while the queue row was locked");
+    blocker.commit().await.unwrap();
+
+    assert!(
+        !renewal.await.unwrap().unwrap(),
+        "an expired lease cannot be renewed after a lock wait"
+    );
+    let (expired,): (bool,) = sqlx::query_as(
+        "SELECT lease_expires_at <= clock_timestamp() FROM outbound_queue WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert!(expired);
+    let reclaimed = queue
+        .claim_due(10_000)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|row| row.queue_id == id)
+        .unwrap()
+        .lease_token;
+    assert_ne!(reclaimed, token);
+    assert!(!queue.renew_claim(id, token).await.unwrap());
+    assert!(queue.renew_claim(id, reclaimed).await.unwrap());
+}
+
+#[tokio::test]
 async fn expired_delivery_lease_is_reclaimed_after_restart() {
     let (store, queue) = harness().await;
     let msg = a_message(&store).await;

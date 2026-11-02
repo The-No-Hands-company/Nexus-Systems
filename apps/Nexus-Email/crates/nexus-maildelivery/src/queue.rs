@@ -197,10 +197,19 @@ impl Queue {
 
     /// Renew only a still-live claim immediately before starting network work.
     pub async fn renew_claim(&self, id: Uuid, token: Uuid) -> Result<bool> {
+        let mut tx = self.pool.begin().await?;
+        let row: Option<(Uuid,)> =
+            sqlx::query_as("SELECT id FROM outbound_queue WHERE id = $1 FOR UPDATE")
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        if row.is_none() {
+            return Ok(false);
+        }
         let renewed = sqlx::query(
-            "UPDATE outbound_queue q SET lease_expires_at = now() + interval '5 minutes'
+            "UPDATE outbound_queue q SET lease_expires_at = clock_timestamp() + interval '5 minutes'
              WHERE q.id = $1 AND q.lease_token = $2 AND q.state = 'delivering'
-               AND q.lease_expires_at > now()
+               AND q.lease_expires_at > clock_timestamp()
                AND EXISTS (
                    SELECT 1 FROM mail_submission_recipients r
                    JOIN mail_submissions s ON s.id = r.submission_id
@@ -211,8 +220,9 @@ impl Queue {
         )
         .bind(id)
         .bind(token)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
+        tx.commit().await?;
         Ok(renewed.rows_affected() == 1)
     }
 

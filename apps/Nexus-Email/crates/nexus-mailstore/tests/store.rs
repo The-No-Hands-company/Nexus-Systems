@@ -54,6 +54,243 @@ async fn finish_submission(store: &MailStore, message: Uuid) {
     tx.commit().await.unwrap();
 }
 
+async fn wait_for_block_or_finish<T>(
+    store: &MailStore,
+    blocker_pid: i32,
+    task: &tokio::task::JoinHandle<T>,
+) {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let (blocked,): (bool,) = sqlx::query_as(
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)))",
+            ).bind(blocker_pid).fetch_one(store.pool()).await.unwrap();
+            if blocked || task.is_finished() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }).await.expect("concurrent operation neither finished nor blocked");
+}
+
+#[tokio::test]
+async fn concurrent_final_message_erasures_remove_the_shared_thread() {
+    let s = store().await;
+    let from = Address::parse("sender@example.test").unwrap();
+    let thread = s
+        .thread_for(None, &[], Some(&unique("shared-thread")))
+        .await
+        .unwrap();
+    let mut messages = Vec::new();
+    for _ in 0..2 {
+        let message = s
+            .store_message(
+                unique("thread-message").as_bytes(),
+                thread,
+                &from,
+                None,
+                None,
+                None,
+                &[],
+                Transport::Internal,
+                None,
+            )
+            .await
+            .unwrap();
+        finish_submission(&s, message).await;
+        messages.push(message);
+    }
+
+    let mut first = s.pool().begin().await.unwrap();
+    let mut second = s.pool().begin().await.unwrap();
+    let (first_pid,): (i32,) = sqlx::query_as("SELECT pg_backend_pid()")
+        .fetch_one(&mut *first)
+        .await
+        .unwrap();
+    assert!(
+        MailStore::erase_orphaned_message_in_transaction(&mut first, messages[0])
+            .await
+            .unwrap()
+    );
+    let second_message = messages[1];
+    let task = tokio::spawn(async move {
+        let result =
+            MailStore::erase_orphaned_message_in_transaction(&mut second, second_message).await;
+        (second, result)
+    });
+    wait_for_block_or_finish(&s, first_pid, &task).await;
+    first.commit().await.unwrap();
+    let (second, result) = task.await.unwrap();
+    assert!(result.unwrap());
+    second.commit().await.unwrap();
+
+    let (messages_left, thread_left): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM messages WHERE thread_id = $1),
+                (SELECT count(*) FROM threads WHERE id = $1)",
+    )
+    .bind(thread)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        (messages_left, thread_left),
+        (0, 0),
+        "the final erasure must remove the shared thread"
+    );
+}
+
+#[tokio::test]
+async fn reply_creation_survives_concurrent_final_parent_erasure() {
+    let s = store().await;
+    let mailbox = s.create_node_mailbox("thread race").await.unwrap();
+    let from = Address::parse("sender@example.test").unwrap();
+    let parent_id = format!("<{}@test>", Uuid::now_v7());
+    let thread = s.thread_for(None, &[], Some("thread race")).await.unwrap();
+    let parent = s
+        .store_message(
+            unique("parent").as_bytes(),
+            thread,
+            &from,
+            Some("thread race"),
+            Some(&parent_id),
+            None,
+            &[],
+            Transport::Internal,
+            None,
+        )
+        .await
+        .unwrap();
+    let inbox = s.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    s.deliver(mailbox.id, parent, inbox).await.unwrap();
+    finish_submission(&s, parent).await;
+
+    let mut reply_tx = s.pool().begin().await.unwrap();
+    let (reply_pid,): (i32,) = sqlx::query_as("SELECT pg_backend_pid()")
+        .fetch_one(&mut *reply_tx)
+        .await
+        .unwrap();
+    let reply_thread = s
+        .thread_for_in_transaction(
+            &mut reply_tx,
+            Some(&parent_id),
+            &[],
+            Some("Re: thread race"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(reply_thread, thread);
+    let other = s.clone();
+    let erasure = tokio::spawn(async move { other.erase_membership(mailbox.id, parent).await });
+    wait_for_block_or_finish(&s, reply_pid, &erasure).await;
+    let reply = s
+        .store_message_in_transaction(
+            &mut reply_tx,
+            unique("reply").as_bytes(),
+            reply_thread,
+            &from,
+            Some("Re: thread race"),
+            None,
+            Some(&parent_id),
+            &[],
+            Transport::Internal,
+            None,
+            None,
+        )
+        .await
+        .expect("reply creation must not lose its thread during parent erasure");
+    reply_tx.commit().await.unwrap();
+    erasure.await.unwrap().unwrap();
+
+    let (reply_exists, thread_exists): (bool, bool) = sqlx::query_as(
+        "SELECT EXISTS (SELECT 1 FROM messages WHERE id = $1 AND thread_id = $2),
+                EXISTS (SELECT 1 FROM threads WHERE id = $2)",
+    )
+    .bind(reply)
+    .bind(thread)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert!(reply_exists && thread_exists);
+}
+
+#[tokio::test]
+async fn parent_erasure_rechecks_thread_after_concurrent_reply_commits() {
+    let s = store().await;
+    let mailbox = s
+        .create_node_mailbox("thread race committed reply")
+        .await
+        .unwrap();
+    let from = Address::parse("sender@example.test").unwrap();
+    let parent_id = format!("<{}@test>", Uuid::now_v7());
+    let thread = s.thread_for(None, &[], Some("thread race")).await.unwrap();
+    let parent = s
+        .store_message(
+            unique("parent").as_bytes(),
+            thread,
+            &from,
+            Some("thread race"),
+            Some(&parent_id),
+            None,
+            &[],
+            Transport::Internal,
+            None,
+        )
+        .await
+        .unwrap();
+    let inbox = s.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    s.deliver(mailbox.id, parent, inbox).await.unwrap();
+    finish_submission(&s, parent).await;
+
+    let mut reply_tx = s.pool().begin().await.unwrap();
+    let (reply_pid,): (i32,) = sqlx::query_as("SELECT pg_backend_pid()")
+        .fetch_one(&mut *reply_tx)
+        .await
+        .unwrap();
+    let reply_thread = s
+        .thread_for_in_transaction(
+            &mut reply_tx,
+            Some(&parent_id),
+            &[],
+            Some("Re: thread race"),
+        )
+        .await
+        .unwrap();
+    let reply = s
+        .store_message_in_transaction(
+            &mut reply_tx,
+            unique("reply").as_bytes(),
+            reply_thread,
+            &from,
+            Some("Re: thread race"),
+            None,
+            Some(&parent_id),
+            &[],
+            Transport::Internal,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    let other = s.clone();
+    let erasure = tokio::spawn(async move { other.erase_membership(mailbox.id, parent).await });
+    wait_for_block_or_finish(&s, reply_pid, &erasure).await;
+    reply_tx.commit().await.unwrap();
+    erasure
+        .await
+        .unwrap()
+        .expect("erasure must recheck references after the thread lock");
+
+    let (reply_exists, thread_exists): (bool, bool) = sqlx::query_as(
+        "SELECT EXISTS (SELECT 1 FROM messages WHERE id = $1 AND thread_id = $2),
+                EXISTS (SELECT 1 FROM threads WHERE id = $2)",
+    )
+    .bind(reply)
+    .bind(thread)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert!(reply_exists && thread_exists);
+}
+
 #[tokio::test]
 async fn unfinished_submission_hold_prevents_orphan_cleanup_after_restart() {
     let s = store().await;

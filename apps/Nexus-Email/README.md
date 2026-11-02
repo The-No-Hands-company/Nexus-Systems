@@ -69,11 +69,14 @@ including local deliveries and permitted relay work. Mailbox rows are locked
 in UUID order. Pending intents retain content after the last mailbox copy is
 erased; the last terminal transition finishes a deferred erasure. Terminal
 queue retention validates queue/intent pairs, performs checked orphan cleanup
-and schedules any external-body deletion.
+and schedules any external-body deletion. Thread cleanup and new message
+references serialize on the thread row; cleanup checks references after
+acquiring that lock.
 
 Outbound claims carry a five-minute lease and a fresh token. The worker claims
-close to execution and renews a live token before network work; completion and
-failure require that token. An expired claim can be reclaimed after a restart.
+close to execution and renews a live token before network work, checking
+wall-clock expiry after acquiring the queue row lock; completion and failure
+require that token. An expired claim can be reclaimed after a restart.
 Fencing cannot undo a send already in progress, so remote delivery remains
 at-least-once. Local intent records are removed with their membership. Queue
 retention removes raw recipient addresses while retaining a per-submission
