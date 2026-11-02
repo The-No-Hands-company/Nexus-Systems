@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -64,7 +64,8 @@ impl MailStore {
 
     /// Create a node-owned mailbox, for role addresses like `info@`.
     pub async fn create_node_mailbox(&self, display_name: &str) -> Result<Mailbox> {
-        self.create_mailbox(OwnerKind::Node, None, display_name).await
+        self.create_mailbox(OwnerKind::Node, None, display_name)
+            .await
     }
 
     async fn create_mailbox(
@@ -96,15 +97,13 @@ impl MailStore {
             ("Trash", FolderKind::Trash),
             ("Archive", FolderKind::Archive),
         ] {
-            sqlx::query(
-                "INSERT INTO folders (id, mailbox_id, name, kind) VALUES ($1, $2, $3, $4)",
-            )
-            .bind(Uuid::now_v7())
-            .bind(id)
-            .bind(name)
-            .bind(fk.as_str())
-            .execute(&mut *tx)
-            .await?;
+            sqlx::query("INSERT INTO folders (id, mailbox_id, name, kind) VALUES ($1, $2, $3, $4)")
+                .bind(Uuid::now_v7())
+                .bind(id)
+                .bind(name)
+                .bind(fk.as_str())
+                .execute(&mut *tx)
+                .await?;
         }
 
         tx.commit().await?;
@@ -141,26 +140,24 @@ impl MailStore {
 
     /// Which mailbox, if any, receives mail for this address.
     pub async fn resolve(&self, address: &Address) -> Result<Uuid> {
-        let row: Option<(Uuid,)> = sqlx::query_as(
-            "SELECT mailbox_id FROM addresses WHERE localpart = $1 AND domain = $2",
-        )
-        .bind(&address.localpart)
-        .bind(&address.domain)
-        .fetch_optional(&self.pool)
-        .await?;
+        let row: Option<(Uuid,)> =
+            sqlx::query_as("SELECT mailbox_id FROM addresses WHERE localpart = $1 AND domain = $2")
+                .bind(&address.localpart)
+                .bind(&address.domain)
+                .fetch_optional(&self.pool)
+                .await?;
 
         row.map(|r| r.0)
             .ok_or_else(|| MailStoreError::NoSuchAddress(address.as_string()))
     }
 
     pub async fn folder(&self, mailbox_id: Uuid, kind: FolderKind) -> Result<Uuid> {
-        let row: (Uuid,) = sqlx::query_as(
-            "SELECT id FROM folders WHERE mailbox_id = $1 AND kind = $2",
-        )
-        .bind(mailbox_id)
-        .bind(kind.as_str())
-        .fetch_one(&self.pool)
-        .await?;
+        let row: (Uuid,) =
+            sqlx::query_as("SELECT id FROM folders WHERE mailbox_id = $1 AND kind = $2")
+                .bind(mailbox_id)
+                .bind(kind.as_str())
+                .fetch_one(&self.pool)
+                .await?;
         Ok(row.0)
     }
 
@@ -183,12 +180,11 @@ impl MailStore {
         candidates.extend(references.iter().map(String::as_str));
 
         for msg_id in candidates {
-            let found: Option<(Uuid,)> = sqlx::query_as(
-                "SELECT thread_id FROM messages WHERE rfc822_msg_id = $1 LIMIT 1",
-            )
-            .bind(msg_id)
-            .fetch_optional(&self.pool)
-            .await?;
+            let found: Option<(Uuid,)> =
+                sqlx::query_as("SELECT thread_id FROM messages WHERE rfc822_msg_id = $1 LIMIT 1")
+                    .bind(msg_id)
+                    .fetch_optional(&self.pool)
+                    .await?;
             if let Some((thread_id,)) = found {
                 return Ok(thread_id);
             }
@@ -229,12 +225,11 @@ impl MailStore {
     ) -> Result<Uuid> {
         let hash = content_hash(raw);
 
-        if let Some((existing,)) = sqlx::query_as::<_, (Uuid,)>(
-            "SELECT id FROM messages WHERE content_hash = $1",
-        )
-        .bind(&hash)
-        .fetch_optional(&self.pool)
-        .await?
+        if let Some((existing,)) =
+            sqlx::query_as::<_, (Uuid,)>("SELECT id FROM messages WHERE content_hash = $1")
+                .bind(&hash)
+                .fetch_optional(&self.pool)
+                .await?
         {
             return Ok(existing);
         }
@@ -328,24 +323,19 @@ impl MailStore {
     }
 
     /// Messages in a folder, by UID, for IMAP.
-    pub async fn list_by_uid(
-        &self,
-        mailbox_id: Uuid,
-        folder_id: Uuid,
-    ) -> Result<Vec<ImapMessage>> {
-        let rows: Vec<ImapRow> =
-            sqlx::query_as(
-                "SELECT mm.uid, m.id, m.size_bytes, mm.seen, mm.answered, mm.flagged,
+    pub async fn list_by_uid(&self, mailbox_id: Uuid, folder_id: Uuid) -> Result<Vec<ImapMessage>> {
+        let rows: Vec<ImapRow> = sqlx::query_as(
+            "SELECT mm.uid, m.id, m.size_bytes, mm.seen, mm.answered, mm.flagged,
                         mm.draft, mm.deleted, m.received_at
                  FROM mailbox_messages mm
                  JOIN messages m ON m.id = mm.message_id
                  WHERE mm.mailbox_id = $1 AND mm.folder_id = $2
                  ORDER BY mm.uid",
-            )
-            .bind(mailbox_id)
-            .bind(folder_id)
-            .fetch_all(&self.pool)
-            .await?;
+        )
+        .bind(mailbox_id)
+        .bind(folder_id)
+        .fetch_all(&self.pool)
+        .await?;
 
         Ok(rows
             .into_iter()
@@ -382,10 +372,16 @@ impl MailStore {
         // client input — an IMAP STORE command carries arbitrary flag names.
         let sql = match flag {
             "seen" => "UPDATE mailbox_messages SET seen = $1 WHERE mailbox_id = $2 AND uid = $3",
-            "answered" => "UPDATE mailbox_messages SET answered = $1 WHERE mailbox_id = $2 AND uid = $3",
-            "flagged" => "UPDATE mailbox_messages SET flagged = $1 WHERE mailbox_id = $2 AND uid = $3",
+            "answered" => {
+                "UPDATE mailbox_messages SET answered = $1 WHERE mailbox_id = $2 AND uid = $3"
+            }
+            "flagged" => {
+                "UPDATE mailbox_messages SET flagged = $1 WHERE mailbox_id = $2 AND uid = $3"
+            }
             "draft" => "UPDATE mailbox_messages SET draft = $1 WHERE mailbox_id = $2 AND uid = $3",
-            "deleted" => "UPDATE mailbox_messages SET deleted = $1 WHERE mailbox_id = $2 AND uid = $3",
+            "deleted" => {
+                "UPDATE mailbox_messages SET deleted = $1 WHERE mailbox_id = $2 AND uid = $3"
+            }
             _ => return Ok(()),
         };
         sqlx::query(sql)
@@ -468,7 +464,17 @@ fn to_summary(row: SummaryRow) -> MessageSummary {
 
 /// One row of the IMAP listing query. Named because the tuple is unreadable
 /// inline and clippy is right to say so.
-type ImapRow = (i64, Uuid, i64, bool, bool, bool, bool, bool, chrono::DateTime<Utc>);
+type ImapRow = (
+    i64,
+    Uuid,
+    i64,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    chrono::DateTime<Utc>,
+);
 
 /// A message as IMAP needs to see it.
 #[derive(Debug, Clone)]
@@ -548,22 +554,21 @@ impl MailStore {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<MessageSummary>> {
-        let rows: Vec<SummaryRow> =
-            sqlx::query_as(
-                "SELECT m.id, m.thread_id, m.subject, m.from_address, m.received_at,
+        let rows: Vec<SummaryRow> = sqlx::query_as(
+            "SELECT m.id, m.thread_id, m.subject, m.from_address, m.received_at,
                         mm.seen, mm.flagged, left(m.search_text, 200)
                  FROM mailbox_messages mm
                  JOIN messages m ON m.id = mm.message_id
                  WHERE mm.mailbox_id = $1 AND mm.folder_id = $2 AND NOT mm.deleted
                  ORDER BY m.received_at DESC
                  LIMIT $3 OFFSET $4",
-            )
-            .bind(mailbox_id)
-            .bind(folder_id)
-            .bind(limit.clamp(1, 200))
-            .bind(offset.max(0))
-            .fetch_all(&self.pool)
-            .await?;
+        )
+        .bind(mailbox_id)
+        .bind(folder_id)
+        .bind(limit.clamp(1, 200))
+        .bind(offset.max(0))
+        .fetch_all(&self.pool)
+        .await?;
 
         Ok(rows.into_iter().map(to_summary).collect())
     }
@@ -580,9 +585,8 @@ impl MailStore {
         query: &str,
         limit: i64,
     ) -> Result<Vec<MessageSummary>> {
-        let rows: Vec<SummaryRow> =
-            sqlx::query_as(
-                "SELECT m.id, m.thread_id, m.subject, m.from_address, m.received_at,
+        let rows: Vec<SummaryRow> = sqlx::query_as(
+            "SELECT m.id, m.thread_id, m.subject, m.from_address, m.received_at,
                         mm.seen, mm.flagged, left(m.search_text, 200)
                  FROM mailbox_messages mm
                  JOIN messages m ON m.id = mm.message_id
@@ -592,12 +596,12 @@ impl MailStore {
                  ORDER BY ts_rank(m.search_vector, plainto_tsquery('simple', $2)) DESC,
                           m.received_at DESC
                  LIMIT $3",
-            )
-            .bind(mailbox_id)
-            .bind(query)
-            .bind(limit.clamp(1, 100))
-            .fetch_all(&self.pool)
-            .await?;
+        )
+        .bind(mailbox_id)
+        .bind(query)
+        .bind(limit.clamp(1, 100))
+        .fetch_all(&self.pool)
+        .await?;
 
         Ok(rows.into_iter().map(to_summary).collect())
     }
@@ -762,16 +766,89 @@ impl MailStore {
         message_id: Uuid,
         folder_id: Uuid,
     ) -> Result<()> {
+        self.move_to_folder_at(mailbox_id, message_id, folder_id, Utc::now())
+            .await
+    }
+
+    /// Move a message to a folder, recording a seven-day expiry only in Trash.
+    pub async fn move_to_folder_at(
+        &self,
+        mailbox_id: Uuid,
+        message_id: Uuid,
+        folder_id: Uuid,
+        moved_at: DateTime<Utc>,
+    ) -> Result<()> {
         sqlx::query(
-            "UPDATE mailbox_messages SET folder_id = $1
+            "UPDATE mailbox_messages
+             SET folder_id = $1,
+                 trash_expires_at = CASE
+                     WHEN (SELECT kind FROM folders WHERE id = $1 AND mailbox_id = $2) = 'trash'
+                         THEN $4 + interval '7 days'
+                     ELSE NULL
+                 END
              WHERE mailbox_id = $2 AND message_id = $3",
         )
         .bind(folder_id)
         .bind(mailbox_id)
         .bind(message_id)
+        .bind(moved_at)
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+
+    /// Erase one mailbox's membership and delete shared content only after the
+    /// final membership is gone.
+    pub async fn erase_membership(&self, mailbox_id: Uuid, message_id: Uuid) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+
+        let deleted: Option<(Uuid,)> = sqlx::query_as(
+            "DELETE FROM mailbox_messages
+             WHERE mailbox_id = $1 AND message_id = $2
+             RETURNING message_id",
+        )
+        .bind(mailbox_id)
+        .bind(message_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        if deleted.is_some() {
+            sqlx::query(
+                "DELETE FROM messages
+                 WHERE id = $1
+                   AND NOT EXISTS (
+                     SELECT 1 FROM mailbox_messages WHERE message_id = $1
+                   )",
+            )
+            .bind(message_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Permanently erase expired Trash memberships in bounded batches.
+    pub async fn purge_expired_trash(&self, now: DateTime<Utc>, limit: i64) -> Result<u64> {
+        let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(
+            "SELECT mailbox_id, message_id
+             FROM mailbox_messages
+             WHERE trash_expires_at IS NOT NULL AND trash_expires_at <= $1
+             ORDER BY trash_expires_at
+             LIMIT $2",
+        )
+        .bind(now)
+        .bind(limit.clamp(1, 10_000))
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut purged = 0_u64;
+        for (mailbox_id, message_id) in rows {
+            self.erase_membership(mailbox_id, message_id).await?;
+            purged += 1;
+        }
+        Ok(purged)
     }
 
     pub async fn mailbox_for_subject(&self, subject: &str) -> Result<Option<Uuid>> {

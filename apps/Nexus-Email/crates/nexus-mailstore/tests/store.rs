@@ -10,6 +10,7 @@
 //! integration test reads as a passing one in CI output, which is how a suite
 //! ends up green while proving nothing.
 
+use chrono::Duration;
 use nexus_mailstore::{Address, FolderKind, MailStore, Transport};
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
@@ -37,14 +38,27 @@ async fn one_message_lands_in_many_mailboxes_without_being_copied() {
     // The central claim of the schema. If this regresses, every message
     // delivered to N recipients costs N copies of the body.
     let s = store().await;
-    let alice = s.create_identity_mailbox(&unique("usr"), "Alice").await.unwrap();
+    let alice = s
+        .create_identity_mailbox(&unique("usr"), "Alice")
+        .await
+        .unwrap();
     let info = s.create_node_mailbox("Role: info").await.unwrap();
 
     let raw = b"From: a@tnhc.dev\r\nSubject: shared\r\n\r\nbody";
     let from = Address::parse("a@tnhc.dev").unwrap();
     let thread = s.thread_for(None, &[], Some("shared")).await.unwrap();
     let msg = s
-        .store_message(raw, thread, &from, Some("shared"), None, None, &[], Transport::Internal, None)
+        .store_message(
+            raw,
+            thread,
+            &from,
+            Some("shared"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            None,
+        )
         .await
         .unwrap();
 
@@ -76,15 +90,38 @@ async fn identical_content_is_stored_once() {
     let thread = s.thread_for(None, &[], Some("dedupe")).await.unwrap();
 
     let first = s
-        .store_message(raw.as_bytes(), thread, &from, Some("dedupe"), None, None, &[], Transport::Smtp, None)
+        .store_message(
+            raw.as_bytes(),
+            thread,
+            &from,
+            Some("dedupe"),
+            None,
+            None,
+            &[],
+            Transport::Smtp,
+            None,
+        )
         .await
         .unwrap();
     let second = s
-        .store_message(raw.as_bytes(), thread, &from, Some("dedupe"), None, None, &[], Transport::Smtp, None)
+        .store_message(
+            raw.as_bytes(),
+            thread,
+            &from,
+            Some("dedupe"),
+            None,
+            None,
+            &[],
+            Transport::Smtp,
+            None,
+        )
         .await
         .unwrap();
 
-    assert_eq!(first, second, "same bytes must resolve to the same stored message");
+    assert_eq!(
+        first, second,
+        "same bytes must resolve to the same stored message"
+    );
 }
 
 #[tokio::test]
@@ -92,7 +129,10 @@ async fn an_alias_and_the_primary_address_reach_the_same_mailbox() {
     // Aliases are ordinary, not a special case: several addresses route to one
     // mailbox.
     let s = store().await;
-    let mb = s.create_identity_mailbox(&unique("usr"), "Alice").await.unwrap();
+    let mb = s
+        .create_identity_mailbox(&unique("usr"), "Alice")
+        .await
+        .unwrap();
     let domain = unique("d").to_lowercase();
 
     let primary = Address::parse(&format!("alice@{domain}")).unwrap();
@@ -122,19 +162,38 @@ async fn a_message_cannot_be_filed_into_another_mailboxs_folder() {
     // Enforced by a composite foreign key, not by application code. Getting
     // this wrong makes one person's mail visible in another person's folder.
     let s = store().await;
-    let alice = s.create_identity_mailbox(&unique("usr"), "Alice").await.unwrap();
-    let bob = s.create_identity_mailbox(&unique("usr"), "Bob").await.unwrap();
+    let alice = s
+        .create_identity_mailbox(&unique("usr"), "Alice")
+        .await
+        .unwrap();
+    let bob = s
+        .create_identity_mailbox(&unique("usr"), "Bob")
+        .await
+        .unwrap();
 
     let from = Address::parse("a@tnhc.dev").unwrap();
     let thread = s.thread_for(None, &[], Some("x")).await.unwrap();
     let msg = s
-        .store_message(unique("m").as_bytes(), thread, &from, Some("x"), None, None, &[], Transport::Internal, None)
+        .store_message(
+            unique("m").as_bytes(),
+            thread,
+            &from,
+            Some("x"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            None,
+        )
         .await
         .unwrap();
 
     let bobs_inbox = s.folder(bob.id, FolderKind::Inbox).await.unwrap();
     let err = s.deliver(alice.id, msg, bobs_inbox).await;
-    assert!(err.is_err(), "the database must refuse a cross-mailbox folder");
+    assert!(
+        err.is_err(),
+        "the database must refuse a cross-mailbox folder"
+    );
 }
 
 #[tokio::test]
@@ -144,10 +203,20 @@ async fn a_reply_joins_its_parents_thread() {
     let from = Address::parse("a@tnhc.dev").unwrap();
     let parent_msgid = format!("<{}@tnhc.dev>", unique("p"));
 
-    let thread = s.thread_for(None, &[], Some("Design review")).await.unwrap();
+    let thread = s
+        .thread_for(None, &[], Some("Design review"))
+        .await
+        .unwrap();
     s.store_message(
-        unique("parent").as_bytes(), thread, &from, Some("Design review"),
-        Some(&parent_msgid), None, &[], Transport::Internal, None,
+        unique("parent").as_bytes(),
+        thread,
+        &from,
+        Some("Design review"),
+        Some(&parent_msgid),
+        None,
+        &[],
+        Transport::Internal,
+        None,
     )
     .await
     .unwrap();
@@ -156,7 +225,10 @@ async fn a_reply_joins_its_parents_thread() {
         .thread_for(Some(&parent_msgid), &[], Some("Re: Design review"))
         .await
         .unwrap();
-    assert_eq!(reply_thread, thread, "the reply must join the parent's thread");
+    assert_eq!(
+        reply_thread, thread,
+        "the reply must join the parent's thread"
+    );
 }
 
 #[tokio::test]
@@ -164,7 +236,127 @@ async fn unrelated_messages_sharing_a_subject_do_not_merge() {
     // Subject grouping is a fallback, and must not drag strangers into one
     // conversation when the headers say nothing.
     let s = store().await;
-    let a = s.thread_for(None, &[], Some(&unique("Subject"))).await.unwrap();
-    let b = s.thread_for(None, &[], Some(&unique("Subject"))).await.unwrap();
+    let a = s
+        .thread_for(None, &[], Some(&unique("Subject")))
+        .await
+        .unwrap();
+    let b = s
+        .thread_for(None, &[], Some(&unique("Subject")))
+        .await
+        .unwrap();
     assert_ne!(a, b);
+}
+
+#[tokio::test]
+async fn trash_membership_expires_after_seven_days_and_last_copy_is_erased() {
+    let s = store().await;
+    let alice = s
+        .create_identity_mailbox(&unique("usr"), "Alice")
+        .await
+        .unwrap();
+    let bob = s
+        .create_identity_mailbox(&unique("usr"), "Bob")
+        .await
+        .unwrap();
+    let from = Address::parse("a@tnhc.dev").unwrap();
+    let thread = s.thread_for(None, &[], Some("lifecycle")).await.unwrap();
+
+    let msg = s
+        .store_message(
+            unique("lifecycle").as_bytes(),
+            thread,
+            &from,
+            Some("lifecycle"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            None,
+        )
+        .await
+        .unwrap();
+
+    let alice_inbox = s.folder(alice.id, FolderKind::Inbox).await.unwrap();
+    let bob_inbox = s.folder(bob.id, FolderKind::Inbox).await.unwrap();
+    let bob_trash = s.folder(bob.id, FolderKind::Trash).await.unwrap();
+    s.deliver(alice.id, msg, alice_inbox).await.unwrap();
+    s.deliver(bob.id, msg, bob_inbox).await.unwrap();
+
+    s.erase_membership(alice.id, msg).await.unwrap();
+
+    let (remaining_after_single_erase,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM mailbox_messages WHERE message_id = $1")
+            .bind(msg)
+            .fetch_one(s.pool())
+            .await
+            .unwrap();
+    assert_eq!(remaining_after_single_erase, 1);
+
+    let moved_at = chrono::DateTime::parse_from_rfc3339("2026-11-01T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    s.move_to_folder_at(bob.id, msg, bob_trash, moved_at)
+        .await
+        .unwrap();
+
+    let (trash_expires_at,): (Option<chrono::DateTime<chrono::Utc>>,) = sqlx::query_as(
+        "SELECT trash_expires_at FROM mailbox_messages WHERE mailbox_id = $1 AND message_id = $2",
+    )
+    .bind(bob.id)
+    .bind(msg)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        trash_expires_at,
+        Some(moved_at + Duration::days(7)),
+        "trash expiry must be exactly seven days after move"
+    );
+
+    s.move_to_folder_at(bob.id, msg, bob_inbox, moved_at + Duration::days(1))
+        .await
+        .unwrap();
+    let (cleared_expiry,): (Option<chrono::DateTime<chrono::Utc>>,) = sqlx::query_as(
+        "SELECT trash_expires_at FROM mailbox_messages WHERE mailbox_id = $1 AND message_id = $2",
+    )
+    .bind(bob.id)
+    .bind(msg)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        cleared_expiry, None,
+        "moving out of Trash must clear expiry"
+    );
+
+    s.move_to_folder_at(bob.id, msg, bob_trash, moved_at + Duration::days(2))
+        .await
+        .unwrap();
+
+    let purged_early = s
+        .purge_expired_trash(moved_at + Duration::days(8), 64)
+        .await
+        .unwrap();
+    assert_eq!(purged_early, 0);
+
+    let purged = s
+        .purge_expired_trash(moved_at + Duration::days(10), 64)
+        .await
+        .unwrap();
+    assert_eq!(purged, 1);
+
+    let (memberships_after_purge,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM mailbox_messages WHERE message_id = $1")
+            .bind(msg)
+            .fetch_one(s.pool())
+            .await
+            .unwrap();
+    let (messages_after_purge,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM messages WHERE id = $1")
+            .bind(msg)
+            .fetch_one(s.pool())
+            .await
+            .unwrap();
+    assert_eq!(memberships_after_purge, 0);
+    assert_eq!(messages_after_purge, 0);
 }
