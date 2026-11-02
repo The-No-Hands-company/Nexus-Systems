@@ -35,27 +35,34 @@ work but does not release it until all safety acceptance criteria pass.
 
 ## Message reference model
 
-`messages` remains the shared immutable message row. `mailbox_messages`
-remains the durable per-mailbox reference. Outbound queue rows in `pending` or
-`delivering` state are also durable references; `sent`, terminally failed, and
-removed queue rows are not.
+`messages` remains the shared immutable message row. A new
+`message_references` ledger is the authoritative lifetime boundary. Each
+active row names one `message_id`, a kind (`submission`, `mailbox`, or
+`outbound`), and the immutable ID of the membership or queue row it protects.
+Released rows are retained only as non-content audit state until message
+cleanup; active rows prevent cleanup.
 
-Every operation that can add or remove either kind of reference locks the
-message row first with `SELECT ... FOR UPDATE`:
+Message creation atomically creates a `submission` hold. The router replaces
+that hold with mailbox and outbound holds in the same transaction that creates
+the corresponding `mailbox_messages` or `outbound_queue` row. It releases the
+submission hold only after every recipient disposition is durable. A crash
+therefore retains the message behind an unfinished hold rather than exposing a
+creation-before-queue window; a recovery worker resumes or reports the
+unfinished submission without deleting it.
 
-1. Submission locks the message before adding mailbox memberships or queue
-   rows.
-2. Delivery completion locks the message before changing/removing its active
-   queue row.
-3. Explicit erase, Empty Trash, and expiry purge lock the message before
-   deleting a mailbox membership and deciding whether it is orphaned.
-4. Orphan cleanup deletes the message only when no mailbox membership and no
-   active queue reference exists while that lock is held.
+Every operation that can create or release a reference locks the message row
+first with `SELECT ... FOR UPDATE`. Explicit erase, Empty Trash, expiry purge,
+delivery completion, and terminal delivery failure release their matching
+ledger row in the same transaction as the protected row's state change.
+Orphan cleanup deletes only while holding that lock and finding no active
+ledger references. It cross-checks the membership and active queue tables
+before deletion to detect an inconsistent ledger as a database error, never
+as permission to erase.
 
 Queue foreign keys must not cascade-delete active work when a message is
-erased. A queue operation either retains its reference until terminal
-completion or the deletion transaction fails and is retried. This serializes
-the decision rather than relying on `READ COMMITTED` observations of another
+erased. A queue operation retains its ledger reference until terminal
+completion, then releases it atomically. This serializes both creation and
+removal instead of relying on `READ COMMITTED` observations of another
 transaction's uncommitted membership.
 
 ## External-body protocol
