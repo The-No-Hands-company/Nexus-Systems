@@ -78,8 +78,9 @@ shows people the wrong mail.
 
 `nexus-mailsmtpd` runs two listeners: an MX port for anonymous strangers, and a
 submission port for our own users. `deploy.sh` starts it. The same process
-runs the delivery worker, which drains the outbound queue, and the federation
-listener on `127.0.0.1:2580`.
+runs the delivery worker, which drains the outbound queue, a bounded Trash-purge
+loop (expired Trash memberships only), and the federation listener on
+`127.0.0.1:2580`.
 
 **Both default to unprivileged loopback ports (2525 / 2587).** Binding 25 needs
 root or `CAP_NET_BIND_SERVICE`, and nothing can reach this node on 25 anyway —
@@ -156,6 +157,9 @@ one peer to another.
 | `NEXUS_EMAIL_EGRESS` | `direct` | `direct`, `resend`, or `peer:<domain>`; anything else stops the daemon at start |
 | `NEXUS_EMAIL_SMTP_HOST` / `_PORT` / `_USER` / `_PASS` | unset | Authenticated SMTP relay settings; password is required for `resend` |
 | `NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN` | unset | Shared bearer secret for the Cloudflare Email Worker endpoint |
+| `NEXUS_EMAIL_TRASH_PURGE_INTERVAL_SECS` | `300` | delay between bounded purge passes |
+| `NEXUS_EMAIL_TRASH_PURGE_BATCH_SIZE` | `128` | max expired memberships erased per batch |
+| `NEXUS_EMAIL_TRASH_PURGE_MAX_BATCHES` | `4` | max batches per pass before yielding to the next interval |
 | `NEXUS_EMAIL_FEDERATION_BIND` | `127.0.0.1:2580` | the federation listener |
 | `NEXUS_EMAIL_FEDERATION_HOST` | `mail.<domain>` | the host peers pin and sign for |
 | `NEXUS_EMAIL_NODE_KEY_PATH` | `~/.config/nexus-email/node.key` | this node's Ed25519 key; created once, never replaced |

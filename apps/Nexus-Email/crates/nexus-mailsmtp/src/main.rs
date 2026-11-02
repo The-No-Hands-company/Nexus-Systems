@@ -5,18 +5,19 @@
 //! own users, which requires authentication and may send anywhere.
 
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use nexus_maildelivery::{Deliverer, Queue, Router};
 use nexus_mailauth::{load_private_key_pem, Canon, DkimSigner, SystemDns};
+use nexus_maildelivery::{Deliverer, Queue, Router};
 use nexus_mailfed::client::HttpTransport;
 use nexus_mailfed::ingest::{self, IngestState};
 use nexus_mailfed::{NodeKey, PeerDirectory};
+use nexus_mailimap::ImapServer;
 use nexus_mailout::{DeliveryWorker, Egress, SmtpRelayConfig, WorkerConfig};
+use nexus_mailsmtp::authenticator::AuthService;
 use nexus_mailsmtp::inbound::{AuthenticatingSink, PolicyMode};
 use nexus_mailsmtp::policy::MailboxPolicy;
-use nexus_mailimap::ImapServer;
-use nexus_mailsmtp::authenticator::AuthService;
+use nexus_mailsmtp::purge::run_bounded_purge_pass;
 use nexus_mailsmtp::{Limits, Role, SmtpServer};
 use nexus_mailstore::MailStore;
 use sqlx::postgres::PgPoolOptions;
@@ -25,7 +26,25 @@ use tokio::net::TcpListener;
 /// An environment variable, treating empty as unset: deploy.sh passes every
 /// variable explicitly, so an unset optional one arrives as "".
 fn setting(name: &str) -> Option<String> {
-    std::env::var(name).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+    std::env::var(name)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+fn setting_parse<T: std::str::FromStr>(
+    name: &str,
+    default: T,
+) -> Result<T, Box<dyn std::error::Error>>
+where
+    T::Err: std::fmt::Display,
+{
+    match setting(name) {
+        Some(value) => value
+            .parse::<T>()
+            .map_err(|e| format!("{name}={value:?} is invalid: {e}").into()),
+        None => Ok(default),
+    }
 }
 
 #[tokio::main]
@@ -40,13 +59,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let database_url = std::env::var("NEXUS_EMAIL_DATABASE_URL")
         .map_err(|_| "NEXUS_EMAIL_DATABASE_URL must be set")?;
     let domain = std::env::var("NEXUS_EMAIL_DOMAIN").unwrap_or_else(|_| "tnhc.dev".into());
-    let hostname = std::env::var("NEXUS_EMAIL_HOSTNAME").unwrap_or_else(|_| format!("mail.{domain}"));
+    let hostname =
+        std::env::var("NEXUS_EMAIL_HOSTNAME").unwrap_or_else(|_| format!("mail.{domain}"));
 
     // Observe by default, and deliberately so. Enforce refuses mail on the
     // strength of this implementation's reading of somebody else's DNS; it
     // should be switched on once its Authentication-Results headers have been
     // read against real traffic, not on the day it first runs.
-    let mode = match std::env::var("NEXUS_EMAIL_POLICY").unwrap_or_default().as_str() {
+    let mode = match std::env::var("NEXUS_EMAIL_POLICY")
+        .unwrap_or_default()
+        .as_str()
+    {
         "enforce" => PolicyMode::Enforce,
         _ => PolicyMode::Observe,
     };
@@ -77,15 +100,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         None
     };
-    let federation_bind = setting("NEXUS_EMAIL_FEDERATION_BIND").unwrap_or_else(|| "127.0.0.1:2580".into());
+    let federation_bind =
+        setting("NEXUS_EMAIL_FEDERATION_BIND").unwrap_or_else(|| "127.0.0.1:2580".into());
     // The host peers pin for us, which they sign for. Not the Host header:
     // the ecosystem proxy rewrites that.
-    let federation_host = setting("NEXUS_EMAIL_FEDERATION_HOST").unwrap_or_else(|| hostname.clone());
+    let federation_host =
+        setting("NEXUS_EMAIL_FEDERATION_HOST").unwrap_or_else(|| hostname.clone());
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
     // Under $HOME, like the DKIM key: the project volume is NTFS, where file
     // permissions cannot protect a private key.
-    let key_path =
-        setting("NEXUS_EMAIL_NODE_KEY_PATH").unwrap_or_else(|| format!("{home}/.config/nexus-email/node.key"));
+    let key_path = setting("NEXUS_EMAIL_NODE_KEY_PATH")
+        .unwrap_or_else(|| format!("{home}/.config/nexus-email/node.key"));
     let node_key = Arc::new(NodeKey::load_or_create(std::path::Path::new(&key_path))?);
     let dkim = match (
         setting("NEXUS_EMAIL_DKIM_KEY_PATH"),
@@ -99,10 +124,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             body_canon: Canon::Relaxed,
         })),
         (None, None) => None,
-        _ => return Err("set both NEXUS_EMAIL_DKIM_KEY_PATH and NEXUS_EMAIL_DKIM_SELECTOR, or neither".into()),
+        _ => {
+            return Err(
+                "set both NEXUS_EMAIL_DKIM_KEY_PATH and NEXUS_EMAIL_DKIM_SELECTOR, or neither"
+                    .into(),
+            )
+        }
     };
 
-    let pool = PgPoolOptions::new().max_connections(8).connect(&database_url).await?;
+    let pool = PgPoolOptions::new()
+        .max_connections(8)
+        .connect(&database_url)
+        .await?;
     let store = MailStore::new(pool.clone());
     let peers = PeerDirectory::new(pool.clone());
 
@@ -152,9 +185,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // IMAP, so ordinary mail clients can use this mailbox. Credentials are
     // checked against Auth rather than against anything stored here.
-    let imap_bind = std::env::var("NEXUS_EMAIL_IMAP_BIND").unwrap_or_else(|_| "127.0.0.1:2143".into());
-    let auth_url = std::env::var("NEXUS_AUTH_INTERNAL_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:4310".into());
+    let imap_bind =
+        std::env::var("NEXUS_EMAIL_IMAP_BIND").unwrap_or_else(|_| "127.0.0.1:2143".into());
+    let auth_url =
+        std::env::var("NEXUS_AUTH_INTERNAL_URL").unwrap_or_else(|_| "http://127.0.0.1:4310".into());
     let imap = Arc::new(ImapServer {
         hostname: hostname.clone(),
         store: store.clone(),
@@ -162,8 +196,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     let imap_listener = TcpListener::bind(&imap_bind).await?;
 
-    let clock: Arc<dyn Fn() -> i64 + Send + Sync> =
-        Arc::new(|| SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0));
+    let clock: Arc<dyn Fn() -> i64 + Send + Sync> = Arc::new(|| {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0)
+    });
     let federation = ingest::router(Arc::new(IngestState {
         local_domain: domain.clone(),
         public_host: federation_host.clone(),
@@ -174,7 +212,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }));
     let federation_listener = TcpListener::bind(&federation_bind).await?;
 
-    let transport = Arc::new(HttpTransport::new(domain.clone(), Arc::clone(&node_key), peers.clone(), clock));
+    let transport = Arc::new(HttpTransport::new(
+        domain.clone(),
+        Arc::clone(&node_key),
+        peers.clone(),
+        clock,
+    ));
     let mut worker = DeliveryWorker::new(
         store.clone(),
         queue,
@@ -195,6 +238,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mx_listener = TcpListener::bind(&mx_bind).await?;
     let sub_listener = TcpListener::bind(&submission_bind).await?;
+    let purge_interval_secs = setting_parse::<u64>("NEXUS_EMAIL_TRASH_PURGE_INTERVAL_SECS", 300)?;
+    let purge_batch_size = setting_parse::<i64>("NEXUS_EMAIL_TRASH_PURGE_BATCH_SIZE", 128)?;
+    let purge_max_batches = setting_parse::<u32>("NEXUS_EMAIL_TRASH_PURGE_MAX_BATCHES", 4)?;
     tracing::info!(%mx_bind, %submission_bind, %imap_bind, %hostname, ?mode, "nexus-mailsmtpd listening");
     tracing::info!(
         %federation_bind,
@@ -230,6 +276,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    let purge = async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(purge_interval_secs.max(1)));
+        loop {
+            ticker.tick().await;
+            let started = Instant::now();
+            let stats = run_bounded_purge_pass(purge_batch_size, purge_max_batches, {
+                let store = store.clone();
+                move |limit| {
+                    let store = store.clone();
+                    async move {
+                        store
+                            .purge_expired_trash(sqlx::types::chrono::Utc::now(), limit)
+                            .await
+                    }
+                }
+            })
+            .await;
+            match stats {
+                Ok(stats) => {
+                    tracing::info!(
+                        purged = stats.purged,
+                        batches = stats.batches,
+                        capped = stats.capped,
+                        elapsed_ms = started.elapsed().as_millis(),
+                        "trash purge pass complete"
+                    );
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        %error,
+                        batch_size = purge_batch_size,
+                        max_batches = purge_max_batches,
+                        "trash purge pass failed"
+                    );
+                }
+            }
+        }
+    };
+
     tokio::select! {
         r = mx.serve(mx_listener) => r?,
         r = submission.serve(sub_listener) => r?,
@@ -237,6 +322,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         r = axum::serve(federation_listener, federation) => r?,
         _ = worker.run() => {},
         _ = prune => {},
+        _ = purge => {},
     }
     Ok(())
 }

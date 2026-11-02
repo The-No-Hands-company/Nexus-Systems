@@ -2,6 +2,8 @@
 //! state machine, which is exactly why these rules can be pinned down.
 
 use nexus_mailsmtp::{Action, Limits, RelayPolicy, Role, Session};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// Hosts one domain, like a real node would.
 struct Local;
@@ -48,7 +50,11 @@ async fn an_anonymous_sender_cannot_relay_to_a_third_party() {
     // reputational damage is not recoverable.
     let mut s = mx();
     let r = open_transaction(&mut s, "spammer@evil.test", "victim@gmail.com").await;
-    assert!(reply(&r).starts_with("550"), "must refuse to relay, got {}", reply(&r));
+    assert!(
+        reply(&r).starts_with("550"),
+        "must refuse to relay, got {}",
+        reply(&r)
+    );
 }
 
 #[tokio::test]
@@ -56,7 +62,11 @@ async fn an_anonymous_sender_may_deliver_to_a_mailbox_we_host() {
     // The other half: refusing everything would make the MX useless.
     let mut s = mx();
     let r = open_transaction(&mut s, "someone@example.test", "info@tnhc.dev").await;
-    assert!(reply(&r).starts_with("250"), "should accept local mail, got {}", reply(&r));
+    assert!(
+        reply(&r).starts_with("250"),
+        "should accept local mail, got {}",
+        reply(&r)
+    );
 }
 
 #[tokio::test]
@@ -67,7 +77,10 @@ async fn an_unauthenticated_submission_session_cannot_send_anywhere() {
     for target in ["victim@gmail.com", "info@tnhc.dev"] {
         let mut s2 = submission(false);
         let r = open_transaction(&mut s2, "a@tnhc.dev", target).await;
-        assert!(reply(&r).starts_with("550"), "unauthenticated must be refused for {target}");
+        assert!(
+            reply(&r).starts_with("550"),
+            "unauthenticated must be refused for {target}"
+        );
     }
     let _ = &mut s;
 }
@@ -76,7 +89,11 @@ async fn an_unauthenticated_submission_session_cannot_send_anywhere() {
 async fn an_authenticated_submission_session_may_send_outward() {
     let mut s = submission(true);
     let r = open_transaction(&mut s, "founder@tnhc.dev", "someone@gmail.com").await;
-    assert!(reply(&r).starts_with("250"), "authenticated should be allowed, got {}", reply(&r));
+    assert!(
+        reply(&r).starts_with("250"),
+        "authenticated should be allowed, got {}",
+        reply(&r)
+    );
 }
 
 #[tokio::test]
@@ -138,8 +155,13 @@ async fn quit_closes_the_connection() {
 async fn a_flood_of_bad_commands_ends_the_connection() {
     // Otherwise a stranger holds a connection open indefinitely feeding junk.
     let mut s = Session::new(
-        "mail.tnhc.dev", Role::Mx, Local,
-        Limits { max_errors: 3, ..Default::default() },
+        "mail.tnhc.dev",
+        Role::Mx,
+        Local,
+        Limits {
+            max_errors: 3,
+            ..Default::default()
+        },
     );
     say(&mut s, "NONSENSE").await;
     say(&mut s, "NONSENSE").await;
@@ -169,15 +191,23 @@ async fn vrfy_never_reveals_whether_an_address_exists() {
     say(&mut s, "EHLO x").await;
     let real = reply(&say(&mut s, "VRFY info@tnhc.dev").await);
     let fake = reply(&say(&mut s, "VRFY nobody@tnhc.dev").await);
-    assert_eq!(real, fake, "the answer must not depend on whether the address exists");
+    assert_eq!(
+        real, fake,
+        "the answer must not depend on whether the address exists"
+    );
     assert!(real.starts_with("252"));
 }
 
 #[tokio::test]
 async fn too_many_recipients_is_refused() {
     let mut s = Session::new(
-        "mail.tnhc.dev", Role::Mx, Local,
-        Limits { max_recipients: 2, ..Default::default() },
+        "mail.tnhc.dev",
+        Role::Mx,
+        Local,
+        Limits {
+            max_recipients: 2,
+            ..Default::default()
+        },
     );
     say(&mut s, "EHLO x").await;
     say(&mut s, "MAIL FROM:<a@b.test>").await;
@@ -199,8 +229,17 @@ async fn a_complete_message_is_handed_over_for_delivery() {
     let r = say(&mut s, ".").await;
 
     match r {
-        Action::Deliver { from, recipients, data, helo, reply } => {
-            assert_eq!(helo, "client.test", "the HELO name must reach the sink for SPF");
+        Action::Deliver {
+            from,
+            recipients,
+            data,
+            helo,
+            reply,
+        } => {
+            assert_eq!(
+                helo, "client.test",
+                "the HELO name must reach the sink for SPF"
+            );
             assert_eq!(from, "sender@example.test");
             assert_eq!(recipients, vec!["info@tnhc.dev"]);
             assert!(String::from_utf8_lossy(&data).contains("body line"));
@@ -232,8 +271,13 @@ async fn an_oversized_message_is_refused_but_the_session_survives() {
     // Dropping the connection instead would leave the sender retrying forever
     // without ever learning why.
     let mut s = Session::new(
-        "mail.tnhc.dev", Role::Mx, Local,
-        Limits { max_message_bytes: 64, ..Default::default() },
+        "mail.tnhc.dev",
+        Role::Mx,
+        Local,
+        Limits {
+            max_message_bytes: 64,
+            ..Default::default()
+        },
     );
     open_transaction(&mut s, "a@b.test", "info@tnhc.dev").await;
     say(&mut s, "DATA").await;
@@ -242,7 +286,10 @@ async fn an_oversized_message_is_refused_but_the_session_survives() {
     }
     let r = say(&mut s, ".").await;
 
-    assert!(matches!(r, Action::Reply(_)), "must not deliver an oversized message");
+    assert!(
+        matches!(r, Action::Reply(_)),
+        "must not deliver an oversized message"
+    );
     assert!(reply(&r).starts_with("552"));
     assert!(!s.is_closed(), "the session should continue");
 
@@ -256,9 +303,60 @@ async fn the_advertised_size_matches_the_enforced_one() {
     // A sender that trusts the advertised SIZE and is then refused has been
     // lied to, and will keep retrying a message that can never fit.
     let mut s = Session::new(
-        "mail.tnhc.dev", Role::Mx, Local,
-        Limits { max_message_bytes: 12345, ..Default::default() },
+        "mail.tnhc.dev",
+        Role::Mx,
+        Local,
+        Limits {
+            max_message_bytes: 12345,
+            ..Default::default()
+        },
     );
     let banner = reply(&say(&mut s, "EHLO x").await);
     assert!(banner.contains("SIZE 12345"), "got {banner}");
+}
+
+#[derive(Debug)]
+struct FakePurgeState {
+    expired: usize,
+    unexpired: usize,
+}
+
+#[tokio::test]
+async fn purge_resumes_after_restart_without_deleting_unexpired_trash() {
+    let state = Arc::new(Mutex::new(FakePurgeState {
+        expired: 5,
+        unexpired: 2,
+    }));
+    let mut total_purged = 0_u64;
+
+    for expected in [2_u64, 2, 1, 0] {
+        let run = nexus_mailsmtp::purge::run_bounded_purge_pass(2, 1, {
+            let state = Arc::clone(&state);
+            move |limit| {
+                let state = Arc::clone(&state);
+                async move {
+                    let mut guard = state.lock().await;
+                    let purged = guard.expired.min(limit as usize);
+                    guard.expired -= purged;
+                    Ok::<u64, ()>(purged as u64)
+                }
+            }
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(run.purged, expected);
+        total_purged += run.purged;
+    }
+
+    let guard = state.lock().await;
+    assert_eq!(
+        total_purged, 5,
+        "every expired membership should eventually purge"
+    );
+    assert_eq!(guard.expired, 0, "all expired memberships should be gone");
+    assert_eq!(
+        guard.unexpired, 2,
+        "unexpired memberships must survive restart/resume cycles"
+    );
 }
