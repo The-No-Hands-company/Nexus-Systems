@@ -8,7 +8,7 @@ ALTER TABLE mailbox_messages
 
 -- Existing Trash memberships should start expiring from when they were filed.
 UPDATE mailbox_messages mm
-SET trash_expires_at = mm.added_at + interval '7 days'
+SET trash_expires_at = GREATEST(now(), mm.added_at) + interval '7 days'
 FROM folders f
 WHERE mm.folder_id = f.id
   AND mm.mailbox_id = f.mailbox_id

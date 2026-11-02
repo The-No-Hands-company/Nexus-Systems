@@ -832,10 +832,15 @@ impl MailStore {
     /// Permanently erase expired Trash memberships in bounded batches.
     pub async fn purge_expired_trash(&self, now: DateTime<Utc>, limit: i64) -> Result<u64> {
         let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(
-            "SELECT mailbox_id, message_id
-             FROM mailbox_messages
-             WHERE trash_expires_at IS NOT NULL AND trash_expires_at <= $1
-             ORDER BY trash_expires_at
+            "SELECT mm.mailbox_id, mm.message_id
+             FROM mailbox_messages mm
+             JOIN folders f
+               ON f.id = mm.folder_id
+              AND f.mailbox_id = mm.mailbox_id
+             WHERE f.kind = 'trash'
+               AND mm.trash_expires_at IS NOT NULL
+               AND mm.trash_expires_at <= $1
+             ORDER BY mm.trash_expires_at
              LIMIT $2",
         )
         .bind(now)
@@ -845,9 +850,42 @@ impl MailStore {
 
         let mut purged = 0_u64;
         for (mailbox_id, message_id) in rows {
-            self.erase_membership(mailbox_id, message_id).await?;
-            purged += 1;
+            let mut tx = self.pool.begin().await?;
+            let deleted: Option<(Uuid,)> = sqlx::query_as(
+                "DELETE FROM mailbox_messages mm
+                 USING folders f
+                 WHERE mm.mailbox_id = $1
+                   AND mm.message_id = $2
+                   AND mm.folder_id = f.id
+                   AND f.mailbox_id = mm.mailbox_id
+                   AND f.kind = 'trash'
+                   AND mm.trash_expires_at IS NOT NULL
+                   AND mm.trash_expires_at <= $3
+                 RETURNING mm.message_id",
+            )
+            .bind(mailbox_id)
+            .bind(message_id)
+            .bind(now)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+            if deleted.is_some() {
+                sqlx::query(
+                    "DELETE FROM messages
+                     WHERE id = $1
+                       AND NOT EXISTS (
+                         SELECT 1 FROM mailbox_messages WHERE message_id = $1
+                       )",
+                )
+                .bind(message_id)
+                .execute(&mut *tx)
+                .await?;
+                purged += 1;
+            }
+
+            tx.commit().await?;
         }
+
         Ok(purged)
     }
 

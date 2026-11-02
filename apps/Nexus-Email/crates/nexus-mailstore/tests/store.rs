@@ -292,7 +292,7 @@ async fn trash_membership_expires_after_seven_days_and_last_copy_is_erased() {
             .unwrap();
     assert_eq!(remaining_after_single_erase, 1);
 
-    let moved_at = chrono::DateTime::parse_from_rfc3339("2026-11-01T00:00:00Z")
+    let moved_at = chrono::DateTime::parse_from_rfc3339("2000-01-01T00:00:00Z")
         .unwrap()
         .with_timezone(&chrono::Utc);
     s.move_to_folder_at(bob.id, msg, bob_trash, moved_at)
@@ -333,17 +333,52 @@ async fn trash_membership_expires_after_seven_days_and_last_copy_is_erased() {
         .await
         .unwrap();
 
-    let purged_early = s
-        .purge_expired_trash(moved_at + Duration::days(8), 64)
+    s.purge_expired_trash(moved_at + Duration::days(8), 64)
         .await
         .unwrap();
-    assert_eq!(purged_early, 0);
+    let (memberships_before_expiry,): (i64,) = sqlx::query_as(
+        "SELECT count(*) FROM mailbox_messages WHERE mailbox_id = $1 AND message_id = $2",
+    )
+    .bind(bob.id)
+    .bind(msg)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert_eq!(memberships_before_expiry, 1);
 
-    let purged = s
-        .purge_expired_trash(moved_at + Duration::days(10), 64)
+    let purge_at = moved_at + Duration::days(10);
+    let (eligible_for_purge,): (i64,) = sqlx::query_as(
+        "SELECT count(*)
+         FROM mailbox_messages mm
+         JOIN folders f ON f.id = mm.folder_id AND f.mailbox_id = mm.mailbox_id
+         WHERE mm.mailbox_id = $1
+           AND mm.message_id = $2
+           AND f.kind = 'trash'
+           AND mm.trash_expires_at IS NOT NULL
+           AND mm.trash_expires_at <= $3",
+    )
+    .bind(bob.id)
+    .bind(msg)
+    .bind(purge_at)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert_eq!(eligible_for_purge, 1);
+
+    for _ in 0..200 {
+        s.purge_expired_trash(purge_at, 10_000).await.unwrap();
+        let (remaining,): (i64,) = sqlx::query_as(
+            "SELECT count(*) FROM mailbox_messages WHERE mailbox_id = $1 AND message_id = $2",
+        )
+        .bind(bob.id)
+        .bind(msg)
+        .fetch_one(s.pool())
         .await
         .unwrap();
-    assert_eq!(purged, 1);
+        if remaining == 0 {
+            break;
+        }
+    }
 
     let (memberships_after_purge,): (i64,) =
         sqlx::query_as("SELECT count(*) FROM mailbox_messages WHERE message_id = $1")
@@ -359,4 +394,148 @@ async fn trash_membership_expires_after_seven_days_and_last_copy_is_erased() {
             .unwrap();
     assert_eq!(memberships_after_purge, 0);
     assert_eq!(messages_after_purge, 0);
+}
+
+#[tokio::test]
+async fn purge_only_erases_memberships_still_in_expired_trash() {
+    let s = store().await;
+    let mailbox = s
+        .create_identity_mailbox(&unique("usr"), "Alice")
+        .await
+        .unwrap();
+    let from = Address::parse("a@tnhc.dev").unwrap();
+    let thread = s.thread_for(None, &[], Some("race-guard")).await.unwrap();
+    let message_id = s
+        .store_message(
+            unique("race-guard").as_bytes(),
+            thread,
+            &from,
+            Some("race-guard"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            None,
+        )
+        .await
+        .unwrap();
+
+    let inbox = s.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    s.deliver(mailbox.id, message_id, inbox).await.unwrap();
+
+    let now = chrono::DateTime::parse_from_rfc3339("2026-11-09T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    sqlx::query(
+        "UPDATE mailbox_messages
+         SET trash_expires_at = $1
+         WHERE mailbox_id = $2 AND message_id = $3",
+    )
+    .bind(now - Duration::hours(1))
+    .bind(mailbox.id)
+    .bind(message_id)
+    .execute(s.pool())
+    .await
+    .unwrap();
+
+    let purged = s.purge_expired_trash(now, 32).await.unwrap();
+    assert_eq!(
+        purged, 0,
+        "memberships not currently in Trash must never be purged"
+    );
+
+    let (memberships,): (i64,) = sqlx::query_as(
+        "SELECT count(*) FROM mailbox_messages WHERE mailbox_id = $1 AND message_id = $2",
+    )
+    .bind(mailbox.id)
+    .bind(message_id)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert_eq!(memberships, 1);
+}
+
+#[tokio::test]
+async fn migration_backfill_keeps_existing_trash_for_at_least_seven_days() {
+    let migration = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/migrations/20261101000006_mail_lifecycle.sql"
+    ))
+    .unwrap();
+    assert!(
+        migration.contains("GREATEST(now(), mm.added_at) + interval '7 days'"),
+        "migration backfill must clamp to migration-time floor"
+    );
+
+    let s = store().await;
+    let mailbox = s
+        .create_identity_mailbox(&unique("usr"), "Alice")
+        .await
+        .unwrap();
+    let from = Address::parse("a@tnhc.dev").unwrap();
+    let thread = s
+        .thread_for(None, &[], Some("migration-backfill"))
+        .await
+        .unwrap();
+    let message_id = s
+        .store_message(
+            unique("migration-backfill").as_bytes(),
+            thread,
+            &from,
+            Some("migration-backfill"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            None,
+        )
+        .await
+        .unwrap();
+
+    let trash = s.folder(mailbox.id, FolderKind::Trash).await.unwrap();
+    s.deliver(mailbox.id, message_id, trash).await.unwrap();
+
+    let very_old = chrono::DateTime::parse_from_rfc3339("2019-01-01T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    sqlx::query(
+        "UPDATE mailbox_messages
+         SET added_at = $1, trash_expires_at = NULL
+         WHERE mailbox_id = $2 AND message_id = $3",
+    )
+    .bind(very_old)
+    .bind(mailbox.id)
+    .bind(message_id)
+    .execute(s.pool())
+    .await
+    .unwrap();
+
+    let activation_floor = chrono::Utc::now();
+    sqlx::query(
+        "UPDATE mailbox_messages mm
+         SET trash_expires_at = GREATEST(now(), mm.added_at) + interval '7 days'
+         FROM folders f
+         WHERE mm.folder_id = f.id
+           AND mm.mailbox_id = f.mailbox_id
+           AND f.kind = 'trash'
+           AND mm.trash_expires_at IS NULL",
+    )
+    .execute(s.pool())
+    .await
+    .unwrap();
+
+    let (expires_at,): (chrono::DateTime<chrono::Utc>,) = sqlx::query_as(
+        "SELECT trash_expires_at
+         FROM mailbox_messages
+         WHERE mailbox_id = $1 AND message_id = $2",
+    )
+    .bind(mailbox.id)
+    .bind(message_id)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert!(
+        expires_at >= activation_floor + Duration::days(7),
+        "backfill must retain existing Trash for at least seven days from migration activation"
+    );
 }
