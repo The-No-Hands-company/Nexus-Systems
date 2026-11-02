@@ -608,6 +608,7 @@ async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
         .thread_for(None, &[], Some("external-body-delete"))
         .await
         .unwrap();
+    let external_key = format!("mail-bodies/opaque-object-{}", unique("generation"));
     let message_id = s
         .store_message(
             b"stored externally",
@@ -618,7 +619,7 @@ async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
             None,
             &[],
             Transport::Internal,
-            Some("mail-bodies/opaque-object"),
+            Some(&external_key),
         )
         .await
         .unwrap();
@@ -628,34 +629,115 @@ async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
     s.erase_membership(mailbox.id, message_id).await.unwrap();
 
     let now = chrono::Utc::now();
-    let jobs = s.claim_object_deletion_jobs(now, 1).await.unwrap();
-    assert_eq!(jobs.len(), 1);
-    assert_eq!(jobs[0].object_key, "mail-bodies/opaque-object");
+    let job = s
+        .claim_object_deletion_jobs(now, 1)
+        .await
+        .unwrap()
+        .pop()
+        .expect("the erased generation is queued");
+    assert!(
+        job.object_key.starts_with(&format!("{external_key}/")),
+        "external objects must use an immutable generation key"
+    );
 
-    s.retry_object_deletion(jobs[0].id, now).await.unwrap();
+    s.retry_object_deletion(job.id, now).await.unwrap();
     assert!(
         s.claim_object_deletion_jobs(now, 1)
             .await
             .unwrap()
-            .is_empty(),
+            .into_iter()
+            .all(|candidate| candidate.id != job.id),
         "a failed deletion must remain durably queued until its retry delay"
     );
     let retry = s
         .claim_object_deletion_jobs(now + Duration::minutes(2), 1)
         .await
         .unwrap();
-    assert_eq!(
-        retry.len(),
-        1,
-        "the queued external object must become retryable"
-    );
-    s.complete_object_deletion(retry[0].id).await.unwrap();
+    let retry = retry
+        .into_iter()
+        .next()
+        .expect("the queued external object must become retryable");
+    s.complete_object_deletion(retry.id, retry.generation_id)
+        .await
+        .unwrap();
     assert!(
         s.claim_object_deletion_jobs(now + Duration::minutes(4), 1)
             .await
             .unwrap()
-            .is_empty(),
+            .into_iter()
+            .all(|candidate| candidate.id != job.id),
         "only a successful object-store deletion may remove the durable job"
+    );
+}
+
+#[tokio::test]
+async fn cleanup_never_deletes_a_new_object_generation_after_erasure() {
+    let s = store().await;
+    let mailbox = s
+        .create_identity_mailbox(&unique("usr"), "Alice")
+        .await
+        .unwrap();
+    let from = Address::parse("sender@example.test").unwrap();
+    let raw = b"equivalent externally stored content";
+    let external_key = "mail-bodies/content-address";
+
+    let first_thread = s
+        .thread_for(None, &[], Some("old-generation"))
+        .await
+        .unwrap();
+    let first = s
+        .store_message(
+            raw,
+            first_thread,
+            &from,
+            Some("old-generation"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            Some(external_key),
+        )
+        .await
+        .unwrap();
+    let inbox = s.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    s.deliver(mailbox.id, first, inbox).await.unwrap();
+    s.erase_membership(mailbox.id, first).await.unwrap();
+
+    let queued = s
+        .claim_object_deletion_jobs(chrono::Utc::now(), 1)
+        .await
+        .unwrap()
+        .pop()
+        .expect("erasing the old message queues its generation");
+
+    let second_thread = s
+        .thread_for(None, &[], Some("new-generation"))
+        .await
+        .unwrap();
+    let second = s
+        .store_message(
+            raw,
+            second_thread,
+            &from,
+            Some("new-generation"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            Some(external_key),
+        )
+        .await
+        .unwrap();
+    let new_generation: (String,) =
+        sqlx::query_as("SELECT body_object_key FROM messages WHERE id = $1")
+            .bind(second)
+            .fetch_one(s.pool())
+            .await
+            .unwrap();
+
+    assert_ne!(
+        queued.object_key, new_generation.0,
+        "the queued cleanup must name the erased generation, never a reusable key"
     );
 }
 

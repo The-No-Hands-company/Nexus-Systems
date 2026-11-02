@@ -32,7 +32,9 @@ where
 
     for job in jobs {
         if delete_object(job.object_key).await.is_ok() {
-            store.complete_object_deletion(job.id).await?;
+            store
+                .complete_object_deletion(job.id, job.generation_id)
+                .await?;
             stats.deleted += 1;
         } else {
             store.retry_object_deletion(job.id, now).await?;

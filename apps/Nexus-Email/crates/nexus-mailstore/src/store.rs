@@ -20,6 +20,7 @@ pub const INLINE_BODY_LIMIT: usize = 256 * 1024;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectDeletionJob {
     pub id: Uuid,
+    pub generation_id: Uuid,
     pub object_key: String,
 }
 
@@ -255,11 +256,24 @@ impl MailStore {
             };
 
         let id = Uuid::now_v7();
+        let generation =
+            key.map(|base_key| (Uuid::now_v7(), format!("{base_key}/{}", Uuid::now_v7())));
+        let mut tx = self.pool.begin().await?;
+        if let Some((generation_id, generation_key)) = &generation {
+            sqlx::query(
+                "INSERT INTO object_generations (id, object_key, lifecycle_state, created_at)
+                 VALUES ($1, $2, 'referenced', now())",
+            )
+            .bind(generation_id)
+            .bind(generation_key)
+            .execute(&mut *tx)
+            .await?;
+        }
         sqlx::query(
             "INSERT INTO messages (id, content_hash, rfc822_msg_id, thread_id, in_reply_to,
                                    references_ids, subject, from_address, transport,
-                                   size_bytes, body_inline, body_object_key)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+                                   size_bytes, body_inline, body_object_key, body_object_generation_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
         )
         .bind(id)
         .bind(&hash)
@@ -272,16 +286,18 @@ impl MailStore {
         .bind(transport.as_str())
         .bind(raw.len() as i64)
         .bind(inline)
-        .bind(key)
-        .execute(&self.pool)
+        .bind(generation.as_ref().map(|(_, generation_key)| generation_key))
+        .bind(generation.as_ref().map(|(generation_id, _)| generation_id))
+        .execute(&mut *tx)
         .await?;
 
         sqlx::query("UPDATE threads SET last_activity_at = $1 WHERE id = $2")
             .bind(Utc::now())
             .bind(thread_id)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
 
+        tx.commit().await?;
         Ok(id)
     }
 
@@ -929,11 +945,17 @@ impl MailStore {
     ) -> Result<Vec<ObjectDeletionJob>> {
         let rows = sqlx::query_as(
             "WITH candidates AS (
-                 SELECT id
-                 FROM object_deletion_queue
-                 WHERE next_attempt_at <= $1
-                   AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
-                 ORDER BY next_attempt_at, created_at
+                 SELECT q.id
+                 FROM object_deletion_queue q
+                 JOIN object_generations g ON g.id = q.generation_id
+                 WHERE q.next_attempt_at <= $1
+                   AND (q.lease_expires_at IS NULL OR q.lease_expires_at <= $1)
+                   AND g.lifecycle_state = 'cleanup_queued'
+                   AND NOT EXISTS (
+                       SELECT 1 FROM messages m
+                       WHERE m.body_object_generation_id = q.generation_id
+                   )
+                 ORDER BY q.next_attempt_at, q.created_at
                  FOR UPDATE SKIP LOCKED
                  LIMIT $2
              ),
@@ -943,9 +965,16 @@ impl MailStore {
                      attempts = q.attempts + 1
                  FROM candidates c
                  WHERE q.id = c.id
-                 RETURNING q.id, q.object_key
+                 RETURNING q.id, q.generation_id, q.object_key
              )
-             SELECT id, object_key FROM claimed",
+             SELECT c.id, c.generation_id, c.object_key
+             FROM claimed c
+             JOIN object_generations g ON g.id = c.generation_id
+             WHERE g.lifecycle_state = 'cleanup_queued'
+               AND NOT EXISTS (
+                   SELECT 1 FROM messages m
+                   WHERE m.body_object_generation_id = c.generation_id
+               )",
         )
         .bind(now)
         .bind(limit.clamp(1, 1_000))
@@ -954,16 +983,42 @@ impl MailStore {
 
         Ok(rows
             .into_iter()
-            .map(|(id, object_key)| ObjectDeletionJob { id, object_key })
+            .map(|(id, generation_id, object_key)| ObjectDeletionJob {
+                id,
+                generation_id,
+                object_key,
+            })
             .collect())
     }
 
     /// Mark an object deletion as confirmed by the object-storage owner.
-    pub async fn complete_object_deletion(&self, job_id: Uuid) -> Result<()> {
-        sqlx::query("DELETE FROM object_deletion_queue WHERE id = $1")
-            .bind(job_id)
-            .execute(&self.pool)
+    pub async fn complete_object_deletion(&self, job_id: Uuid, generation_id: Uuid) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        let deleted: Option<(Uuid,)> = sqlx::query_as(
+            "DELETE FROM object_deletion_queue
+             WHERE id = $1 AND generation_id = $2
+             RETURNING generation_id",
+        )
+        .bind(job_id)
+        .bind(generation_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if let Some((generation_id,)) = deleted {
+            sqlx::query(
+                "UPDATE object_generations
+                 SET lifecycle_state = 'deleted'
+                 WHERE id = $1
+                   AND lifecycle_state = 'cleanup_queued'
+                   AND NOT EXISTS (
+                       SELECT 1 FROM messages
+                       WHERE body_object_generation_id = $1
+                   )",
+            )
+            .bind(generation_id)
+            .execute(&mut *tx)
             .await?;
+        }
+        tx.commit().await?;
         Ok(())
     }
 
@@ -986,29 +1041,46 @@ impl MailStore {
         tx: &mut Transaction<'_, Postgres>,
         message_id: Uuid,
     ) -> Result<()> {
-        let deleted: Option<(Option<String>,)> = sqlx::query_as(
+        let deleted: Option<(Option<Uuid>,)> = sqlx::query_as(
             "DELETE FROM messages
              WHERE id = $1
                AND NOT EXISTS (
                  SELECT 1 FROM mailbox_messages WHERE message_id = $1
                )
-             RETURNING body_object_key",
+             RETURNING body_object_generation_id",
         )
         .bind(message_id)
         .fetch_optional(&mut **tx)
         .await?;
 
-        if let Some((Some(object_key),)) = deleted {
-            sqlx::query(
-                "INSERT INTO object_deletion_queue
-                     (id, object_key, next_attempt_at, created_at)
-                 VALUES ($1, $2, now(), now())
-                 ON CONFLICT (object_key) DO NOTHING",
+        if let Some((Some(generation_id),)) = deleted {
+            let generation: Option<(String,)> = sqlx::query_as(
+                "UPDATE object_generations
+                 SET lifecycle_state = 'cleanup_queued'
+                 WHERE id = $1
+                   AND lifecycle_state = 'referenced'
+                   AND NOT EXISTS (
+                       SELECT 1 FROM messages
+                       WHERE body_object_generation_id = $1
+                   )
+                 RETURNING object_key",
             )
-            .bind(Uuid::now_v7())
-            .bind(object_key)
-            .execute(&mut **tx)
+            .bind(generation_id)
+            .fetch_optional(&mut **tx)
             .await?;
+            if let Some((object_key,)) = generation {
+                sqlx::query(
+                    "INSERT INTO object_deletion_queue
+                     (id, generation_id, object_key, next_attempt_at, created_at)
+                 VALUES ($1, $2, $3, now(), now())
+                 ON CONFLICT DO NOTHING",
+                )
+                .bind(Uuid::now_v7())
+                .bind(generation_id)
+                .bind(object_key)
+                .execute(&mut **tx)
+                .await?;
+            }
         }
         Ok(())
     }
