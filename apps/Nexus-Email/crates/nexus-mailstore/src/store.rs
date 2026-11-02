@@ -1535,6 +1535,8 @@ impl MailStore {
                 Self::release_reference_in_transaction(
                     &mut tx, message_id, MessageReferenceKind::Mailbox, id,
                 ).await?;
+            } else {
+                Self::request_erasure_if_unowned_in_transaction(&mut tx, message_id).await?;
             }
             Self::erase_orphaned_message_in_transaction(&mut tx, message_id).await?;
         }
@@ -1573,6 +1575,8 @@ impl MailStore {
                 Self::release_reference_in_transaction(
                     &mut tx, message_id, MessageReferenceKind::Mailbox, id,
                 ).await?;
+            } else {
+                Self::request_erasure_if_unowned_in_transaction(&mut tx, message_id).await?;
             }
             Self::erase_orphaned_message_in_transaction(&mut tx, message_id).await?;
         }
@@ -1629,6 +1633,8 @@ impl MailStore {
                     Self::release_reference_in_transaction(
                         &mut tx, message_id, MessageReferenceKind::Mailbox, id,
                     ).await?;
+                } else {
+                    Self::request_erasure_if_unowned_in_transaction(&mut tx, message_id).await?;
                 }
                 Self::erase_orphaned_message_in_transaction(&mut tx, message_id).await?;
                 purged += 1;
@@ -1775,8 +1781,22 @@ impl MailStore {
         Ok(())
     }
 
+    async fn request_erasure_if_unowned_in_transaction(
+        tx: &mut Transaction<'_, Postgres>,
+        message_id: Uuid,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE mail_submissions SET erasure_requested = true
+             WHERE message_id = $1 AND NOT EXISTS
+                 (SELECT 1 FROM mailbox_messages WHERE message_id = $1)",
+        )
+        .bind(message_id)
+        .execute(&mut **tx)
+        .await?;
+        Ok(())
+    }
+
     /// Finish an erasure deferred while another reference was still active.
-    /// Queue-only messages retain their terminal delivery history as before.
     pub async fn finish_deferred_erasure_in_transaction(
         tx: &mut Transaction<'_, Postgres>,
         message_id: Uuid,
@@ -1798,6 +1818,59 @@ impl MailStore {
         Ok(())
     }
 
+    pub async fn validate_submission_queues_in_transaction(
+        tx: &mut Transaction<'_, Postgres>,
+        message_id: Uuid,
+    ) -> Result<()> {
+        let (inconsistent,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS (
+                SELECT 1 FROM outbound_queue q
+                LEFT JOIN mail_submission_recipients r ON r.queue_id = q.id
+                LEFT JOIN mail_submissions s ON s.id = r.submission_id
+                WHERE q.message_id = $1 AND (
+                    r.id IS NULL OR s.message_id IS DISTINCT FROM q.message_id OR
+                    r.route IS DISTINCT FROM q.route OR r.recipient IS DISTINCT FROM q.recipient OR
+                    (q.state IN ('pending', 'delivering') AND r.state <> 'outbound_pending') OR
+                    (q.state IN ('delivered', 'failed') AND r.state <> q.state)
+                )
+            ) OR EXISTS (
+                SELECT 1 FROM mail_submission_recipients r
+                JOIN mail_submissions s ON s.id = r.submission_id
+                LEFT JOIN outbound_queue q ON q.id = r.queue_id
+                WHERE s.message_id = $1 AND (
+                    (r.queue_id IS NOT NULL AND (
+                        q.id IS NULL OR q.message_id IS DISTINCT FROM s.message_id OR
+                        q.route IS DISTINCT FROM r.route OR q.recipient IS DISTINCT FROM r.recipient OR
+                        (q.state IN ('pending', 'delivering') AND r.state <> 'outbound_pending') OR
+                        (q.state IN ('delivered', 'failed') AND r.state <> q.state)
+                    ))
+                    OR (r.state = 'outbound_pending' AND q.id IS NULL)
+                )
+            )",
+        )
+        .bind(message_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        if inconsistent {
+            return Err(sqlx::Error::Protocol("queue and recipient intent disagree".into()).into());
+        }
+        Ok(())
+    }
+
+    pub async fn delete_unreferenced_thread_in_transaction(
+        tx: &mut Transaction<'_, Postgres>,
+        thread_id: Uuid,
+    ) -> Result<()> {
+        sqlx::query(
+            "DELETE FROM threads WHERE id = $1
+             AND NOT EXISTS (SELECT 1 FROM messages WHERE thread_id = $1)",
+        )
+        .bind(thread_id)
+        .execute(&mut **tx)
+        .await?;
+        Ok(())
+    }
+
     pub async fn erase_orphaned_message_in_transaction(
         tx: &mut Transaction<'_, Postgres>,
         message_id: Uuid,
@@ -1806,43 +1879,38 @@ impl MailStore {
             return Ok(false);
         }
         if Self::has_submission_in_transaction(tx, message_id).await? {
-            let (inconsistent,): (bool,) = sqlx::query_as(
-                "SELECT EXISTS (
-                    SELECT 1 FROM outbound_queue q
-                    LEFT JOIN mail_submission_recipients r ON r.queue_id = q.id
-                    LEFT JOIN mail_submissions s ON s.id = r.submission_id
-                    WHERE q.message_id = $1 AND (
-                        r.id IS NULL OR s.message_id <> q.message_id OR
-                        r.route <> q.route OR r.recipient IS DISTINCT FROM q.recipient OR
-                        (q.state IN ('pending', 'delivering') AND r.state <> 'outbound_pending') OR
-                        (q.state IN ('delivered', 'failed') AND r.state <> q.state)
-                    )
-                ) OR EXISTS (
-                    SELECT 1 FROM mail_submission_recipients r
-                    JOIN mail_submissions s ON s.id = r.submission_id
-                    LEFT JOIN outbound_queue q ON q.id = r.queue_id
-                    WHERE s.message_id = $1 AND r.state = 'outbound_pending'
-                      AND (q.id IS NULL OR q.message_id <> $1 OR q.state NOT IN ('pending', 'delivering'))
-                )",
-            ).bind(message_id).fetch_one(&mut **tx).await?;
-            if inconsistent {
-                return Err(
-                    sqlx::Error::Protocol("queue and recipient intent disagree".into()).into(),
-                );
-            }
-            let (retained,): (bool,) = sqlx::query_as(
+            Self::validate_submission_queues_in_transaction(tx, message_id).await?;
+            let (retained, erasure_requested): (bool, bool) = sqlx::query_as(
                 "SELECT EXISTS (SELECT 1 FROM mailbox_messages WHERE message_id = $1)
-                    OR EXISTS (SELECT 1 FROM outbound_queue WHERE message_id = $1)
                     OR EXISTS (
                         SELECT 1 FROM mail_submission_recipients r
                         JOIN mail_submissions s ON s.id = r.submission_id
                         WHERE s.message_id = $1 AND r.state IN ('local_pending', 'outbound_pending')
-                    )",
+                    ),
+                    (SELECT erasure_requested FROM mail_submissions WHERE message_id = $1)",
             )
             .bind(message_id)
             .fetch_one(&mut **tx)
             .await?;
             if retained {
+                return Ok(false);
+            }
+            if erasure_requested {
+                sqlx::query(
+                    "DELETE FROM mail_submission_recipients WHERE queue_id IN
+                     (SELECT id FROM outbound_queue WHERE message_id = $1 AND state IN ('delivered', 'failed'))",
+                ).bind(message_id).execute(&mut **tx).await?;
+                sqlx::query(
+                    "DELETE FROM outbound_queue WHERE message_id = $1 AND state IN ('delivered', 'failed')",
+                ).bind(message_id).execute(&mut **tx).await?;
+            }
+            let (queue_remains,): (bool,) = sqlx::query_as(
+                "SELECT EXISTS (SELECT 1 FROM outbound_queue WHERE message_id = $1)",
+            )
+            .bind(message_id)
+            .fetch_one(&mut **tx)
+            .await?;
+            if queue_remains {
                 return Ok(false);
             }
             sqlx::query(
@@ -1860,13 +1928,13 @@ impl MailStore {
                 .bind(message_id)
                 .execute(&mut **tx)
                 .await?;
-            let deleted: Option<(Option<Uuid>,)> = sqlx::query_as(
-                "DELETE FROM messages WHERE id = $1 RETURNING body_object_generation_id",
+            let deleted: Option<(Option<Uuid>, Uuid)> = sqlx::query_as(
+                "DELETE FROM messages WHERE id = $1 RETURNING body_object_generation_id, thread_id",
             )
             .bind(message_id)
             .fetch_optional(&mut **tx)
             .await?;
-            if let Some((Some(generation_id),)) = deleted {
+            if let Some((Some(generation_id), _)) = deleted {
                 let generation: Option<(String,)> = sqlx::query_as(
                     "UPDATE object_generations SET lifecycle_state = 'cleanup_queued'
                      WHERE id = $1 AND lifecycle_state = 'referenced'
@@ -1880,6 +1948,9 @@ impl MailStore {
                     Self::enqueue_object_deletion_job(tx, generation_id, &object_key, Utc::now())
                         .await?;
                 }
+            }
+            if let Some((_, thread_id)) = deleted {
+                Self::delete_unreferenced_thread_in_transaction(tx, thread_id).await?;
             }
             return Ok(deleted.is_some());
         }
@@ -1929,7 +2000,7 @@ impl MailStore {
         .bind(message_id)
         .execute(&mut **tx)
         .await?;
-        let deleted: Option<(Option<Uuid>,)> = sqlx::query_as(
+        let deleted: Option<(Option<Uuid>, Uuid)> = sqlx::query_as(
             "DELETE FROM messages
              WHERE id = $1
                AND NOT EXISTS (
@@ -1941,13 +2012,13 @@ impl MailStore {
                AND NOT EXISTS (
                  SELECT 1 FROM outbound_queue WHERE message_id = $1 AND state IN ('pending', 'delivering')
                )
-             RETURNING body_object_generation_id",
+             RETURNING body_object_generation_id, thread_id",
         )
         .bind(message_id)
         .fetch_optional(&mut **tx)
         .await?;
 
-        if let Some((Some(generation_id),)) = deleted {
+        if let Some((Some(generation_id), _)) = deleted {
             let generation: Option<(String,)> = sqlx::query_as(
                 "UPDATE object_generations
                  SET lifecycle_state = 'cleanup_queued'
@@ -1966,6 +2037,9 @@ impl MailStore {
                 Self::enqueue_object_deletion_job(tx, generation_id, &object_key, Utc::now())
                     .await?;
             }
+        }
+        if let Some((_, thread_id)) = deleted {
+            Self::delete_unreferenced_thread_in_transaction(tx, thread_id).await?;
         }
         Ok(deleted.is_some())
     }

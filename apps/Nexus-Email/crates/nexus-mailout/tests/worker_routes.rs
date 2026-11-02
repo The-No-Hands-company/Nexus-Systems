@@ -181,6 +181,71 @@ async fn a_federated_delivery_goes_to_its_peer_over_the_transport() {
 }
 
 #[tokio::test]
+async fn an_expired_delivery_lease_never_starts_network_handoff() {
+    let (store, queue) = setup().await;
+    let rcpt = unique("peer.test");
+    let (item, _) = queued(
+        &store,
+        &queue,
+        &rcpt,
+        Route::Federated {
+            node: "peer.test".into(),
+        },
+    )
+    .await;
+    sqlx::query(
+        "UPDATE outbound_queue SET lease_expires_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(item.queue_id)
+    .execute(store.pool())
+    .await
+    .unwrap();
+    let fake = FakeTransport::answering(HandoffOutcome::Delivered);
+    let worker = DeliveryWorker::new(store.clone(), queue, WorkerConfig::default())
+        .with_transport(fake.clone());
+
+    worker.process(item).await;
+
+    assert!(
+        fake.calls().is_empty(),
+        "expired claims must not contact a peer"
+    );
+    assert_eq!(state_of(&store, &rcpt).await.0, "delivering");
+}
+
+#[tokio::test]
+async fn a_reclaimed_delivery_lease_never_starts_a_stale_handoff() {
+    let (store, queue) = setup().await;
+    let rcpt = unique("peer.test");
+    let (item, _) = queued(
+        &store,
+        &queue,
+        &rcpt,
+        Route::Federated {
+            node: "peer.test".into(),
+        },
+    )
+    .await;
+    sqlx::query("UPDATE outbound_queue SET lease_token = $2 WHERE id = $1")
+        .bind(item.queue_id)
+        .bind(Uuid::now_v7())
+        .execute(store.pool())
+        .await
+        .unwrap();
+    let fake = FakeTransport::answering(HandoffOutcome::Delivered);
+    let worker = DeliveryWorker::new(store.clone(), queue, WorkerConfig::default())
+        .with_transport(fake.clone());
+
+    worker.process(item).await;
+
+    assert!(
+        fake.calls().is_empty(),
+        "superseded claims must not contact a peer"
+    );
+    assert_eq!(state_of(&store, &rcpt).await.0, "delivering");
+}
+
+#[tokio::test]
 async fn under_peer_egress_outside_mail_is_handed_to_the_egress_peer() {
     let (store, queue) = setup().await;
     let rcpt = unique("gmail.example");

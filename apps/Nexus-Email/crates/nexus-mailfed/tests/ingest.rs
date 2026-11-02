@@ -154,6 +154,123 @@ async fn a_relay_peers_outside_mail_is_queued_for_smtp() {
 }
 
 #[tokio::test]
+async fn mixed_federated_envelope_rolls_back_local_delivery_if_relay_fails() {
+    let h = harness(true).await;
+    let (mailbox, local) = local_mailbox(&h, "atomic").await;
+    let external = format!("atomic-{}@outside.example", Uuid::now_v7().simple());
+    let from = format!("alice@{}", h.peer);
+    let function = format!("fed_fail_{}", Uuid::now_v7().simple());
+    sqlx::raw_sql(&format!(
+        "CREATE FUNCTION {function}() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN RAISE EXCEPTION 'injected relay failure'; END $$;
+         CREATE TRIGGER {function} BEFORE INSERT ON outbound_queue
+         FOR EACH ROW WHEN (NEW.recipient = '{external}') EXECUTE FUNCTION {function}();",
+    ))
+    .execute(h.store.pool())
+    .await
+    .unwrap();
+    let (status, _) = send(
+        &h,
+        handoff(
+            &h,
+            &h.peer_key,
+            &h.peer,
+            &from,
+            &[local, external.clone()],
+            NOW,
+        ),
+    )
+    .await;
+    sqlx::raw_sql(&format!(
+        "DROP TRIGGER {function} ON outbound_queue; DROP FUNCTION {function}();"
+    ))
+    .execute(h.store.pool())
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(h.store.unseen_count(mailbox).await.unwrap(), 0);
+    assert_eq!(queued(&h, &external).await, None);
+}
+
+#[tokio::test]
+async fn mixed_federated_envelope_commits_one_message_and_both_intents() {
+    let h = harness(true).await;
+    let (mailbox, local) = local_mailbox(&h, "mixed").await;
+    let external = format!("mixed-{}@outside.example", Uuid::now_v7().simple());
+    let from = format!("alice@{}", h.peer);
+    let (status, body) = send(
+        &h,
+        handoff(
+            &h,
+            &h.peer_key,
+            &h.peer,
+            &from,
+            &[local.clone(), external.clone()],
+            NOW,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(accepted(&body, &local));
+    assert!(accepted(&body, &external));
+    let (local_message, queue_message, intents): (Uuid, Uuid, i64) = sqlx::query_as(
+        "SELECT mm.message_id, q.message_id,
+                (SELECT count(*) FROM mail_submission_recipients r
+                 JOIN mail_submissions s ON s.id = r.submission_id
+                 WHERE s.message_id = mm.message_id)
+         FROM mailbox_messages mm CROSS JOIN outbound_queue q
+         WHERE mm.mailbox_id = $1 AND q.recipient = $2",
+    )
+    .bind(mailbox)
+    .bind(external)
+    .fetch_one(h.store.pool())
+    .await
+    .unwrap();
+    assert_eq!(local_message, queue_message);
+    assert_eq!(intents, 2);
+}
+
+#[tokio::test]
+async fn malformed_federated_recipient_is_recorded_with_the_complete_envelope() {
+    let h = harness(false).await;
+    let (mailbox, local) = local_mailbox(&h, "valid").await;
+    let malformed = "not-an-address".to_string();
+    let from = format!("alice@{}", h.peer);
+    let (status, body) = send(
+        &h,
+        handoff(
+            &h,
+            &h.peer_key,
+            &h.peer,
+            &from,
+            &[local.clone(), malformed.clone()],
+            NOW,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(accepted(&body, &local));
+    assert!(!accepted(&body, &malformed));
+    let intents: Vec<(String, String)> = sqlx::query_as(
+        "SELECT r.recipient, r.state FROM mailbox_messages mm
+         JOIN mail_submissions s ON s.message_id = mm.message_id
+         JOIN mail_submission_recipients r ON r.submission_id = s.id
+         WHERE mm.mailbox_id = $1 ORDER BY r.recipient",
+    )
+    .bind(mailbox)
+    .fetch_all(h.store.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        intents,
+        vec![
+            (malformed, "failed".to_string()),
+            (local, "delivered".to_string())
+        ]
+    );
+}
+
+#[tokio::test]
 async fn a_peer_without_the_relay_grant_cannot_send_outside() {
     // The open-relay test for the federation: pinned is not the same as
     // trusted to spend this node's reputation.

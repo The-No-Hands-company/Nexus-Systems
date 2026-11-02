@@ -70,6 +70,23 @@ impl Queue {
         if !MailStore::lock_message_in_transaction(tx, message_id).await? {
             return Err(sqlx::Error::RowNotFound.into());
         }
+        let (retained_identity,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS (
+                 SELECT 1 FROM mail_submission_recipients r
+                 JOIN mail_submissions s ON s.id = r.submission_id
+                 WHERE s.message_id = $1 AND r.queue_id IS NULL
+                   AND r.retry_fingerprint = sha256(
+                       uuid_send(s.id) || convert_to(r.route || ':' || $2, 'UTF8')
+                   )
+             )",
+        )
+        .bind(message_id)
+        .bind(recipient)
+        .fetch_one(&mut **tx)
+        .await?;
+        if retained_identity {
+            return Ok(());
+        }
         let existing: Option<(Uuid,)> = sqlx::query_as(
             "SELECT id FROM outbound_queue WHERE message_id = $1 AND recipient = $2 LIMIT 1",
         )
@@ -176,6 +193,27 @@ impl Queue {
         }
         tx.commit().await?;
         Ok(claimed)
+    }
+
+    /// Renew only a still-live claim immediately before starting network work.
+    pub async fn renew_claim(&self, id: Uuid, token: Uuid) -> Result<bool> {
+        let renewed = sqlx::query(
+            "UPDATE outbound_queue q SET lease_expires_at = now() + interval '5 minutes'
+             WHERE q.id = $1 AND q.lease_token = $2 AND q.state = 'delivering'
+               AND q.lease_expires_at > now()
+               AND EXISTS (
+                   SELECT 1 FROM mail_submission_recipients r
+                   JOIN mail_submissions s ON s.id = r.submission_id
+                   WHERE r.queue_id = q.id AND r.state = 'outbound_pending'
+                     AND s.message_id = q.message_id AND r.route = q.route
+                     AND r.recipient = q.recipient
+               )",
+        )
+        .bind(id)
+        .bind(token)
+        .execute(&self.pool)
+        .await?;
+        Ok(renewed.rows_affected() == 1)
     }
 
     async fn lock_claim(
@@ -292,6 +330,7 @@ impl Queue {
             if !MailStore::lock_message_in_transaction(&mut tx, message_id).await? {
                 continue;
             }
+            MailStore::validate_submission_queues_in_transaction(&mut tx, message_id).await?;
             let state: Option<(String,)> = sqlx::query_as(
                 "SELECT state FROM outbound_queue WHERE id = $1
                  AND ((state = 'delivered' AND completed_at < $2) OR (state = 'failed' AND completed_at < $3))
@@ -299,10 +338,18 @@ impl Queue {
             ).bind(id).bind(delivered_before).bind(failed_before).fetch_optional(&mut *tx).await?;
             if let Some((state,)) = state {
                 let removed = sqlx::query(
-                    "DELETE FROM mail_submission_recipients WHERE queue_id = $1 AND state = $2",
+                    "UPDATE mail_submission_recipients r
+                     SET retry_fingerprint = sha256(
+                             uuid_send(s.id) || convert_to(r.route || ':' || r.recipient, 'UTF8')
+                         ),
+                         recipient = NULL, queue_id = NULL
+                     FROM mail_submissions s
+                     WHERE r.submission_id = s.id AND s.message_id = $3
+                       AND r.queue_id = $1 AND r.state = $2",
                 )
                 .bind(id)
                 .bind(&state)
+                .bind(message_id)
                 .execute(&mut *tx)
                 .await?;
                 if removed.rows_affected() != 1 {

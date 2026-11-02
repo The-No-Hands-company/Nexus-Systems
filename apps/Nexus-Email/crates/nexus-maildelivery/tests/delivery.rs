@@ -162,6 +162,266 @@ async fn entirely_rejected_submission_without_sender_copy_does_not_leak_a_messag
 }
 
 #[tokio::test]
+async fn rejected_only_submission_does_not_leave_its_subject_in_threads() {
+    let (d, store, _, local) = harness().await;
+    let sender = Address::parse("sender@example.test").unwrap();
+    let missing = Address::parse(&format!("missing@{local}")).unwrap();
+    let subject = format!("rejected-subject-{}", Uuid::now_v7());
+    let raw = msg(&sender.as_string(), &missing.as_string(), &subject, "body");
+    d.submit(&raw, &sender, &[missing], None).await.unwrap();
+    let (threads,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM threads WHERE subject_normalised = $1")
+            .bind(subject)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_eq!(
+        threads, 0,
+        "an orphaned thread must not retain the rejected subject"
+    );
+}
+
+#[tokio::test]
+async fn deleting_one_message_preserves_a_thread_used_by_another() {
+    let (d, store, _, local) = harness().await;
+    let mailbox = store.create_node_mailbox("shared thread").await.unwrap();
+    let sender = Address::parse(&format!("sender@{local}")).unwrap();
+    let first_id = format!("<{}@test>", Uuid::now_v7());
+    let first = MessageBuilder::new(&sender.as_string(), &first_id)
+        .subject("shared thread")
+        .text("first")
+        .build();
+    let reply = MessageBuilder::new(&sender.as_string(), &format!("<{}@test>", Uuid::now_v7()))
+        .in_reply_to(&first_id)
+        .subject("Re: shared thread")
+        .text("second")
+        .build();
+    d.submit(&first, &sender, &[], Some(mailbox.id))
+        .await
+        .unwrap();
+    d.submit(&reply, &sender, &[], Some(mailbox.id))
+        .await
+        .unwrap();
+    let (first_message, thread): (Uuid, Uuid) = sqlx::query_as(
+        "SELECT id, thread_id FROM messages WHERE content_hash = encode(sha256($1), 'hex')",
+    )
+    .bind(&first[..])
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    let (reply_thread,): (Uuid,) = sqlx::query_as(
+        "SELECT thread_id FROM messages WHERE content_hash = encode(sha256($1), 'hex')",
+    )
+    .bind(&reply[..])
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(thread, reply_thread);
+    store
+        .erase_membership(mailbox.id, first_message)
+        .await
+        .unwrap();
+    let (exists,): (bool,) = sqlx::query_as("SELECT EXISTS (SELECT 1 FROM threads WHERE id = $1)")
+        .bind(thread)
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    assert!(exists, "another live message still references the thread");
+}
+
+#[tokio::test]
+async fn retry_after_terminal_queue_retention_does_not_send_again() {
+    let (d, store, queue, local) = harness().await;
+    let mailbox = store
+        .create_node_mailbox("retry after retention")
+        .await
+        .unwrap();
+    let sender = Address::parse(&format!("sender@{local}")).unwrap();
+    for failed in [false, true] {
+        let recipient =
+            Address::parse(&format!("retry-{}@outside.example", Uuid::now_v7())).unwrap();
+        let raw = msg(
+            &sender.as_string(),
+            &recipient.as_string(),
+            "retry retention",
+            "body",
+        );
+        d.submit(
+            &raw,
+            &sender,
+            std::slice::from_ref(&recipient),
+            Some(mailbox.id),
+        )
+        .await
+        .unwrap();
+        let (id,): (Uuid,) = sqlx::query_as("SELECT id FROM outbound_queue WHERE recipient = $1")
+            .bind(recipient.as_string())
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        let token = queue
+            .claim_due(10_000)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|row| row.queue_id == id)
+            .unwrap()
+            .lease_token;
+        if failed {
+            queue
+                .mark_attempt_failed(id, token, true, "permanent")
+                .await
+                .unwrap();
+        } else {
+            queue.mark_delivered(id, token).await.unwrap();
+        }
+        queue
+            .purge_finished(chrono::Duration::zero(), chrono::Duration::zero())
+            .await
+            .unwrap();
+
+        d.submit(
+            &raw,
+            &sender,
+            std::slice::from_ref(&recipient),
+            Some(mailbox.id),
+        )
+        .await
+        .unwrap();
+        let (queue_rows, recipient_rows): (i64, i64) = sqlx::query_as(
+            "SELECT (SELECT count(*) FROM outbound_queue WHERE recipient = $1),
+                    (SELECT count(*) FROM mail_submission_recipients WHERE recipient = $1)",
+        )
+        .bind(recipient.as_string())
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+        assert_eq!((queue_rows, recipient_rows), (0, 0));
+    }
+}
+
+#[tokio::test]
+async fn retry_counts_retained_terminal_identity_for_repeated_recipients() {
+    let (d, store, queue, local) = harness().await;
+    let mailbox = store
+        .create_node_mailbox("duplicate retention")
+        .await
+        .unwrap();
+    let sender = Address::parse(&format!("sender@{local}")).unwrap();
+    let recipient =
+        Address::parse(&format!("duplicate-{}@outside.example", Uuid::now_v7())).unwrap();
+    let raw = msg(
+        &sender.as_string(),
+        &recipient.as_string(),
+        "duplicate retention",
+        "body",
+    );
+    let recipients = [recipient.clone(), recipient.clone()];
+    d.submit(&raw, &sender, &recipients, Some(mailbox.id))
+        .await
+        .unwrap();
+    let rows: Vec<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM outbound_queue WHERE recipient = $1 ORDER BY id")
+            .bind(recipient.as_string())
+            .fetch_all(store.pool())
+            .await
+            .unwrap();
+    assert_eq!(rows.len(), 2);
+    let token = queue
+        .claim_due(10_000)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|row| row.queue_id == rows[0].0)
+        .unwrap()
+        .lease_token;
+    queue.mark_delivered(rows[0].0, token).await.unwrap();
+    queue
+        .purge_finished(chrono::Duration::zero(), chrono::Duration::zero())
+        .await
+        .unwrap();
+    d.submit(&raw, &sender, &recipients, Some(mailbox.id))
+        .await
+        .unwrap();
+    let (rows,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM outbound_queue WHERE recipient = $1")
+            .bind(recipient.as_string())
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_eq!(
+        rows, 1,
+        "the purged terminal recipient still counts toward retry identity"
+    );
+}
+
+#[tokio::test]
+async fn retry_after_retention_does_not_redeliver_when_route_changes() {
+    let (d, store, queue, local) = harness().await;
+    let mailbox = store.create_node_mailbox("changed route").await.unwrap();
+    let sender = Address::parse(&format!("sender@{local}")).unwrap();
+    let recipient = Address::parse(&format!("route-{}@outside.example", Uuid::now_v7())).unwrap();
+    let raw = msg(
+        &sender.as_string(),
+        &recipient.as_string(),
+        "route changed",
+        "body",
+    );
+    d.submit(
+        &raw,
+        &sender,
+        std::slice::from_ref(&recipient),
+        Some(mailbox.id),
+    )
+    .await
+    .unwrap();
+    let (id,): (Uuid,) = sqlx::query_as("SELECT id FROM outbound_queue WHERE recipient = $1")
+        .bind(recipient.as_string())
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    let token = queue
+        .claim_due(10_000)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|row| row.queue_id == id)
+        .unwrap()
+        .lease_token;
+    queue.mark_delivered(id, token).await.unwrap();
+    queue
+        .purge_finished(chrono::Duration::zero(), chrono::Duration::zero())
+        .await
+        .unwrap();
+    let changed = Deliverer::new(
+        store.clone(),
+        queue,
+        Router::new()
+            .with_local_domain(&local)
+            .with_peer_domain("outside.example"),
+    );
+    changed
+        .submit(
+            &raw,
+            &sender,
+            std::slice::from_ref(&recipient),
+            Some(mailbox.id),
+        )
+        .await
+        .unwrap();
+    let (rows,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM outbound_queue WHERE recipient = $1")
+            .bind(recipient.as_string())
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_eq!(
+        rows, 0,
+        "a route update must not turn a retry into a second delivery"
+    );
+}
+
+#[tokio::test]
 async fn retrying_submission_does_not_duplicate_outbound_work() {
     let (d, store, _, _) = harness().await;
     let sender = Address::parse("sender@example.test").unwrap();
@@ -179,6 +439,41 @@ async fn retrying_submission_does_not_duplicate_outbound_work() {
             .await
             .unwrap();
     assert_eq!(count, 1, "retry must not create another delivery");
+}
+
+#[tokio::test]
+async fn retrying_a_stored_message_does_not_leave_an_extra_thread() {
+    let (d, store, _, local) = harness().await;
+    let mailbox = store.create_node_mailbox("thread retry").await.unwrap();
+    let sender = Address::parse(&format!("sender@{local}")).unwrap();
+    let recipient = Address::parse(&format!("retry-{}@outside.example", Uuid::now_v7())).unwrap();
+    let subject = format!("thread-retry-{}", Uuid::now_v7());
+    let raw = msg(
+        &sender.as_string(),
+        &recipient.as_string(),
+        &subject,
+        "body",
+    );
+    for _ in 0..2 {
+        d.submit(
+            &raw,
+            &sender,
+            std::slice::from_ref(&recipient),
+            Some(mailbox.id),
+        )
+        .await
+        .unwrap();
+    }
+    let (threads,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM threads WHERE subject_normalised = $1")
+            .bind(subject)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_eq!(
+        threads, 1,
+        "deduplicated messages must not leave new orphan threads"
+    );
 }
 
 #[tokio::test]

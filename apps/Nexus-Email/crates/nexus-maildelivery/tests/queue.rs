@@ -214,6 +214,280 @@ async fn erasing_final_mailbox_copy_keeps_pending_outbound_delivery() {
 }
 
 #[tokio::test]
+async fn final_erasure_rejects_a_terminal_intent_linked_to_another_message() {
+    let (store, queue) = harness().await;
+    let mailbox = store
+        .create_node_mailbox("inconsistent link")
+        .await
+        .unwrap();
+    let first = a_message(&store).await;
+    let second = a_message(&store).await;
+    let inbox = store.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    store.deliver(mailbox.id, first, inbox).await.unwrap();
+    let first_recipient = format!("first-{}@outside.example", Uuid::now_v7());
+    let second_recipient = format!("second-{}@outside.example", Uuid::now_v7());
+    queue
+        .enqueue(first, "a@test.invalid", &first_recipient, &Route::External)
+        .await
+        .unwrap();
+    queue
+        .enqueue(
+            second,
+            "a@test.invalid",
+            &second_recipient,
+            &Route::External,
+        )
+        .await
+        .unwrap();
+    let (first_queue, _) = queue_row(&store, &first_recipient).await;
+    let (second_queue, _) = queue_row(&store, &second_recipient).await;
+    let token = claim_for(&store, &queue, first_queue).await;
+    queue.mark_delivered(first_queue, token).await.unwrap();
+    let token = claim_for(&store, &queue, second_queue).await;
+    queue.mark_delivered(second_queue, token).await.unwrap();
+    let mut tx = store.pool().begin().await.unwrap();
+    sqlx::query("DELETE FROM mail_submission_recipients WHERE queue_id = $1")
+        .bind(second_queue)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE mail_submission_recipients SET queue_id = $2, recipient = $3 WHERE queue_id = $1",
+    )
+    .bind(first_queue)
+    .bind(second_queue)
+    .bind(&second_recipient)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    sqlx::query("DELETE FROM outbound_queue WHERE id = $1")
+        .bind(first_queue)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    let purge_result = queue
+        .purge_finished(chrono::Duration::zero(), chrono::Duration::zero())
+        .await;
+    let result = store.erase_membership(mailbox.id, first).await;
+    let (messages, memberships, queue_rows): (i64, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM messages WHERE id = $1),
+                (SELECT count(*) FROM mailbox_messages WHERE message_id = $1),
+                (SELECT count(*) FROM outbound_queue WHERE id = $2)",
+    )
+    .bind(first)
+    .bind(second_queue)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    sqlx::query("DELETE FROM mail_submission_recipients WHERE queue_id = $1")
+        .bind(second_queue)
+        .execute(store.pool())
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM outbound_queue WHERE id = $1")
+        .bind(second_queue)
+        .execute(store.pool())
+        .await
+        .unwrap();
+    assert!(purge_result.is_err());
+    assert!(result.is_err());
+    assert_eq!((messages, memberships, queue_rows), (1, 1, 1));
+}
+
+#[tokio::test]
+async fn final_erasure_rejects_queue_and_intent_state_mismatch() {
+    let (store, queue) = harness().await;
+    let mailbox = store
+        .create_node_mailbox("inconsistent state")
+        .await
+        .unwrap();
+    let message = a_message(&store).await;
+    let inbox = store.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    store.deliver(mailbox.id, message, inbox).await.unwrap();
+    let recipient = format!("state-{}@outside.example", Uuid::now_v7());
+    queue
+        .enqueue(message, "a@test.invalid", &recipient, &Route::External)
+        .await
+        .unwrap();
+    let (id, _) = queue_row(&store, &recipient).await;
+    sqlx::query("UPDATE mail_submission_recipients SET state = 'delivered' WHERE queue_id = $1")
+        .bind(id)
+        .execute(store.pool())
+        .await
+        .unwrap();
+    let result = store.erase_membership(mailbox.id, message).await;
+    let (memberships,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM mailbox_messages WHERE message_id = $1")
+            .bind(message)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    sqlx::query(
+        "UPDATE mail_submission_recipients SET state = 'outbound_pending' WHERE queue_id = $1",
+    )
+    .bind(id)
+    .execute(store.pool())
+    .await
+    .unwrap();
+    assert!(result.is_err());
+    assert_eq!(
+        memberships, 1,
+        "an inconsistent state must roll back membership erasure"
+    );
+}
+
+#[tokio::test]
+async fn standalone_enqueue_respects_retained_terminal_retry_identity() {
+    let (store, queue) = harness().await;
+    let mailbox = store.create_node_mailbox("standalone retry").await.unwrap();
+    let message = a_message(&store).await;
+    let inbox = store.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    store.deliver(mailbox.id, message, inbox).await.unwrap();
+    let recipient = format!("standalone-{}@outside.example", Uuid::now_v7());
+    queue
+        .enqueue(message, "a@test.invalid", &recipient, &Route::External)
+        .await
+        .unwrap();
+    let (id, _) = queue_row(&store, &recipient).await;
+    let token = claim_for(&store, &queue, id).await;
+    queue.mark_delivered(id, token).await.unwrap();
+    queue
+        .purge_finished(chrono::Duration::zero(), chrono::Duration::zero())
+        .await
+        .unwrap();
+
+    queue
+        .enqueue(message, "a@test.invalid", &recipient, &Route::External)
+        .await
+        .unwrap();
+    let (rows,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM outbound_queue WHERE recipient = $1")
+            .bind(recipient)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_eq!(rows, 0);
+}
+
+#[tokio::test]
+async fn explicit_final_erasure_removes_checked_terminal_queue_records() {
+    let (store, queue) = harness().await;
+    let mailbox = store.create_node_mailbox("terminal erase").await.unwrap();
+    let msg = a_message(&store).await;
+    let inbox = store.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    store.deliver(mailbox.id, msg, inbox).await.unwrap();
+    let rcpt = format!("erase-{}@outside.example", Uuid::now_v7());
+    queue
+        .enqueue(msg, "a@test.invalid", &rcpt, &Route::External)
+        .await
+        .unwrap();
+    let (id, _) = queue_row(&store, &rcpt).await;
+    let token = claim_for(&store, &queue, id).await;
+    queue.mark_delivered(id, token).await.unwrap();
+
+    store.erase_membership(mailbox.id, msg).await.unwrap();
+    let (messages, queue_rows): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM messages WHERE id = $1),
+                (SELECT count(*) FROM outbound_queue WHERE id = $2)",
+    )
+    .bind(msg)
+    .bind(id)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!((messages, queue_rows), (0, 0));
+}
+
+#[tokio::test]
+async fn deferred_final_erasure_finishes_when_outbound_work_completes() {
+    let (store, queue) = harness().await;
+    let mailbox = store.create_node_mailbox("deferred erase").await.unwrap();
+    let msg = a_message(&store).await;
+    let inbox = store.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    store.deliver(mailbox.id, msg, inbox).await.unwrap();
+    let rcpt = format!("deferred-{}@outside.example", Uuid::now_v7());
+    queue
+        .enqueue(msg, "a@test.invalid", &rcpt, &Route::External)
+        .await
+        .unwrap();
+    let (id, _) = queue_row(&store, &rcpt).await;
+    store.erase_membership(mailbox.id, msg).await.unwrap();
+    let (still_present,): (bool,) =
+        sqlx::query_as("SELECT EXISTS (SELECT 1 FROM messages WHERE id = $1)")
+            .bind(msg)
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert!(still_present, "pending delivery must retain the message");
+    let restarted = Queue::new(store.pool().clone());
+    let token = claim_for(&store, &restarted, id).await;
+
+    restarted.mark_delivered(id, token).await.unwrap();
+    let (messages, queue_rows): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM messages WHERE id = $1),
+                (SELECT count(*) FROM outbound_queue WHERE id = $2)",
+    )
+    .bind(msg)
+    .bind(id)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!((messages, queue_rows), (0, 0));
+}
+
+#[tokio::test]
+async fn deferred_erasure_keeps_unfinished_recipients_until_the_last_is_terminal() {
+    let (store, queue) = harness().await;
+    let mailbox = store
+        .create_node_mailbox("mixed deferred erase")
+        .await
+        .unwrap();
+    let msg = a_message(&store).await;
+    let inbox = store.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    store.deliver(mailbox.id, msg, inbox).await.unwrap();
+    let first = format!("finished-{}@outside.example", Uuid::now_v7());
+    let second = format!("pending-{}@outside.example", Uuid::now_v7());
+    queue
+        .enqueue(msg, "a@test.invalid", &first, &Route::External)
+        .await
+        .unwrap();
+    queue
+        .enqueue(msg, "a@test.invalid", &second, &Route::External)
+        .await
+        .unwrap();
+    let (first_id, _) = queue_row(&store, &first).await;
+    let (second_id, _) = queue_row(&store, &second).await;
+    let first_token = claim_for(&store, &queue, first_id).await;
+    let second_token = claim_for(&store, &queue, second_id).await;
+    queue.mark_delivered(first_id, first_token).await.unwrap();
+    store.erase_membership(mailbox.id, msg).await.unwrap();
+    let (messages, rows): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM messages WHERE id = $1),
+                (SELECT count(*) FROM outbound_queue WHERE message_id = $1)",
+    )
+    .bind(msg)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!((messages, rows), (1, 2));
+    queue
+        .mark_attempt_failed(second_id, second_token, true, "permanent")
+        .await
+        .unwrap();
+    let (messages, rows): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM messages WHERE id = $1),
+                (SELECT count(*) FROM outbound_queue WHERE message_id = $1)",
+    )
+    .bind(msg)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!((messages, rows), (0, 0));
+}
+
+#[tokio::test]
 async fn erasure_waits_for_uncommitted_queue_reference() {
     let (store, queue) = harness().await;
     let mailbox = store.create_node_mailbox("queue race").await.unwrap();

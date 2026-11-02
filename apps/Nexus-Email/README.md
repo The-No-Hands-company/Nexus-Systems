@@ -64,16 +64,21 @@ path exists — the ISP lifting the filter, or a peer node with clean egress.
 
 Recipient routing is resolved before a single transaction persists the
 message, submission, recipient intents, mailbox copies and outbound work.
-Mailbox rows are locked in UUID order. Pending intents retain content after the
-last mailbox copy is erased; terminal queue retention performs checked orphan
-cleanup and schedules any external-body deletion.
+SMTP and peer handoffs commit the complete accepted envelope together,
+including local deliveries and permitted relay work. Mailbox rows are locked
+in UUID order. Pending intents retain content after the last mailbox copy is
+erased; the last terminal transition finishes a deferred erasure. Terminal
+queue retention validates queue/intent pairs, performs checked orphan cleanup
+and schedules any external-body deletion.
 
-Outbound claims carry a five-minute lease and a fresh token. Completion and
-failure require the token; an expired claim can be reclaimed after a restart.
-Fencing prevents stale workers from changing queue state, but remote delivery
-is still at-least-once if a worker sends and crashes before recording success.
-Local intent records are removed with their membership, and outbound records
-with their finished queue entry.
+Outbound claims carry a five-minute lease and a fresh token. The worker claims
+close to execution and renews a live token before network work; completion and
+failure require that token. An expired claim can be reclaimed after a restart.
+Fencing cannot undo a send already in progress, so remote delivery remains
+at-least-once. Local intent records are removed with their membership. Queue
+retention removes raw recipient addresses while retaining a per-submission
+salted fingerprint for retry identity for as long as the message remains; the
+fingerprint is also removed on final erasure.
 
 Stop all Mail writers before applying the submission-intent migration and do
 not mix old and new writers. It backfills existing queue work and returns

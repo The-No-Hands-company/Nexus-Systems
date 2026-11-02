@@ -144,13 +144,18 @@ impl DeliveryWorker {
         {
             tracing::warn!(error = %e, "could not purge finished deliveries");
         }
-        let due = self
-            .queue
-            .claim_due(self.config.batch)
-            .await
-            .map_err(|e| e.to_string())?;
-        let count = due.len();
-        for item in due {
+        let mut count = 0;
+        while count < self.config.batch.max(0) as usize {
+            let Some(item) = self
+                .queue
+                .claim_due(1)
+                .await
+                .map_err(|e| e.to_string())?
+                .pop()
+            else {
+                break;
+            };
+            count += 1;
             self.process(item).await;
         }
         Ok(count)
@@ -203,6 +208,14 @@ impl DeliveryWorker {
         };
         let raw = self.outgoing(&item.envelope_from, raw);
 
+        if !matches!(
+            self.queue
+                .renew_claim(item.queue_id, item.lease_token)
+                .await,
+            Ok(true)
+        ) {
+            return;
+        }
         let outcome = match (item.route.as_str(), &self.config.egress) {
             ("smtp", Egress::Direct) => {
                 self.attempt(&item.envelope_from, &item.recipient, &item.destination, &raw).await

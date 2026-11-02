@@ -32,8 +32,19 @@ struct PreparedMessage {
     search_text: Option<String>,
 }
 
+struct SubmissionMessage<'a> {
+    raw: &'a [u8],
+    from: &'a Address,
+    transport: Transport,
+    prepared: &'a PreparedMessage,
+}
+
 enum ResolvedRecipient {
-    Local { mailbox: Uuid, folder: Uuid },
+    Local {
+        mailbox: Uuid,
+        folder: Uuid,
+        force_folder: bool,
+    },
     Queued(Route),
     Rejected(String),
 }
@@ -72,7 +83,7 @@ impl Deliverer {
         for rcpt in recipients {
             resolved.push(match self.router.route(rcpt) {
                 Route::Local => match self.resolve_local(rcpt).await {
-                    Ok((mailbox, folder)) => ResolvedRecipient::Local { mailbox, folder },
+                    Ok((mailbox, folder)) => ResolvedRecipient::Local { mailbox, folder, force_folder: false },
                     Err(DeliveryError::Permanent { reason, .. }) => {
                         ResolvedRecipient::Rejected(reason)
                     }
@@ -85,18 +96,43 @@ impl Deliverer {
             Some(mailbox) => Some((mailbox, self.store.folder(mailbox, FolderKind::Sent).await?)),
             None => None,
         };
+        let recipient_strings: Vec<String> = recipients.iter().map(Address::as_string).collect();
+        let (_, outcomes) = self
+            .persist_resolved(
+                SubmissionMessage {
+                    raw,
+                    from,
+                    transport: Transport::Internal,
+                    prepared: &prepared,
+                },
+                &recipient_strings,
+                resolved,
+                sender_copy,
+            )
+            .await?;
+        Ok(outcomes)
+    }
+
+    async fn persist_resolved(
+        &self,
+        message: SubmissionMessage<'_>,
+        recipients: &[String],
+        resolved: Vec<ResolvedRecipient>,
+        sender_copy: Option<(Uuid, Uuid)>,
+    ) -> Result<(Uuid, Vec<Outcome>)> {
+        let SubmissionMessage { raw, from, transport, prepared } = message;
         let mut tx = self.store.begin_reference_transaction().await?;
         let message_id = self
             .store_prepared(
                 &mut tx,
                 raw,
                 from,
-                Transport::Internal,
-                &prepared,
+                transport,
+                prepared,
             )
             .await?;
         let submission_id = Self::ensure_submission(&mut tx, message_id).await?;
-        let mut existing_queue = Self::existing_queue(&mut tx, message_id).await?;
+        let mut existing_queue = Self::existing_queue(&mut tx, message_id, recipients).await?;
         let mut mailboxes: Vec<Uuid> = resolved
             .iter()
             .filter_map(|route| match route {
@@ -111,11 +147,17 @@ impl Deliverer {
         let mut outcomes = Vec::with_capacity(recipients.len());
         for (rcpt, route) in recipients.iter().zip(resolved) {
             let (outcome, route_name, state, membership_id, queue_id) = match route {
-                ResolvedRecipient::Local { mailbox, folder } => {
+                ResolvedRecipient::Local { mailbox, folder, force_folder } => {
                     let membership_id = self
                         .store
                         .deliver_in_transaction(&mut tx, mailbox, message_id, folder)
                         .await?;
+                    if force_folder {
+                        sqlx::query(
+                            "UPDATE mailbox_messages SET folder_id = $2, trash_expires_at = NULL
+                             WHERE id = $1",
+                        ).bind(membership_id).bind(folder).execute(&mut *tx).await?;
+                    }
                     (Disposition::DeliveredLocally, "local", "delivered", Some(membership_id), None)
                 }
                 ResolvedRecipient::Queued(route) => {
@@ -124,9 +166,9 @@ impl Deliverer {
                         Route::External => "smtp",
                         Route::Local => unreachable!(),
                     };
-                    if Self::consume_existing(&mut existing_queue, &rcpt.as_string(), route_name) {
+                    if Self::consume_existing(&mut existing_queue, rcpt) {
                         outcomes.push(Outcome {
-                            recipient: rcpt.as_string(),
+                            recipient: rcpt.clone(),
                             disposition: Disposition::Queued,
                         });
                         continue;
@@ -136,7 +178,7 @@ impl Deliverer {
                             &mut tx,
                             message_id,
                             &from.as_string(),
-                            &rcpt.as_string(),
+                            rcpt,
                             &route,
                         )
                         .await?;
@@ -152,7 +194,7 @@ impl Deliverer {
             )
             .bind(Uuid::now_v7())
             .bind(submission_id)
-            .bind(rcpt.as_string())
+            .bind(rcpt)
             .bind(route_name)
             .bind(state)
             .bind(membership_id)
@@ -160,7 +202,7 @@ impl Deliverer {
             .execute(&mut *tx)
             .await?;
             outcomes.push(Outcome {
-                recipient: rcpt.as_string(),
+                recipient: rcpt.clone(),
                 disposition: outcome,
             });
         }
@@ -172,7 +214,7 @@ impl Deliverer {
         }
         MailStore::erase_orphaned_message_in_transaction(&mut tx, message_id).await?;
         tx.commit().await?;
-        Ok(outcomes)
+        Ok((message_id, outcomes))
     }
 
     /// The displayable text of a message, for the search index.
@@ -230,7 +272,20 @@ impl Deliverer {
         from: &Address,
         recipient: &Address,
     ) -> Result<Uuid> {
-        self.accept_external(raw, from, recipient, Transport::Smtp).await
+        self.accept_smtp_envelope(raw, from, std::slice::from_ref(recipient), false)
+            .await
+    }
+
+    /// Accept all local SMTP recipients in one transaction.
+    pub async fn accept_smtp_envelope(
+        &self,
+        raw: &[u8],
+        from: &Address,
+        recipients: &[Address],
+        quarantine: bool,
+    ) -> Result<Uuid> {
+        self.accept_external(raw, from, recipients, Transport::Smtp, quarantine)
+            .await
     }
 
     /// Accept a message handed to us by a peer node.
@@ -244,7 +299,72 @@ impl Deliverer {
         from: &Address,
         recipient: &Address,
     ) -> Result<Uuid> {
-        self.accept_external(raw, from, recipient, Transport::Federated).await
+        self.accept_external(
+            raw,
+            from,
+            std::slice::from_ref(recipient),
+            Transport::Federated,
+            false,
+        )
+        .await
+    }
+
+    /// Resolve a peer's complete envelope before committing local and relay work.
+    pub async fn accept_federated_envelope(
+        &self,
+        raw: &[u8],
+        from: &Address,
+        recipients: &[String],
+        may_relay: bool,
+    ) -> Result<Vec<Outcome>> {
+        let prepared = self.prepare(raw)?;
+        let mut resolved = Vec::with_capacity(recipients.len());
+        let mut normalized = Vec::with_capacity(recipients.len());
+        for raw_recipient in recipients {
+            let recipient = match Address::parse(raw_recipient) {
+                Ok(recipient) => recipient,
+                Err(_) => {
+                    normalized.push(raw_recipient.clone());
+                    resolved.push(ResolvedRecipient::Rejected("malformed address".into()));
+                    continue;
+                }
+            };
+            normalized.push(recipient.as_string());
+            resolved.push(match self.router.route(&recipient) {
+                Route::Local => match self.resolve_local(&recipient).await {
+                    Ok((mailbox, folder)) => ResolvedRecipient::Local {
+                        mailbox,
+                        folder,
+                        force_folder: false,
+                    },
+                    Err(DeliveryError::Permanent { reason, .. }) => {
+                        ResolvedRecipient::Rejected(reason)
+                    }
+                    Err(e) => return Err(e),
+                },
+                Route::Federated { .. } => {
+                    ResolvedRecipient::Rejected("mail is not forwarded between peers".into())
+                }
+                Route::External if may_relay => ResolvedRecipient::Queued(Route::External),
+                Route::External => {
+                    ResolvedRecipient::Rejected("this peer may not relay through this node".into())
+                }
+            });
+        }
+        let (_, outcomes) = self
+            .persist_resolved(
+                SubmissionMessage {
+                    raw,
+                    from,
+                    transport: Transport::Federated,
+                    prepared: &prepared,
+                },
+                &normalized,
+                resolved,
+                None,
+            )
+            .await?;
+        Ok(outcomes)
     }
 
     /// Accept a message a pinned peer asked us to deliver to the outside
@@ -287,9 +407,11 @@ impl Deliverer {
             )
             .await?;
         let submission_id = Self::ensure_submission(&mut tx, message_id).await?;
-        let mut existing_queue = Self::existing_queue(&mut tx, message_id).await?;
+        let recipient_strings: Vec<String> = recipients.iter().map(Address::as_string).collect();
+        let mut existing_queue =
+            Self::existing_queue(&mut tx, message_id, &recipient_strings).await?;
         for rcpt in recipients {
-            if Self::consume_existing(&mut existing_queue, &rcpt.as_string(), "smtp") {
+            if Self::consume_existing(&mut existing_queue, &rcpt.as_string()) {
                 continue;
             }
             let queue_id = self.queue
@@ -314,35 +436,52 @@ impl Deliverer {
         &self,
         raw: &[u8],
         from: &Address,
-        recipient: &Address,
+        recipients: &[Address],
         transport: Transport,
+        quarantine: bool,
     ) -> Result<Uuid> {
-        if !self.router.is_local_domain(&recipient.domain) {
-            // Accepting mail for a domain we do not serve would make this node
-            // an open relay for the federation.
+        if recipients.is_empty() {
             return Err(DeliveryError::Permanent {
-                recipient: recipient.as_string(),
-                reason: "this node does not serve that domain".into(),
+                recipient: String::new(),
+                reason: "no recipients".into(),
             });
         }
-
-        let (mailbox, folder) = self.resolve_local(recipient).await?;
+        let mut resolved = Vec::with_capacity(recipients.len());
+        for recipient in recipients {
+            if !self.router.is_local_domain(&recipient.domain) {
+                return Err(DeliveryError::Permanent {
+                    recipient: recipient.as_string(),
+                    reason: "this node does not serve that domain".into(),
+                });
+            }
+            let (mailbox, mut folder) = self.resolve_local(recipient).await?;
+            if quarantine {
+                folder = self
+                    .store
+                    .folder_named_or_create(mailbox, "Junk", FolderKind::Custom)
+                    .await?;
+            }
+            resolved.push(ResolvedRecipient::Local {
+                mailbox,
+                folder,
+                force_folder: quarantine,
+            });
+        }
         let prepared = self.prepare(raw)?;
-        let mut tx = self.store.begin_reference_transaction().await?;
-        let message_id = self
-            .store_prepared(&mut tx, raw, from, transport, &prepared)
+        let recipient_strings: Vec<String> = recipients.iter().map(Address::as_string).collect();
+        let (message_id, _) = self
+            .persist_resolved(
+                SubmissionMessage {
+                    raw,
+                    from,
+                    transport,
+                    prepared: &prepared,
+                },
+                &recipient_strings,
+                resolved,
+                None,
+            )
             .await?;
-        let submission_id = Self::ensure_submission(&mut tx, message_id).await?;
-        Self::lock_mailboxes(&mut tx, &[mailbox]).await?;
-        let membership_id = self
-            .store
-            .deliver_in_transaction(&mut tx, mailbox, message_id, folder)
-            .await?;
-        sqlx::query("INSERT INTO mail_submission_recipients (id, submission_id, recipient, route, state, membership_id) VALUES ($1, $2, $3, 'local', 'delivered', $4)")
-            .bind(Uuid::now_v7()).bind(submission_id).bind(recipient.as_string())
-            .bind(membership_id)
-            .execute(&mut *tx).await?;
-        tx.commit().await?;
         Ok(message_id)
     }
 
@@ -399,6 +538,14 @@ impl Deliverer {
             )
             .await?;
 
+        let (persisted_thread,): (Uuid,) =
+            sqlx::query_as("SELECT thread_id FROM messages WHERE id = $1")
+                .bind(message_id)
+                .fetch_one(&mut **tx)
+                .await?;
+        if persisted_thread != thread_id {
+            MailStore::delete_unreferenced_thread_in_transaction(tx, thread_id).await?;
+        }
         if let Some(text) = &prepared.search_text {
             self.store
                 .set_search_text_in_transaction(tx, message_id, text)
@@ -432,25 +579,31 @@ impl Deliverer {
     async fn existing_queue(
         tx: &mut Transaction<'_, Postgres>,
         message_id: Uuid,
-    ) -> Result<Vec<(String, String)>> {
-        Ok(sqlx::query_as(
-            "SELECT recipient, route FROM outbound_queue
-             WHERE message_id = $1 ORDER BY created_at, id",
+        recipients: &[String],
+    ) -> Result<Vec<String>> {
+        Ok(sqlx::query_scalar(
+            "SELECT candidate.recipient
+             FROM mail_submission_recipients r
+             JOIN mail_submissions s ON s.id = r.submission_id
+             JOIN LATERAL (
+                 SELECT c.recipient FROM unnest($2::text[]) AS c(recipient)
+                 WHERE c.recipient = r.recipient OR
+                       r.retry_fingerprint = sha256(
+                           uuid_send(s.id) || convert_to(r.route || ':' || c.recipient, 'UTF8')
+                       )
+                 LIMIT 1
+             ) candidate ON true
+             WHERE s.message_id = $1 AND r.route IN ('smtp', 'federated')
+             ORDER BY r.created_at, r.id",
         )
         .bind(message_id)
+        .bind(recipients)
         .fetch_all(&mut **tx)
         .await?)
     }
 
-    fn consume_existing(
-        existing: &mut Vec<(String, String)>,
-        recipient: &str,
-        route: &str,
-    ) -> bool {
-        if let Some(index) = existing
-            .iter()
-            .position(|(r, t)| r == recipient && t == route)
-        {
+    fn consume_existing(existing: &mut Vec<String>, recipient: &str) -> bool {
+        if let Some(index) = existing.iter().position(|r| r == recipient) {
             existing.remove(index);
             true
         } else {

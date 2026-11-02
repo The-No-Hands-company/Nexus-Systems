@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use nexus_maildelivery::Deliverer;
 use nexus_mailauth::{authenticate, Authentication, Lookup, Verdict};
-use nexus_mailstore::{Address, FolderKind, MailStore};
+use nexus_maildelivery::Deliverer;
+use nexus_mailstore::{Address, MailStore};
 
 use crate::server::{Inbound, Sink};
 
@@ -65,59 +65,27 @@ impl<L: Lookup + 'static> Sink for AuthenticatingSink<L> {
         let quarantine =
             self.mode == PolicyMode::Enforce && auth.verdict == Verdict::Quarantine;
 
-        for rcpt in msg.recipients {
-            let address = Address::parse(rcpt).map_err(|e| e.to_string())?;
-            self.accept_one(&address, &stored, msg.from, quarantine, &auth)
-                .await?;
-        }
-        Ok(None)
-    }
-}
-
-impl<L: Lookup + 'static> AuthenticatingSink<L> {
-    async fn accept_one(
-        &self,
-        recipient: &Address,
-        raw: &[u8],
-        envelope_from: &str,
-        quarantine: bool,
-        _auth: &Authentication,
-    ) -> Result<(), String> {
-        let from = Address::parse(envelope_from)
+        let recipients: Vec<Address> = msg
+            .recipients
+            .iter()
+            .map(|recipient| Address::parse(recipient).map_err(|e| e.to_string()))
+            .collect::<Result<_, _>>()?;
+        let first = recipients
+            .first()
+            .ok_or_else(|| "no recipients".to_string())?;
+        let from = Address::parse(msg.from)
             // A null reverse path is a bounce and is legal. It still needs an
             // address shaped value to record, so the recipient's own domain
             // stands in for one rather than the message being refused.
             .unwrap_or_else(|_| Address {
                 localpart: "postmaster".into(),
-                domain: recipient.domain.clone(),
+                domain: first.domain.clone(),
             });
-
-        let message_id = self
-            .deliverer
-            .accept_smtp(raw, &from, recipient)
+        self.deliverer
+            .accept_smtp_envelope(&stored, &from, &recipients, quarantine)
             .await
             .map_err(|e| e.to_string())?;
-
-        if quarantine {
-            // Delivered, but set aside. The domain asked for suspicious mail to
-            // be held rather than destroyed, and honouring that literally is
-            // the whole difference between quarantine and reject.
-            let mailbox = self
-                .store
-                .resolve(recipient)
-                .await
-                .map_err(|e| e.to_string())?;
-            let junk = self
-                .store
-                .folder_named_or_create(mailbox, "Junk", FolderKind::Custom)
-                .await
-                .map_err(|e| e.to_string())?;
-            self.store
-                .move_to_folder(mailbox, message_id, junk)
-                .await
-                .map_err(|e| e.to_string())?;
-        }
-        Ok(())
+        Ok(None)
     }
 }
 
