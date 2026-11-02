@@ -24,6 +24,11 @@ pub struct ObjectDeletionJob {
     pub object_key: String,
 }
 
+enum StoreReservationLock {
+    Live { object_key: String },
+    Finalized { message_id: Uuid },
+}
+
 pub fn content_hash(raw: &[u8]) -> String {
     hex::encode(Sha256::digest(raw))
 }
@@ -264,16 +269,39 @@ impl MailStore {
         }
 
         let hash = content_hash(raw);
+        let size_bytes = raw.len() as i64;
+        let from_address = from.as_string();
         let now = Utc::now();
         let mut tx = self.pool.begin().await?;
 
         let mut reserved_key: Option<String> = None;
         let mut generation_id: Option<Uuid> = None;
         if let Some(reservation) = reservation {
-            let object_key =
-                Self::lock_live_external_body_reservation(&mut tx, reservation, now).await?;
-            reserved_key = Some(object_key);
-            generation_id = Some(reservation.generation_id);
+            match Self::lock_store_message_reservation(
+                &mut tx,
+                reservation,
+                now,
+                &hash,
+                size_bytes,
+                thread_id,
+                &from_address,
+                subject,
+                rfc822_msg_id,
+                in_reply_to,
+                references,
+                transport,
+            )
+            .await?
+            {
+                StoreReservationLock::Live { object_key } => {
+                    reserved_key = Some(object_key);
+                    generation_id = Some(reservation.generation_id);
+                }
+                StoreReservationLock::Finalized { message_id } => {
+                    tx.commit().await?;
+                    return Ok(message_id);
+                }
+            }
         }
 
         if let Some((existing,)) =
@@ -311,9 +339,9 @@ impl MailStore {
         .bind(in_reply_to)
         .bind(references)
         .bind(subject)
-        .bind(from.as_string())
+        .bind(&from_address)
         .bind(transport.as_str())
-        .bind(raw.len() as i64)
+        .bind(size_bytes)
         .bind(inline)
         .bind(reserved_key.as_deref())
         .bind(generation_id)
@@ -349,6 +377,160 @@ impl MailStore {
 
         tx.commit().await?;
         Ok(id)
+    }
+
+    pub async fn abandon_external_body_reservation(
+        &self,
+        reservation: &ExternalBodyReservation,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        let object_key =
+            Self::lock_live_external_body_reservation(&mut tx, reservation, now).await?;
+        Self::queue_reserved_generation_cleanup(
+            &mut tx,
+            reservation.generation_id,
+            &object_key,
+            now,
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn lock_store_message_reservation(
+        tx: &mut Transaction<'_, Postgres>,
+        reservation: &ExternalBodyReservation,
+        now: DateTime<Utc>,
+        hash: &str,
+        size_bytes: i64,
+        thread_id: Uuid,
+        from_address: &str,
+        subject: Option<&str>,
+        rfc822_msg_id: Option<&str>,
+        in_reply_to: Option<&str>,
+        references: &[String],
+        transport: Transport,
+    ) -> Result<StoreReservationLock> {
+        let row: Option<(String, String, Option<DateTime<Utc>>, Option<Uuid>)> = sqlx::query_as(
+            "SELECT object_key, lifecycle_state, reservation_expires_at, finalized_message_id
+             FROM object_generations
+             WHERE id = $1
+             FOR UPDATE",
+        )
+        .bind(reservation.generation_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+        let Some((object_key, lifecycle_state, reservation_expires_at, finalized_message_id)) = row
+        else {
+            return Err(MailStoreError::ExternalBodyReservationMissing);
+        };
+        if object_key != reservation.object_key {
+            return Err(MailStoreError::ExternalBodyReservationUnavailable);
+        }
+
+        if let Some(message_id) = finalized_message_id {
+            let matches = Self::finalized_retry_matches_original_message(
+                tx,
+                reservation,
+                message_id,
+                hash,
+                size_bytes,
+                thread_id,
+                from_address,
+                subject,
+                rfc822_msg_id,
+                in_reply_to,
+                references,
+                transport,
+            )
+            .await?;
+            if matches {
+                return Ok(StoreReservationLock::Finalized { message_id });
+            }
+            return Err(MailStoreError::ExternalBodyReservationUnavailable);
+        }
+
+        if lifecycle_state != "reserved" {
+            return Err(MailStoreError::ExternalBodyReservationUnavailable);
+        }
+
+        let Some(expires_at) = reservation_expires_at else {
+            return Err(MailStoreError::ExternalBodyReservationUnavailable);
+        };
+        if expires_at <= now {
+            return Err(MailStoreError::ExternalBodyReservationExpired);
+        }
+
+        Ok(StoreReservationLock::Live { object_key })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn finalized_retry_matches_original_message(
+        tx: &mut Transaction<'_, Postgres>,
+        reservation: &ExternalBodyReservation,
+        message_id: Uuid,
+        hash: &str,
+        size_bytes: i64,
+        thread_id: Uuid,
+        from_address: &str,
+        subject: Option<&str>,
+        rfc822_msg_id: Option<&str>,
+        in_reply_to: Option<&str>,
+        references: &[String],
+        transport: Transport,
+    ) -> Result<bool> {
+        let row: Option<(
+            String,
+            Uuid,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Vec<String>,
+            String,
+            i64,
+            Option<String>,
+            Option<Uuid>,
+        )> = sqlx::query_as(
+            "SELECT content_hash, thread_id, from_address, subject, rfc822_msg_id, in_reply_to,
+                    references_ids, transport, size_bytes, body_object_key, body_object_generation_id
+             FROM messages
+             WHERE id = $1",
+        )
+        .bind(message_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+
+        let Some((
+            content_hash,
+            persisted_thread_id,
+            persisted_from_address,
+            persisted_subject,
+            persisted_rfc822_msg_id,
+            persisted_in_reply_to,
+            persisted_references,
+            persisted_transport,
+            persisted_size_bytes,
+            persisted_object_key,
+            persisted_generation_id,
+        )) = row
+        else {
+            return Ok(false);
+        };
+
+        Ok(content_hash == hash
+            && persisted_thread_id == thread_id
+            && persisted_from_address == from_address
+            && persisted_subject.as_deref() == subject
+            && persisted_rfc822_msg_id.as_deref() == rfc822_msg_id
+            && persisted_in_reply_to.as_deref() == in_reply_to
+            && persisted_references == references
+            && persisted_transport == transport.as_str()
+            && persisted_size_bytes == size_bytes
+            && persisted_object_key.as_deref() == Some(reservation.object_key.as_str())
+            && persisted_generation_id == Some(reservation.generation_id))
     }
 
     async fn lock_live_external_body_reservation(

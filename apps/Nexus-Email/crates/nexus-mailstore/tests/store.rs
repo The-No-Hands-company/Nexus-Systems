@@ -725,6 +725,110 @@ async fn external_body_keeps_the_reserved_object_key() {
 }
 
 #[tokio::test]
+async fn finalized_reservation_retry_returns_the_original_message_when_metadata_matches() {
+    let s = store().await;
+    let from = Address::parse("sender@example.test").unwrap();
+    let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    let thread = s.thread_for(None, &[], Some("retry-match")).await.unwrap();
+    let raw = format!(
+        "{}{}",
+        "x".repeat(INLINE_BODY_LIMIT + 128),
+        unique("retry-match-body")
+    )
+    .into_bytes();
+    let references = vec![
+        "<first@example.test>".to_string(),
+        "<second@example.test>".to_string(),
+    ];
+
+    let first = s
+        .store_message(
+            &raw,
+            thread,
+            &from,
+            Some("retry-match"),
+            Some("<retry-match@example.test>"),
+            Some("<parent@example.test>"),
+            &references,
+            Transport::Internal,
+            Some(&reservation),
+        )
+        .await
+        .unwrap();
+
+    let retried = s
+        .store_message(
+            &raw,
+            thread,
+            &from,
+            Some("retry-match"),
+            Some("<retry-match@example.test>"),
+            Some("<parent@example.test>"),
+            &references,
+            Transport::Internal,
+            Some(&reservation),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        retried, first,
+        "a finalized reservation retry with identical payload and metadata must return the original message id"
+    );
+}
+
+#[tokio::test]
+async fn finalized_reservation_retry_rejects_metadata_mismatch() {
+    let s = store().await;
+    let from = Address::parse("sender@example.test").unwrap();
+    let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    let thread = s
+        .thread_for(None, &[], Some("retry-mismatch"))
+        .await
+        .unwrap();
+    let raw = format!(
+        "{}{}",
+        "y".repeat(INLINE_BODY_LIMIT + 64),
+        unique("retry-mismatch-body")
+    )
+    .into_bytes();
+    let references = vec!["<ref@example.test>".to_string()];
+
+    let _ = s
+        .store_message(
+            &raw,
+            thread,
+            &from,
+            Some("retry-mismatch"),
+            Some("<retry-mismatch@example.test>"),
+            None,
+            &references,
+            Transport::Internal,
+            Some(&reservation),
+        )
+        .await
+        .unwrap();
+
+    let mismatch = s
+        .store_message(
+            &raw,
+            thread,
+            &from,
+            Some("retry-mismatch-updated"),
+            Some("<retry-mismatch@example.test>"),
+            None,
+            &references,
+            Transport::Internal,
+            Some(&reservation),
+        )
+        .await;
+    assert!(matches!(
+        mismatch,
+        Err(MailStoreError::ExternalBodyReservationUnavailable)
+    ));
+}
+
+#[tokio::test]
 async fn externally_stored_body_rejects_a_caller_selected_key() {
     let s = store().await;
     let from = Address::parse("sender@example.test").unwrap();
@@ -785,6 +889,44 @@ async fn expired_uploaded_reservation_is_queued_without_affecting_live_body() {
 
     assert_eq!(expired_jobs, 1);
     assert_eq!(live_jobs, 0);
+}
+
+#[tokio::test]
+async fn abandoning_live_reservation_queues_generation_cleanup() {
+    let s = store().await;
+    let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    let now = chrono::Utc::now();
+
+    s.abandon_external_body_reservation(&reservation, now)
+        .await
+        .unwrap();
+
+    let (queued_jobs,): (i64,) = sqlx::query_as(
+        "SELECT count(*)
+         FROM object_deletion_queue
+         WHERE generation_id = $1 AND object_key = $2",
+    )
+    .bind(reservation.generation_id)
+    .bind(&reservation.object_key)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        queued_jobs, 1,
+        "abandonment must queue cleanup for the reserved immutable generation"
+    );
+
+    let row: (String, Option<chrono::DateTime<chrono::Utc>>) = sqlx::query_as(
+        "SELECT lifecycle_state, reservation_expires_at
+         FROM object_generations
+         WHERE id = $1",
+    )
+    .bind(reservation.generation_id)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert_eq!(row.0, "cleanup_queued");
+    assert_eq!(row.1, None);
 }
 
 #[tokio::test]
