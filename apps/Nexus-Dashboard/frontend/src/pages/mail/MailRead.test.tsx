@@ -30,6 +30,9 @@ function message(folder_kind: string, folder_name: string) {
 function stubFetch(folderKind: string, folderName: string) {
   const spy = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
     const path = String(url);
+    if (path.endsWith("/ipa/mail/messages/m-1") && init?.method === "DELETE") {
+      return new Response(null, { status: 204 });
+    }
     if (path.endsWith("/ipa/mail/messages/m-1")) return jsonResponse(message(folderKind, folderName));
     if (path.endsWith("/ipa/mail/messages/m-1/seen")) return new Response(null, { status: 204 });
     if (path.endsWith("/ipa/mail/messages/m-1/folder")) return new Response(null, { status: 204 });
@@ -95,5 +98,23 @@ describe("MailRead", () => {
       expect.stringContaining("/ipa/mail/messages/m-1/folder"),
       expect.objectContaining({ body: JSON.stringify({ folder: "inbox" }) }),
     ));
+  });
+
+  it("confirms and permanently deletes from Trash", async () => {
+    const spy = stubFetch("trash", "Trash");
+    render(
+      <MemoryRouter initialEntries={["/mail/m/m-1"]}>
+        <Routes><Route path="/mail/m/:messageId" element={<MailRead />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Design review");
+    fireEvent.click(screen.getByRole("button", { name: "Delete permanently" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm permanent delete" }));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining("/ipa/mail/messages/m-1"),
+      expect.objectContaining({ method: "DELETE" }),
+    ));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/deleted permanently/i));
   });
 });

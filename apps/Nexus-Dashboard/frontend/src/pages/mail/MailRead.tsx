@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  attachmentUrl, markMailSeen, moveMailMessage, readMailMessage, threadMessages,
+  attachmentUrl, deleteMailMessage, markMailSeen, moveMailMessage, readMailMessage, threadMessages,
   type MailMessage, type MailSummary,
 } from "../../api";
 import { mailDate, senderName } from "./format";
@@ -18,6 +18,14 @@ export default function MailRead() {
   const [showHtml, setShowHtml] = useState(false);
   const [siblings, setSiblings] = useState<MailSummary[]>([]);
   const [moveError, setMoveError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [busyAction, setBusyAction] = useState<"move" | "delete" | null>(null);
+  const backLinkRef = useRef<HTMLAnchorElement | null>(null);
+
+  useEffect(() => {
+    if (state.kind === "missing" && status) backLinkRef.current?.focus();
+  }, [state.kind, status]);
 
   useEffect(() => {
     if (!messageId) return;
@@ -30,6 +38,8 @@ export default function MailRead() {
         if (cancelled) return;
         setState({ kind: "ready", message });
         setMoveError(null);
+        setStatus(null);
+        setConfirmDelete(false);
         setShowHtml(false);
         // The rest of the conversation, best effort: failing to load it must
         // not stop the message the reader actually opened from rendering.
@@ -62,8 +72,9 @@ export default function MailRead() {
   if (state.kind === "missing") {
     return (
       <section className="mx-auto max-w-3xl px-4 py-6 sm:p-8">
+        {status && <p role="status" className="mb-3 text-sm text-zinc-300">{status}</p>}
         <p className="text-zinc-400">That message is not in your mailbox.</p>
-        <Link to="/mail" className="mt-4 inline-block text-sm text-zinc-300 underline">
+        <Link ref={backLinkRef} to="/mail" className="mt-4 inline-block text-sm text-zinc-300 underline">
           Back to mail
         </Link>
       </section>
@@ -81,20 +92,50 @@ export default function MailRead() {
   const m = state.message;
   const move = async (folder: "inbox" | "trash" | "junk") => {
     try {
+      setBusyAction("move");
       setMoveError(null);
+      setStatus(null);
       await moveMailMessage(m.id, folder);
       const message = await readMailMessage(m.id);
       setState({ kind: "ready", message });
+      setStatus(
+        folder === "trash"
+          ? "Message moved to Trash."
+          : folder === "junk"
+            ? "Message moved to Junk."
+            : "Message moved to Inbox.",
+      );
+      setConfirmDelete(false);
     } catch (e) {
       setMoveError(e instanceof Error ? e.message : "unknown");
+    } finally {
+      setBusyAction(null);
     }
   };
+
+  const removePermanently = async () => {
+    try {
+      setBusyAction("delete");
+      setMoveError(null);
+      setStatus(null);
+      await deleteMailMessage(m.id);
+      setStatus("Message deleted permanently.");
+      setState({ kind: "missing" });
+      setSiblings([]);
+      setConfirmDelete(false);
+    } catch (e) {
+      setMoveError(e instanceof Error ? e.message : "unknown");
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   const isInbox = m.folder_kind === "inbox";
   const isTrash = m.folder_kind === "trash";
   const isJunk = m.folder_kind === "custom" && m.folder_name === "Junk";
   return (
     <section className="mx-auto max-w-3xl space-y-4 px-4 py-6 sm:p-8">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <Link to="/mail" className="text-sm text-zinc-400 hover:text-zinc-200">← Mail</Link>
         {/* Reply prefills through the URL: the quoted body is built here rather
             than in the composer so the composer stays a plain form. */}
@@ -117,6 +158,7 @@ export default function MailRead() {
         {(isInbox || isJunk) && (
           <button
             type="button"
+            disabled={busyAction !== null}
             onClick={() => void move("trash")}
             className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900"
           >
@@ -126,15 +168,27 @@ export default function MailRead() {
         {isTrash && (
           <button
             type="button"
+            disabled={busyAction !== null}
             onClick={() => void move("inbox")}
             className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900"
           >
             Restore to Inbox
           </button>
         )}
+        {isTrash && !confirmDelete && (
+          <button
+            type="button"
+            disabled={busyAction !== null}
+            onClick={() => setConfirmDelete(true)}
+            className="rounded border border-red-700 px-3 py-1.5 text-sm text-red-200 hover:bg-red-950/40"
+          >
+            Delete permanently
+          </button>
+        )}
         {isInbox && (
           <button
             type="button"
+            disabled={busyAction !== null}
             onClick={() => void move("junk")}
             className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900"
           >
@@ -144,6 +198,7 @@ export default function MailRead() {
         {isJunk && (
           <button
             type="button"
+            disabled={busyAction !== null}
             onClick={() => void move("inbox")}
             className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900"
           >
@@ -151,6 +206,35 @@ export default function MailRead() {
           </button>
         )}
       </div>
+      {confirmDelete && (
+        <div className="rounded border border-zinc-800 bg-zinc-900/50 p-3">
+          <p className="text-sm text-zinc-300">
+            Permanent delete cannot be undone and erases this mailbox copy immediately.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void removePermanently()}
+              className="rounded border border-red-700 px-3 py-1.5 text-sm text-red-200 hover:bg-red-950/40"
+            >
+              Confirm permanent delete
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(false)}
+              className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {isJunk && (
+        <p className="text-sm text-zinc-400">
+          This message is in Junk. Move it back to Inbox with Not Spam if it is safe.
+        </p>
+      )}
+      {status && <p role="status" className="text-sm text-zinc-300">{status}</p>}
       {moveError && <p role="alert" className="text-sm text-red-300">Could not move message ({moveError}).</p>}
 
       <header className="border-b border-zinc-800 pb-4">
