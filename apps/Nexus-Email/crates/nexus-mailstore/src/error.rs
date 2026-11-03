@@ -15,6 +15,21 @@ pub enum MailStoreError {
     /// tell the two apart to choose between a 550 and a 451.
     #[error("no mailbox routes this address")]
     NoSuchAddress(String),
+
+    #[error("external body reservation is required")]
+    ExternalBodyReservationRequired,
+
+    #[error("external body reservation does not exist")]
+    ExternalBodyReservationMissing,
+
+    #[error("external body reservation has expired")]
+    ExternalBodyReservationExpired,
+
+    #[error("external body reservation is already finalized")]
+    ExternalBodyReservationFinalized,
+
+    #[error("external body reservation is no longer usable")]
+    ExternalBodyReservationUnavailable,
 }
 
 impl MailStoreError {

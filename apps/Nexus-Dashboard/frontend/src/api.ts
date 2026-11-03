@@ -709,6 +709,7 @@ export type MailMessage = {
   blocked_remote: boolean;
   folder_kind: string;
   folder_name: string;
+  disposition: "none" | "dmarc_quarantine";
   attachments: MailAttachment[];
 };
 
@@ -740,6 +741,18 @@ export function moveMailMessage(id: string, folder: "inbox" | "trash" | "junk") 
   });
 }
 
+export function deleteMailMessage(id: string) {
+  return request<void>(`/ipa/mail/messages/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export function emptyMailTrash() {
+  return request<void>("/ipa/mail/folders/trash/empty", {
+    method: "POST",
+  });
+}
+
 export function threadMessages(threadId: string) {
   return request<MailSummary[]>(`/ipa/mail/threads/${encodeURIComponent(threadId)}/messages`);
 }
@@ -750,8 +763,14 @@ export function attachmentUrl(messageId: string, index: number) {
   return `/ipa/mail/messages/${encodeURIComponent(messageId)}/attachments/${index}`;
 }
 
-export function searchMail(q: string) {
-  return request<MailSummary[]>(`/ipa/mail/search?q=${encodeURIComponent(q)}`);
+export function searchMail(
+  q: string,
+  filters: { folder?: "inbox" | "sent" | "trash" | "junk"; unread?: boolean } = {},
+) {
+  const params = new URLSearchParams({ q });
+  if (filters.folder) params.set("folder", filters.folder);
+  if (filters.unread !== undefined) params.set("unread", String(filters.unread));
+  return request<MailSummary[]>(`/ipa/mail/search?${params.toString()}`);
 }
 
 export type OutgoingAttachment = {

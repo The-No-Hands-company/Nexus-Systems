@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use nexus_maildelivery::{FederatedHandoff, FederatedTransport, HandoffOutcome, Queue, QueuedDelivery, Route};
 use nexus_mailauth::{public_key_record, verify_with_key, Canon, DkimSigner};
 use nexus_mailout::{DeliveryWorker, Egress, WorkerConfig};
-use nexus_mailstore::{Address, MailStore, Transport};
+use nexus_mailstore::{Address, FolderKind, MailStore, MessageReferenceKind, Transport};
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
@@ -57,6 +57,17 @@ async fn queued_from(
     rcpt: &str,
     route: Route,
 ) -> (QueuedDelivery, Vec<u8>) {
+    queued_from_with_copy(store, queue, from, rcpt, route, true).await
+}
+
+async fn queued_from_with_copy(
+    store: &MailStore,
+    queue: &Queue,
+    from: &str,
+    rcpt: &str,
+    route: Route,
+    keep_copy: bool,
+) -> (QueuedDelivery, Vec<u8>) {
     let from = Address::parse(from).unwrap();
     let thread = store.thread_for(None, &[], Some("w")).await.unwrap();
     let raw = format!(
@@ -65,11 +76,52 @@ async fn queued_from(
         Uuid::now_v7().simple()
     )
     .into_bytes();
+    let mailbox = if keep_copy {
+        let mailbox = store.create_node_mailbox("worker sender").await.unwrap();
+        Some((
+            mailbox.id,
+            store.folder(mailbox.id, FolderKind::Sent).await.unwrap(),
+        ))
+    } else {
+        None
+    };
+    let submission = Uuid::now_v7();
+    let mut tx = store.begin_reference_transaction().await.unwrap();
     let id = store
-        .store_message(&raw, thread, &from, Some("w"), None, None, &[], Transport::Internal, None)
+        .store_message_in_transaction(
+            &mut tx,
+            &raw,
+            thread,
+            &from,
+            Some("w"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            None,
+            Some(submission),
+        )
         .await
         .unwrap();
-    queue.enqueue(id, &from.as_string(), rcpt, &route).await.unwrap();
+    MailStore::release_reference_in_transaction(
+        &mut tx,
+        id,
+        MessageReferenceKind::Submission,
+        submission,
+    )
+    .await
+    .unwrap();
+    queue
+        .enqueue_in_transaction(&mut tx, id, &from.as_string(), rcpt, &route)
+        .await
+        .unwrap();
+    if let Some((mailbox, folder)) = mailbox {
+        store
+            .deliver_in_transaction(&mut tx, mailbox, id, folder)
+            .await
+            .unwrap();
+    }
+    tx.commit().await.unwrap();
     let row: (Uuid, Uuid, String, String, String, String, i32) = sqlx::query_as(
         "SELECT id, message_id, envelope_from, recipient, destination, route, attempts
            FROM outbound_queue WHERE recipient = $1",
@@ -78,9 +130,20 @@ async fn queued_from(
     .fetch_one(store.pool())
     .await
     .unwrap();
+    let lease_token = Uuid::now_v7();
+    sqlx::query(
+        "UPDATE outbound_queue SET state = 'delivering', lease_token = $2,
+         lease_expires_at = now() + interval '5 minutes' WHERE id = $1",
+    )
+    .bind(row.0)
+    .bind(lease_token)
+    .execute(store.pool())
+    .await
+    .unwrap();
     let item = QueuedDelivery {
-        id: row.0,
+        queue_id: row.0,
         message_id: row.1,
+        lease_token,
         envelope_from: row.2,
         recipient: row.3,
         destination: row.4,
@@ -115,6 +178,71 @@ async fn a_federated_delivery_goes_to_its_peer_over_the_transport() {
 
     assert_eq!(fake.calls(), vec![("peer.test".to_string(), rcpt.clone(), raw)]);
     assert_eq!(state_of(&store, &rcpt).await.0, "delivered");
+}
+
+#[tokio::test]
+async fn an_expired_delivery_lease_never_starts_network_handoff() {
+    let (store, queue) = setup().await;
+    let rcpt = unique("peer.test");
+    let (item, _) = queued(
+        &store,
+        &queue,
+        &rcpt,
+        Route::Federated {
+            node: "peer.test".into(),
+        },
+    )
+    .await;
+    sqlx::query(
+        "UPDATE outbound_queue SET lease_expires_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(item.queue_id)
+    .execute(store.pool())
+    .await
+    .unwrap();
+    let fake = FakeTransport::answering(HandoffOutcome::Delivered);
+    let worker = DeliveryWorker::new(store.clone(), queue, WorkerConfig::default())
+        .with_transport(fake.clone());
+
+    worker.process(item).await;
+
+    assert!(
+        fake.calls().is_empty(),
+        "expired claims must not contact a peer"
+    );
+    assert_eq!(state_of(&store, &rcpt).await.0, "delivering");
+}
+
+#[tokio::test]
+async fn a_reclaimed_delivery_lease_never_starts_a_stale_handoff() {
+    let (store, queue) = setup().await;
+    let rcpt = unique("peer.test");
+    let (item, _) = queued(
+        &store,
+        &queue,
+        &rcpt,
+        Route::Federated {
+            node: "peer.test".into(),
+        },
+    )
+    .await;
+    sqlx::query("UPDATE outbound_queue SET lease_token = $2 WHERE id = $1")
+        .bind(item.queue_id)
+        .bind(Uuid::now_v7())
+        .execute(store.pool())
+        .await
+        .unwrap();
+    let fake = FakeTransport::answering(HandoffOutcome::Delivered);
+    let worker = DeliveryWorker::new(store.clone(), queue, WorkerConfig::default())
+        .with_transport(fake.clone());
+
+    worker.process(item).await;
+
+    assert!(
+        fake.calls().is_empty(),
+        "superseded claims must not contact a peer"
+    );
+    assert_eq!(state_of(&store, &rcpt).await.0, "delivering");
 }
 
 #[tokio::test]
@@ -324,7 +452,8 @@ async fn test_process_when_system_mail_is_delivered_should_delete_message_and_qu
     let (store, queue) = setup().await;
     let sender = unique("system.test");
     let rcpt = unique("gmail.example");
-    let (item, _) = queued_from(&store, &queue, &sender, &rcpt, Route::External).await;
+    let (item, _) =
+        queued_from_with_copy(&store, &queue, &sender, &rcpt, Route::External, false).await;
     let message_id = item.message_id;
     let worker = DeliveryWorker::new(store.clone(), queue, purging_config(&sender))
         .with_transport(FakeTransport::answering(HandoffOutcome::Delivered));
@@ -342,7 +471,8 @@ async fn test_process_when_system_mail_is_rejected_should_delete_it() {
     let (store, queue) = setup().await;
     let sender = unique("system.test");
     let rcpt = unique("gmail.example");
-    let (item, _) = queued_from(&store, &queue, &sender, &rcpt, Route::External).await;
+    let (item, _) =
+        queued_from_with_copy(&store, &queue, &sender, &rcpt, Route::External, false).await;
     let message_id = item.message_id;
     let worker = DeliveryWorker::new(store.clone(), queue, purging_config(&sender))
         .with_transport(FakeTransport::answering(HandoffOutcome::Rejected("no such user".into())));
@@ -357,7 +487,8 @@ async fn test_process_when_system_mail_is_deferred_should_keep_it_for_the_retry(
     let (store, queue) = setup().await;
     let sender = unique("system.test");
     let rcpt = unique("gmail.example");
-    let (item, _) = queued_from(&store, &queue, &sender, &rcpt, Route::External).await;
+    let (item, _) =
+        queued_from_with_copy(&store, &queue, &sender, &rcpt, Route::External, false).await;
     let message_id = item.message_id;
     let worker = DeliveryWorker::new(store.clone(), queue, purging_config(&sender))
         .with_transport(FakeTransport::answering(HandoffOutcome::Deferred("peer down".into())));

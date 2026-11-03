@@ -12,7 +12,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use nexus_maildelivery::{Deliverer, DeliveryError, Route};
+use nexus_maildelivery::{Deliverer, DeliveryError, Disposition};
 use nexus_mailstore::Address;
 use serde_json::json;
 
@@ -54,7 +54,11 @@ fn header<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     headers.get(name).and_then(|v| v.to_str().ok()).map(str::trim).filter(|v| !v.is_empty())
 }
 
-async fn receive(State(state): State<Arc<IngestState>>, headers: HeaderMap, body: Bytes) -> Response {
+async fn receive(
+    State(state): State<Arc<IngestState>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
     let (Some(node), Some(from), Some(rcpts), Some(ts), Some(nonce), Some(sig)) = (
         header(&headers, wire::H_NODE),
         header(&headers, wire::H_FROM),
@@ -117,34 +121,22 @@ async fn receive(State(state): State<Arc<IngestState>>, headers: HeaderMap, body
         return refuse(StatusCode::FORBIDDEN, "a peer may only send as its own domain");
     }
 
-    let mut results = Vec::with_capacity(recipients.len());
-    let mut relay = Vec::new();
-    for raw_rcpt in &recipients {
-        let Ok(rcpt) = Address::parse(raw_rcpt) else {
-            results.push(no(raw_rcpt, "malformed address"));
-            continue;
-        };
-        match state.deliverer.router().route(&rcpt) {
-            Route::Local => match state.deliverer.accept_federated(&body, &from_addr, &rcpt).await {
-                Ok(_) => results.push(yes(raw_rcpt)),
-                Err(DeliveryError::Permanent { reason, .. }) => results.push(no(raw_rcpt, &reason)),
-                Err(e) => return transient(e),
-            },
-            Route::Federated { .. } => results.push(no(raw_rcpt, "mail is not forwarded between peers")),
-            Route::External if peer.may_relay => relay.push(rcpt),
-            Route::External => results.push(no(raw_rcpt, "this peer may not relay through this node")),
-        }
-    }
-
-    if !relay.is_empty() {
-        match state.deliverer.relay_for_peer(&body, &from_addr, &relay).await {
-            Ok(_) => results.extend(relay.iter().map(|r| yes(&r.as_string()))),
-            Err(DeliveryError::Permanent { reason, .. }) => {
-                results.extend(relay.iter().map(|r| no(&r.as_string(), &reason)))
-            }
-            Err(e) => return transient(e),
-        }
-    }
+    let outcomes = match state
+        .deliverer
+        .accept_federated_envelope(&body, &from_addr, &recipients, peer.may_relay)
+        .await
+    {
+        Ok(outcomes) => outcomes,
+        Err(e) => return transient(e),
+    };
+    let results = recipients
+        .iter()
+        .zip(outcomes)
+        .map(|(recipient, outcome)| match outcome.disposition {
+            Disposition::DeliveredLocally | Disposition::Queued => yes(recipient),
+            Disposition::Rejected(reason) => no(recipient, &reason),
+        })
+        .collect();
 
     (StatusCode::OK, Json(HandoffResponse { results })).into_response()
 }
@@ -158,7 +150,7 @@ fn no(rcpt: &str, why: &str) -> RecipientResult {
 }
 
 /// A storage failure is ours, not the sender's: 503 so they retry.
-fn transient(e: DeliveryError) -> Response {
-    tracing::warn!(error = %e, "federated handoff failed");
+fn transient(_e: DeliveryError) -> Response {
+    tracing::warn!("federated handoff failed");
     refuse(StatusCode::SERVICE_UNAVAILABLE, "try again later")
 }

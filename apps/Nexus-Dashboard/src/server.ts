@@ -185,11 +185,25 @@ async function proxyToMail(req: Request, rest: string, search: string): Promise<
     return respond(Response.json({ error: "not_authenticated" }, { status: 401 }));
   }
 
-  // Only the mail API's own surface, and only the methods it serves.
-  if (!/^(folders|messages|search|threads)(\/|$)/.test(rest)) {
+  const method = req.method.toUpperCase();
+  const route = rest.replace(/^\/+|\/+$/g, "");
+  const rules: Array<{ pattern: RegExp; methods: string[] }> = [
+    { pattern: /^folders$/, methods: ["GET"] },
+    { pattern: /^folders\/[^/]+\/messages$/, methods: ["GET"] },
+    { pattern: /^folders\/trash\/empty$/, methods: ["POST"] },
+    { pattern: /^messages$/, methods: ["POST"] },
+    { pattern: /^messages\/[^/]+$/, methods: ["GET", "DELETE"] },
+    { pattern: /^messages\/[^/]+\/seen$/, methods: ["POST"] },
+    { pattern: /^messages\/[^/]+\/folder$/, methods: ["POST"] },
+    { pattern: /^messages\/[^/]+\/attachments\/[^/]+$/, methods: ["GET"] },
+    { pattern: /^search$/, methods: ["GET"] },
+    { pattern: /^threads\/[^/]+\/messages$/, methods: ["GET"] },
+  ];
+  const matched = rules.find(({ pattern }) => pattern.test(route));
+  if (!matched) {
     return respond(Response.json({ error: "not_found" }, { status: 404 }));
   }
-  if (req.method !== "GET" && req.method !== "POST") {
+  if (!matched.methods.includes(method)) {
     return respond(Response.json({ error: "method_not_allowed" }, { status: 405 }));
   }
 
@@ -208,9 +222,9 @@ async function proxyToMail(req: Request, rest: string, search: string): Promise<
       ? `${platform}/api/v1/mail/${rest}${search}`
       : `${mailUrl()}/api/v1/${rest}${search}`;
     const res = await fetch(target, {
-      method: req.method,
+      method,
       headers,
-      body: req.method === "POST" ? await req.text() : undefined,
+      body: method === "POST" ? await req.text() : undefined,
       signal: AbortSignal.timeout(10000),
     });
     // Attachments come back as bytes with headers that matter — the

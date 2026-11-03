@@ -78,9 +78,23 @@ describe("mail proxy", () => {
     expect(mailSaw).toBeNull();
   });
 
-  it("refuses methods the mail API does not serve", async () => {
-    const res = await handleRequest(
+  it("allows mailbox-scoped permanent delete", async () => {
+    await handleRequest(
       new Request("http://app.test/ipa/mail/messages/abc", { method: "DELETE" }),
+    );
+    expect(mailPath).toBe("/api/v1/messages/abc");
+  });
+
+  it("allows empty-trash endpoint and still enforces route methods", async () => {
+    await handleRequest(
+      new Request("http://app.test/ipa/mail/folders/trash/empty", { method: "POST" }),
+    );
+    expect(mailPath).toBe("/api/v1/folders/trash/empty");
+
+    mailPath = null;
+    mailSaw = null;
+    const res = await handleRequest(
+      new Request("http://app.test/ipa/mail/folders/trash/empty", { method: "GET" }),
     );
     expect(res.status).toBe(405);
     expect(mailSaw).toBeNull();

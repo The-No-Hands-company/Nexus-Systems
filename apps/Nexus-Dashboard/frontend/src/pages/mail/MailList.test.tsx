@@ -1,7 +1,18 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MailList from "./MailList";
+
+function renderMailList(path = "/mail") {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/mail" element={<MailList />} />
+        <Route path="/mail/f/:folderId" element={<MailList />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -13,6 +24,8 @@ function jsonResponse(body: unknown, status = 200) {
 const FOLDERS = [
   { id: "f-inbox", name: "INBOX", kind: "inbox" },
   { id: "f-sent", name: "Sent", kind: "sent" },
+  { id: "f-trash", name: "Trash", kind: "trash" },
+  { id: "f-junk", name: "Junk", kind: "custom" },
 ];
 
 const MESSAGES = [
@@ -51,11 +64,7 @@ afterEach(() => {
 describe("MailList", () => {
   it("shows the folders and the messages in them", async () => {
     stubFetch();
-    render(
-      <MemoryRouter>
-        <MailList />
-      </MemoryRouter>,
-    );
+    renderMailList();
 
     await waitFor(() => expect(screen.getByText("Design review")).toBeTruthy());
     expect(screen.getByText("INBOX")).toBeTruthy();
@@ -65,11 +74,7 @@ describe("MailList", () => {
 
   it("defaults to the inbox when no folder is in the URL", async () => {
     const spy = stubFetch();
-    render(
-      <MemoryRouter>
-        <MailList />
-      </MemoryRouter>,
-    );
+    renderMailList();
 
     await waitFor(() => expect(screen.getByText("Design review")).toBeTruthy());
     // Landing nowhere would show an empty page on a mailbox full of mail.
@@ -85,11 +90,7 @@ describe("MailList", () => {
       "/ipa/mail/folders": () =>
         jsonResponse({ error: "no mailbox for this account" }, 404),
     });
-    render(
-      <MemoryRouter>
-        <MailList />
-      </MemoryRouter>,
-    );
+    renderMailList();
 
     await waitFor(() => expect(screen.getByText(/does not have a mailbox yet/i)).toBeTruthy());
     expect(screen.queryByRole("alert")).toBeNull();
@@ -102,11 +103,7 @@ describe("MailList", () => {
       "/ipa/mail/folders": () =>
         jsonResponse({ error: "mail_unavailable" }, 503),
     });
-    render(
-      <MemoryRouter>
-        <MailList />
-      </MemoryRouter>,
-    );
+    renderMailList();
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
     expect(screen.getByText(/unavailable/i)).toBeTruthy();
@@ -114,11 +111,7 @@ describe("MailList", () => {
 
   it("moves an Inbox message to Trash from the message list", async () => {
     const spy = stubFetch();
-    render(
-      <MemoryRouter>
-        <MailList />
-      </MemoryRouter>,
-    );
+    renderMailList();
 
     await screen.findByText("Design review");
     fireEvent.click(screen.getByRole("button", { name: "Move Design review to Trash" }));
@@ -127,5 +120,38 @@ describe("MailList", () => {
       expect.stringContaining("/ipa/mail/messages/m-1/folder"),
       expect.objectContaining({ method: "POST", body: JSON.stringify({ folder: "trash" }) }),
     ));
+  });
+
+  it("confirms and empties Trash with an accessible status", async () => {
+    const spy = stubFetch({
+      "/ipa/mail/folders/f-trash/messages": () => jsonResponse(MESSAGES),
+      "/ipa/mail/folders/trash/empty": () => new Response(null, { status: 204 }),
+    });
+    renderMailList("/mail/f/f-trash");
+
+    await screen.findByText("Design review");
+    fireEvent.click(screen.getByRole("button", { name: "Empty Trash" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm empty Trash" }));
+
+    await waitFor(() => expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining("/ipa/mail/folders/trash/empty"),
+      expect.objectContaining({ method: "POST" }),
+    ));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/trash emptied/i));
+  });
+
+  it("filters search without including Trash or Junk by default", async () => {
+    const spy = stubFetch();
+    renderMailList("/mail?q=invoice");
+
+    await waitFor(() =>
+      expect(spy.mock.calls.some(([u]) => String(u).includes("/ipa/mail/search?q=invoice"))).toBe(true));
+
+    const searchCalls = spy.mock.calls
+      .map(([u]) => String(u))
+      .filter((u) => u.includes("/ipa/mail/search?"));
+    expect(searchCalls.length).toBeGreaterThan(0);
+    expect(searchCalls[0]).not.toContain("folder=trash");
+    expect(searchCalls[0]).not.toContain("folder=junk");
   });
 });

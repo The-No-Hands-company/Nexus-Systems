@@ -21,7 +21,7 @@ use axum::{
 };
 use nexus_maildelivery::{Deliverer, Disposition};
 use nexus_mailmsg::MessageBuilder;
-use nexus_mailstore::{Address, FolderKind, MailStore, MessageSummary};
+use nexus_mailstore::{Address, FolderKind, MailStore, MessageDisposition, MessageSummary};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -72,7 +72,10 @@ fn subject(headers: &HeaderMap) -> Result<String, ApiError> {
         .and_then(|v| v.to_str().ok())
         .filter(|s| !s.is_empty())
         .map(str::to_string)
-        .ok_or(ApiError(StatusCode::UNAUTHORIZED, "not authenticated".into()))
+        .ok_or(ApiError(
+            StatusCode::UNAUTHORIZED,
+            "not authenticated".into(),
+        ))
 }
 
 /// The caller's mailbox, or 404 if they have none yet.
@@ -83,7 +86,10 @@ async fn mailbox_of(state: &SharedState, headers: &HeaderMap) -> Result<Uuid, Ap
         .mailbox_for_subject(&subj)
         .await
         .map_err(|e| server(&format!("mailbox lookup: {e}")))?
-        .ok_or(ApiError(StatusCode::NOT_FOUND, "no mailbox for this account".into()))
+        .ok_or(ApiError(
+            StatusCode::NOT_FOUND,
+            "no mailbox for this account".into(),
+        ))
 }
 
 #[derive(Serialize)]
@@ -125,16 +131,26 @@ pub fn router(state: SharedState) -> Router {
         .route("/internal/v1/cloudflare-email", post(cloudflare_email))
         .route_layer(DefaultBodyLimit::max(25 * 1024 * 1024))
         .route("/internal/v1/system-mail", post(send_system_mail))
-        .route("/api/v1/health", get(|| async { Json(serde_json::json!({"ok": true})) }))
+        .route(
+            "/api/v1/health",
+            get(|| async { Json(serde_json::json!({"ok": true})) }),
+        )
         .route("/api/v1/folders", get(list_folders))
         .route("/api/v1/folders/:id/messages", get(list_messages))
-        .route("/api/v1/messages/:id", get(read_message))
+        .route("/api/v1/folders/trash/empty", post(empty_trash))
+        .route(
+            "/api/v1/messages/:id",
+            get(read_message).delete(delete_message),
+        )
         .route("/api/v1/messages/:id/seen", post(mark_seen))
         .route("/api/v1/messages/:id/folder", post(move_message))
         .route("/api/v1/messages", post(send_message))
         .route("/api/v1/search", get(search))
         .route("/api/v1/threads/:id/messages", get(thread_messages))
-        .route("/api/v1/messages/:id/attachments/:index", get(download_attachment))
+        .route(
+            "/api/v1/messages/:id/attachments/:index",
+            get(download_attachment),
+        )
         .with_state(state)
 }
 
@@ -213,7 +229,10 @@ async fn send_system_mail(
     body: Bytes,
 ) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
     let Some(expected) = state.system_mail_token.as_deref() else {
-        return Err(ApiError(StatusCode::SERVICE_UNAVAILABLE, "system mail is not configured".into()));
+        return Err(ApiError(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "system mail is not configured".into(),
+        ));
     };
     let supplied = headers
         .get(axum::http::header::AUTHORIZATION)
@@ -221,16 +240,26 @@ async fn send_system_mail(
         .and_then(|v| v.strip_prefix("Bearer "))
         .unwrap_or("");
     if !constant_time_token_eq(supplied.as_bytes(), expected.as_bytes()) {
-        return Err(ApiError(StatusCode::UNAUTHORIZED, "invalid system-mail credential".into()));
+        return Err(ApiError(
+            StatusCode::UNAUTHORIZED,
+            "invalid system-mail credential".into(),
+        ));
     }
     if body.len() > 4096 {
         return Err(bad("request is too large"));
     }
-    let request: system_mail::SystemMailRequest =
-        serde_json::from_slice(&body).map_err(|_| bad("request is not valid JSON in the expected shape"))?;
-    let mail = system_mail::parse_system_mail(&request, &state.primary_domain).map_err(|r| bad(r.message()))?;
-    if !state.system_mail_budget.try_spend(chrono::Utc::now().date_naive()) {
-        return Err(ApiError(StatusCode::TOO_MANY_REQUESTS, "daily system-mail limit reached".into()));
+    let request: system_mail::SystemMailRequest = serde_json::from_slice(&body)
+        .map_err(|_| bad("request is not valid JSON in the expected shape"))?;
+    let mail = system_mail::parse_system_mail(&request, &state.primary_domain)
+        .map_err(|r| bad(r.message()))?;
+    if !state
+        .system_mail_budget
+        .try_spend(chrono::Utc::now().date_naive())
+    {
+        return Err(ApiError(
+            StatusCode::TOO_MANY_REQUESTS,
+            "daily system-mail limit reached".into(),
+        ));
     }
 
     let from = Address::parse(&system_sender(&state.primary_domain))
@@ -253,7 +282,10 @@ async fn send_system_mail(
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(serde_json::json!({ "status": "rejected", "reason": reason })),
         )),
-        Some(_) => Ok((StatusCode::ACCEPTED, Json(serde_json::json!({ "status": "sent" })))),
+        Some(_) => Ok((
+            StatusCode::ACCEPTED,
+            Json(serde_json::json!({ "status": "sent" })),
+        )),
         None => Err(server("system mail produced no delivery outcome")),
     }
 }
@@ -316,7 +348,11 @@ async fn list_folders(
     Ok(Json(
         folders
             .into_iter()
-            .map(|f| FolderDto { id: f.id, name: f.name, kind: f.kind.as_str().to_string() })
+            .map(|f| FolderDto {
+                id: f.id,
+                name: f.name,
+                kind: f.kind.as_str().to_string(),
+            })
             .collect(),
     ))
 }
@@ -359,6 +395,7 @@ pub struct MessageDto {
     pub blocked_remote: bool,
     pub folder_kind: String,
     pub folder_name: String,
+    pub disposition: MessageDisposition,
     pub attachments: Vec<AttachmentDto>,
 }
 
@@ -385,9 +422,9 @@ async fn read_message(
         .raw_message(mailbox, message_id)
         .await
         .map_err(|_| ApiError(StatusCode::NOT_FOUND, "no such message".into()))?;
-    let folder = state
+    let (folder, disposition) = state
         .store
-        .message_folder(mailbox, message_id)
+        .message_location(mailbox, message_id)
         .await
         .map_err(|e| server(&format!("message folder: {e}")))?
         .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "no such message".into()))?;
@@ -430,10 +467,14 @@ async fn read_message(
         to: parsed.headers.get("to").map(str::to_string),
         date: parsed.headers.get("date").map(str::to_string),
         text: body_of("text/plain").unwrap_or_else(|| root.text()),
-        blocked_remote: sanitised.as_ref().map(|s| s.blocked_remote).unwrap_or(false),
+        blocked_remote: sanitised
+            .as_ref()
+            .map(|s| s.blocked_remote)
+            .unwrap_or(false),
         html: sanitised.map(|s| s.html),
         folder_kind: folder.kind.as_str().to_string(),
         folder_name: folder.name,
+        disposition,
         attachments,
     }))
 }
@@ -488,18 +529,53 @@ async fn move_message(
     let folder = match body.folder.as_str() {
         "inbox" => state.store.folder(mailbox, FolderKind::Inbox).await,
         "trash" => state.store.folder(mailbox, FolderKind::Trash).await,
-        "junk" => state
-            .store
-            .folder_named_or_create(mailbox, "Junk", FolderKind::Custom)
-            .await,
+        "junk" => {
+            state
+                .store
+                .folder_named_or_create(mailbox, "Junk", FolderKind::Custom)
+                .await
+        }
         _ => return Err(bad("folder must be inbox, trash, or junk")),
     }
-        .map_err(|e| server(&format!("folder: {e}")))?;
+    .map_err(|e| server(&format!("folder: {e}")))?;
     state
         .store
         .move_to_folder(mailbox, message_id, folder)
         .await
         .map_err(|e| server(&format!("move: {e}")))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn delete_message(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path(message_id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    let mailbox = mailbox_of(&state, &headers).await?;
+    state
+        .store
+        .erase_membership(mailbox, message_id)
+        .await
+        .map_err(|e| server(&format!("erase_membership: {e}")))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn empty_trash(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+) -> Result<StatusCode, ApiError> {
+    let mailbox = mailbox_of(&state, &headers).await?;
+    loop {
+        let erased = state
+            .store
+            .erase_all_trash_memberships(mailbox, 200)
+            .await
+            .map_err(|e| server(&format!("erase trash: {e}")))?;
+        if erased == 0 {
+            break;
+        }
+    }
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -583,7 +659,8 @@ async fn send_message(
 
     let mut recipients = Vec::new();
     for raw in req.to.iter().chain(req.cc.iter()) {
-        recipients.push(Address::parse(raw).map_err(|_| bad(&format!("malformed address: {raw}")))?);
+        recipients
+            .push(Address::parse(raw).map_err(|_| bad(&format!("malformed address: {raw}")))?);
     }
 
     let msg_id = format!("<{}@{}>", Uuid::now_v7().simple(), state.primary_domain);
@@ -625,8 +702,15 @@ async fn send_message(
             .take(200)
             .collect();
         builder = builder.attach(nexus_mailmsg::Attachment {
-            filename: if filename.trim().is_empty() { "attachment".into() } else { filename },
-            mime_type: a.mime_type.clone().unwrap_or_else(|| "application/octet-stream".into()),
+            filename: if filename.trim().is_empty() {
+                "attachment".into()
+            } else {
+                filename
+            },
+            mime_type: a
+                .mime_type
+                .clone()
+                .unwrap_or_else(|| "application/octet-stream".into()),
             data: bytes,
         });
     }
@@ -665,7 +749,11 @@ async fn send_message(
 #[derive(Deserialize)]
 pub struct SearchQuery {
     pub q: String,
+    pub folder: Option<String>,
+    pub unread: Option<bool>,
 }
+
+const SEARCH_QUERY_MAX_LEN: usize = 200;
 
 async fn search(
     State(state): State<SharedState>,
@@ -673,12 +761,78 @@ async fn search(
     Query(q): Query<SearchQuery>,
 ) -> Result<Json<Vec<SummaryDto>>, ApiError> {
     let mailbox = mailbox_of(&state, &headers).await?;
-    if q.q.trim().is_empty() {
+    let query = q.q.trim();
+    if query.is_empty() || query.len() > SEARCH_QUERY_MAX_LEN {
+        return Err(bad("q must be between 1 and 200 characters"));
+    }
+    let folders = state
+        .store
+        .folders(mailbox)
+        .await
+        .map_err(|e| server(&format!("folders: {e}")))?;
+    let mut allowed_folders = Vec::new();
+    match q.folder.as_deref() {
+        None => {
+            for folder in &folders {
+                if matches!(folder.kind, FolderKind::Inbox | FolderKind::Sent) {
+                    allowed_folders.push(folder.id);
+                }
+            }
+        }
+        Some("inbox") => {
+            for folder in &folders {
+                if folder.kind == FolderKind::Inbox {
+                    allowed_folders.push(folder.id);
+                }
+            }
+        }
+        Some("sent") => {
+            for folder in &folders {
+                if folder.kind == FolderKind::Sent {
+                    allowed_folders.push(folder.id);
+                }
+            }
+        }
+        Some("drafts") => {
+            for folder in &folders {
+                if folder.kind == FolderKind::Drafts {
+                    allowed_folders.push(folder.id);
+                }
+            }
+        }
+        Some("archive") => {
+            for folder in &folders {
+                if folder.kind == FolderKind::Archive {
+                    allowed_folders.push(folder.id);
+                }
+            }
+        }
+        Some("trash") => {
+            for folder in &folders {
+                if folder.kind == FolderKind::Trash {
+                    allowed_folders.push(folder.id);
+                }
+            }
+        }
+        Some("junk") => {
+            for folder in &folders {
+                if folder.kind == FolderKind::Custom && folder.name.eq_ignore_ascii_case("Junk") {
+                    allowed_folders.push(folder.id);
+                }
+            }
+        }
+        Some(_) => {
+            return Err(bad(
+                "folder must be inbox, sent, drafts, archive, junk, or trash",
+            ))
+        }
+    }
+    if allowed_folders.is_empty() {
         return Ok(Json(Vec::new()));
     }
     let hits = state
         .store
-        .search(mailbox, &q.q, 50)
+        .search(mailbox, query, &allowed_folders, q.unread, 50)
         .await
         .map_err(|e| server(&format!("search: {e}")))?;
     Ok(Json(hits.into_iter().map(Into::into).collect()))
@@ -737,15 +891,25 @@ async fn download_attachment(
         .filter(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | ' '))
         .take(120)
         .collect();
-    let name = if name.trim().is_empty() { "attachment".to_string() } else { name };
+    let name = if name.trim().is_empty() {
+        "attachment".to_string()
+    } else {
+        name
+    };
 
     Ok((
         StatusCode::OK,
         [
             ("content-type", "application/octet-stream".to_string()),
-            ("content-disposition", format!("attachment; filename=\"{name}\"")),
+            (
+                "content-disposition",
+                format!("attachment; filename=\"{name}\""),
+            ),
             ("x-content-type-options", "nosniff".to_string()),
-            ("content-security-policy", "default-src 'none'; sandbox".to_string()),
+            (
+                "content-security-policy",
+                "default-src 'none'; sandbox".to_string(),
+            ),
         ],
         Body::from(part.body.clone()),
     )

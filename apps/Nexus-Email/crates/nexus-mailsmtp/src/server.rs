@@ -124,8 +124,8 @@ where
                         Ok(None) => write.write_all(reply.as_bytes()).await?,
                         // The sink refused on policy grounds and said how.
                         Ok(Some(refusal)) => write.write_all(refusal.as_bytes()).await?,
-                        Err(e) => {
-                            tracing::warn!(error = %e, "smtp delivery failed");
+                        Err(_) => {
+                            tracing::warn!("smtp delivery failed");
                             write
                                 .write_all(b"451 4.3.0 Temporary failure; try again later\r\n")
                                 .await?

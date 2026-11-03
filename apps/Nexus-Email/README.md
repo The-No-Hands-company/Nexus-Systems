@@ -60,6 +60,40 @@ path exists — the ISP lifting the filter, or a peer node with clean egress.
 - `crates/nexus-mailfed` — federation: node keys, signed handoffs, the ingest
   listener, the HTTP transport, and `nexus-mailctl`.
 
+## Message lifetime and migration
+
+Recipient routing is resolved before a single transaction persists the
+message, submission, recipient intents, mailbox copies and outbound work.
+SMTP and peer handoffs commit the complete accepted envelope together,
+including local deliveries and permitted relay work. Mailbox rows are locked
+in UUID order. Pending intents retain content after the last mailbox copy is
+erased; the last terminal transition finishes a deferred erasure. Terminal
+queue retention validates queue/intent pairs, performs checked orphan cleanup
+and schedules any external-body deletion. Thread cleanup and new message
+references serialize on the thread row; cleanup checks references after
+acquiring that lock.
+
+Outbound claims carry a five-minute lease and a fresh token. The worker claims
+close to execution and renews a live token before network work, checking
+wall-clock expiry after acquiring the queue row lock; completion and failure
+require that token. An expired claim can be reclaimed after a restart.
+Fencing cannot undo a send already in progress, so remote delivery remains
+at-least-once. Local intent records are removed with their membership. Queue
+retention removes raw recipient addresses while retaining a per-submission
+salted fingerprint for retry identity for as long as the message remains; the
+fingerprint is also removed on final erasure.
+
+Stop all Mail writers before applying the submission-intent migration and do
+not mix old and new writers. It backfills existing queue work and returns
+unfenced in-flight rows to pending. For a message with existing queue work or
+dispositions, an unfinished legacy submission whose recipients cannot be
+reconstructed becomes a `local_pending` intent with no recipient. Other
+unfinished legacy submissions retain their existing hold. An operator must
+reconcile these records before they can be removed. The legacy
+low-level `store_message` hold API remains for old callers, but an unfinished
+legacy hold cannot be attached to an intent-managed submission. New routing
+must use the transactional `Deliverer` rather than that low-level API.
+
 ## Connecting a mail client
 
 The daemon serves IMAP on `127.0.0.1:2143`, **plaintext**. There is no TLS in it,
@@ -78,8 +112,9 @@ shows people the wrong mail.
 
 `nexus-mailsmtpd` runs two listeners: an MX port for anonymous strangers, and a
 submission port for our own users. `deploy.sh` starts it. The same process
-runs the delivery worker, which drains the outbound queue, and the federation
-listener on `127.0.0.1:2580`.
+runs the delivery worker, which drains the outbound queue, a bounded Trash-purge
+loop (expired Trash memberships only), and the federation listener on
+`127.0.0.1:2580`.
 
 **Both default to unprivileged loopback ports (2525 / 2587).** Binding 25 needs
 root or `CAP_NET_BIND_SERVICE`, and nothing can reach this node on 25 anyway —
@@ -156,6 +191,9 @@ one peer to another.
 | `NEXUS_EMAIL_EGRESS` | `direct` | `direct`, `resend`, or `peer:<domain>`; anything else stops the daemon at start |
 | `NEXUS_EMAIL_SMTP_HOST` / `_PORT` / `_USER` / `_PASS` | unset | Authenticated SMTP relay settings; password is required for `resend` |
 | `NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN` | unset | Shared bearer secret for the Cloudflare Email Worker endpoint |
+| `NEXUS_EMAIL_TRASH_PURGE_INTERVAL_SECS` | `300` | delay between bounded purge passes |
+| `NEXUS_EMAIL_TRASH_PURGE_BATCH_SIZE` | `128` | max expired memberships erased per batch |
+| `NEXUS_EMAIL_TRASH_PURGE_MAX_BATCHES` | `4` | max batches per pass before yielding to the next interval |
 | `NEXUS_EMAIL_FEDERATION_BIND` | `127.0.0.1:2580` | the federation listener |
 | `NEXUS_EMAIL_FEDERATION_HOST` | `mail.<domain>` | the host peers pin and sign for |
 | `NEXUS_EMAIL_NODE_KEY_PATH` | `~/.config/nexus-email/node.key` | this node's Ed25519 key; created once, never replaced |
@@ -231,6 +269,20 @@ sender and raw MIME body.
 - **`Enforce`** honours the sending domain's own published policy — `p=reject`
   is refused at SMTP time with a 550, `p=quarantine` is delivered to a Junk
   folder.
+
+Enforced DMARC quarantine is recorded on each affected mailbox membership and
+shown in the message API as `dmarc_quarantine`. The provenance remains when a
+user moves the message; moving mail to Junk manually does not imply sender
+policy. Existing memberships are migrated to `none`, because their original
+reason for being in Junk cannot be established reliably. Apply
+`20261104000011_mail_disposition.sql` once before starting the updated Mail
+writers and readers, including on installations that have already applied the
+later-numbered submission migrations.
+
+Empty Trash erases all current Trash memberships, including those hidden by
+the IMAP `\Deleted` flag, in bounded batches through the same locked erasure
+path as individual deletion. Other mailbox copies and pending deliveries keep
+their normal lifetime protection.
 
 A rejection is a refusal during the SMTP conversation, not an accept-then-
 discard. A silent discard leaves the sender — sometimes a legitimate,
@@ -324,3 +376,30 @@ cargo test -p nexus-mailstore
 (`nexus-mailfed/tests/two_nodes.rs`) also needs the role to be allowed to
 `CREATE DATABASE`: each node gets its own freshly migrated database, dropped
 afterwards.
+
+### Rolling back the lifecycle migration
+
+The lifecycle migration has a matching, manually applied rollback script. Stop
+Mail processes that use `trash_expires_at`, take the normal database backup,
+then run this exact file against the target database:
+
+```bash
+docker exec -i nexus-systems-postgres-1 psql -v ON_ERROR_STOP=1 -U nexus -d nexus_email \
+  < docs/migration-rollbacks/20261101000006_mail_lifecycle.sql
+```
+
+The script drops only `mailbox_messages_trash_expiry_idx` and
+`mailbox_messages.trash_expires_at`. Reapply the numbered migration to restore
+the lifecycle schema before starting a build that requires it.
+
+### External body deletion
+
+Large message bodies and attachments use the ecosystem's S3-compatible object
+storage settings: `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, and
+`S3_BUCKET`. External bodies are reserved first: Mail issues the immutable
+`mail-bodies/<generation-id>` key, and callers must upload that exact key with
+a no-overwrite write (`If-None-Match: *` or equivalent) before finalizing
+`store_message`. Final message erasure and expired reservations create durable
+deletion jobs in the same database transaction; `nexus-mailsmtpd` deletes the
+object and removes the job only after MinIO/S3 confirms success. Failures
+contain no object key or mail content in logs and remain queued for retry.

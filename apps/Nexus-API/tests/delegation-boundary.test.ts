@@ -37,6 +37,7 @@ describe("delegation trust boundary", () => {
   const previous = new Map<string, string | undefined>();
   const capturedMailSubjects: string[] = [];
   const capturedMailHeaders: Record<string, string>[] = [];
+  const capturedMailMethodsAndPaths: string[] = [];
   const cloudApiKey = "super-secret-cloud-key-test-fixture"; // pragma: allowlist secret
 
   beforeAll(async () => {
@@ -90,11 +91,23 @@ describe("delegation trust boundary", () => {
       capturedMailHeaders.push(headers);
       if (headers["x-nexus-subject"]) capturedMailSubjects.push(headers["x-nexus-subject"]);
       const path = new URL(request.url).pathname;
-      if (path !== "/api/v1/folders" && path !== "/api/v1/messages/message-id/folder")
+      capturedMailMethodsAndPaths.push(`${request.method} ${path}`);
+      if (
+        path !== "/api/v1/folders" &&
+        path !== "/api/v1/messages/message-id/folder" &&
+        path !== "/api/v1/messages/message-id" &&
+        path !== "/api/v1/folders/trash/empty"
+      )
         return new Response("not found", { status: 404 });
       if (headers["x-nexus-subject"] !== "resolved-user-id")
         return Response.json({ error: "wrong subject" }, { status: 403 });
-      if (path.endsWith("/folder")) return new Response(null, { status: 204 });
+      if (
+        path.endsWith("/folder") ||
+        (request.method === "DELETE" && path === "/api/v1/messages/message-id") ||
+        path === "/api/v1/folders/trash/empty"
+      ) {
+        return new Response(null, { status: 204 });
+      }
       return Response.json({ folders: [] });
     });
 
@@ -156,6 +169,44 @@ describe("delegation trust boundary", () => {
       body: JSON.stringify({ folder: "trash" }),
     });
     expect(res.status).toBe(204);
+  });
+
+  it("forwards a permanent delete to Mail", async () => {
+    const res = await fetch(`${base}/api/v1/mail/messages/message-id`, {
+      method: "DELETE",
+      headers: { cookie: "nexus_session=valid", "x-nexus-subject": "attacker-injected-subject" },
+    });
+    expect(res.status).toBe(204);
+    expect(capturedMailSubjects).not.toContain("attacker-injected-subject");
+    expect(capturedMailSubjects).toContain("resolved-user-id");
+  });
+
+  it("forwards empty-trash to Mail", async () => {
+    const res = await fetch(`${base}/api/v1/mail/folders/trash/empty`, {
+      method: "POST",
+      headers: { cookie: "nexus_session=valid" },
+    });
+    expect(res.status).toBe(204);
+  });
+
+  it("rejects GET empty-trash before Mail", async () => {
+    const before = capturedMailMethodsAndPaths.length;
+    const res = await fetch(`${base}/api/v1/mail/folders/trash/empty`, {
+      method: "GET",
+      headers: { cookie: "nexus_session=valid" },
+    });
+    expect(res.status).toBe(405);
+    expect(capturedMailMethodsAndPaths.length).toBe(before);
+  });
+
+  it("enforces messages/:id methods", async () => {
+    const before = capturedMailMethodsAndPaths.length;
+    const res = await fetch(`${base}/api/v1/mail/messages/message-id`, {
+      method: "POST",
+      headers: { cookie: "nexus_session=valid" },
+    });
+    expect(res.status).toBe(405);
+    expect(capturedMailMethodsAndPaths.length).toBe(before);
   });
 
   it("does not expose the Cloud API key in the catalog response", async () => {
