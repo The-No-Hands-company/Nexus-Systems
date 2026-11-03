@@ -154,7 +154,8 @@ impl Deliverer {
                         .await?;
                     if force_folder {
                         sqlx::query(
-                            "UPDATE mailbox_messages SET folder_id = $2, trash_expires_at = NULL
+                            "UPDATE mailbox_messages SET folder_id = $2, trash_expires_at = NULL,
+                                disposition = 'dmarc_quarantine'
                              WHERE id = $1",
                         ).bind(membership_id).bind(folder).execute(&mut *tx).await?;
                     }

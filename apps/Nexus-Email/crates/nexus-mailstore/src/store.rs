@@ -1388,8 +1388,20 @@ impl MailStore {
         mailbox_id: Uuid,
         message_id: Uuid,
     ) -> Result<Option<Folder>> {
-        let row: Option<(Uuid, Uuid, String, String)> = sqlx::query_as(
-            "SELECT f.id, f.mailbox_id, f.name, f.kind
+        Ok(self
+            .message_location(mailbox_id, message_id)
+            .await?
+            .map(|(folder, _)| folder))
+    }
+
+    /// Folder and delivery disposition of the caller's mailbox membership.
+    pub async fn message_location(
+        &self,
+        mailbox_id: Uuid,
+        message_id: Uuid,
+    ) -> Result<Option<(Folder, MessageDisposition)>> {
+        let row: Option<(Uuid, Uuid, String, String, MessageDisposition)> = sqlx::query_as(
+            "SELECT f.id, f.mailbox_id, f.name, f.kind, mm.disposition
              FROM mailbox_messages mm
              JOIN folders f ON f.id = mm.folder_id
              WHERE mm.mailbox_id = $1 AND mm.message_id = $2",
@@ -1399,18 +1411,23 @@ impl MailStore {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(row.map(|(id, mailbox_id, name, kind)| Folder {
-            id,
-            mailbox_id,
-            name,
-            kind: match kind.as_str() {
-                "inbox" => FolderKind::Inbox,
-                "sent" => FolderKind::Sent,
-                "drafts" => FolderKind::Drafts,
-                "trash" => FolderKind::Trash,
-                "archive" => FolderKind::Archive,
-                _ => FolderKind::Custom,
-            },
+        Ok(row.map(|(id, mailbox_id, name, kind, disposition)| {
+            (
+                Folder {
+                    id,
+                    mailbox_id,
+                    name,
+                    kind: match kind.as_str() {
+                        "inbox" => FolderKind::Inbox,
+                        "sent" => FolderKind::Sent,
+                        "drafts" => FolderKind::Drafts,
+                        "trash" => FolderKind::Trash,
+                        "archive" => FolderKind::Archive,
+                        _ => FolderKind::Custom,
+                    },
+                },
+                disposition,
+            )
         }))
     }
 
@@ -1577,9 +1594,8 @@ impl MailStore {
 
     /// Delete one membership only if it is still in this mailbox's Trash.
     ///
-    /// Empty Trash first obtains a display batch, but the folder predicate
-    /// here is authoritative. A restore between the listing and deletion is
-    /// therefore retained.
+    /// The folder predicate is authoritative, so a restore between selection
+    /// and deletion is retained.
     pub async fn erase_trash_membership(&self, mailbox_id: Uuid, message_id: Uuid) -> Result<bool> {
         let mut tx = self.begin_reference_transaction().await?;
         if !Self::lock_message_in_transaction(&mut tx, message_id).await? {
@@ -1613,6 +1629,36 @@ impl MailStore {
 
         tx.commit().await?;
         Ok(deleted.is_some())
+    }
+
+    /// Erase at most `limit` Trash memberships, including IMAP-deleted rows.
+    pub async fn erase_all_trash_memberships(&self, mailbox_id: Uuid, limit: i64) -> Result<u64> {
+        loop {
+            let rows: Vec<(Uuid,)> = sqlx::query_as(
+                "SELECT mm.message_id
+                 FROM mailbox_messages mm
+                 JOIN folders f ON f.id = mm.folder_id AND f.mailbox_id = mm.mailbox_id
+                 WHERE mm.mailbox_id = $1 AND f.kind = 'trash'
+                 ORDER BY mm.added_at, mm.id
+                 LIMIT $2",
+            )
+            .bind(mailbox_id)
+            .bind(limit.clamp(1, 10_000))
+            .fetch_all(&self.pool)
+            .await?;
+            if rows.is_empty() {
+                return Ok(0);
+            }
+            let mut erased = 0;
+            for (message_id,) in rows {
+                erased += u64::from(self.erase_trash_membership(mailbox_id, message_id).await?);
+            }
+            if erased > 0 {
+                return Ok(erased);
+            }
+            // An entire selected batch may have been restored meanwhile.
+            // Continue looking before reporting that Trash is empty.
+        }
     }
 
     /// Permanently erase expired Trash memberships in bounded batches.

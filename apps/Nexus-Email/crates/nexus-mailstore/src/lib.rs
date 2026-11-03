@@ -20,8 +20,8 @@ pub mod store;
 pub use address::Address;
 pub use error::{MailStoreError, Result};
 pub use models::{
-    Body, ExternalBodyReservation, Flags, Folder, FolderKind, Mailbox, Message, OwnerKind,
-    RecipientIntentState, Transport,
+    Body, ExternalBodyReservation, Flags, Folder, FolderKind, Mailbox, Message, MessageDisposition,
+    OwnerKind, RecipientIntentState, Transport,
 };
 pub use store::{
     content_hash, normalise_subject, ImapMessage, MailStore, MessageReferenceKind, MessageSummary,

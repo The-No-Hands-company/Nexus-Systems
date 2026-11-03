@@ -21,7 +21,7 @@ use axum::{
 };
 use nexus_maildelivery::{Deliverer, Disposition};
 use nexus_mailmsg::MessageBuilder;
-use nexus_mailstore::{Address, FolderKind, MailStore, MessageSummary};
+use nexus_mailstore::{Address, FolderKind, MailStore, MessageDisposition, MessageSummary};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -395,6 +395,7 @@ pub struct MessageDto {
     pub blocked_remote: bool,
     pub folder_kind: String,
     pub folder_name: String,
+    pub disposition: MessageDisposition,
     pub attachments: Vec<AttachmentDto>,
 }
 
@@ -421,9 +422,9 @@ async fn read_message(
         .raw_message(mailbox, message_id)
         .await
         .map_err(|_| ApiError(StatusCode::NOT_FOUND, "no such message".into()))?;
-    let folder = state
+    let (folder, disposition) = state
         .store
-        .message_folder(mailbox, message_id)
+        .message_location(mailbox, message_id)
         .await
         .map_err(|e| server(&format!("message folder: {e}")))?
         .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "no such message".into()))?;
@@ -473,6 +474,7 @@ async fn read_message(
         html: sanitised.map(|s| s.html),
         folder_kind: folder.kind.as_str().to_string(),
         folder_name: folder.name,
+        disposition,
         attachments,
     }))
 }
@@ -563,27 +565,14 @@ async fn empty_trash(
     headers: HeaderMap,
 ) -> Result<StatusCode, ApiError> {
     let mailbox = mailbox_of(&state, &headers).await?;
-    let trash_id = state
-        .store
-        .folder(mailbox, FolderKind::Trash)
-        .await
-        .map_err(|e| server(&format!("trash folder lookup: {e}")))?;
-
     loop {
-        let batch = state
+        let erased = state
             .store
-            .list_folder(mailbox, trash_id, 200, 0)
+            .erase_all_trash_memberships(mailbox, 200)
             .await
-            .map_err(|e| server(&format!("list trash: {e}")))?;
-        if batch.is_empty() {
+            .map_err(|e| server(&format!("erase trash: {e}")))?;
+        if erased == 0 {
             break;
-        }
-        for message in batch {
-            state
-                .store
-                .erase_trash_membership(mailbox, message.id)
-                .await
-                .map_err(|e| server(&format!("erase_membership: {e}")))?;
         }
     }
 

@@ -234,6 +234,9 @@ export default function MailRead() {
           This message is in Junk. Move it back to Inbox with Not Spam if it is safe.
         </p>
       )}
+      {m.disposition === "dmarc_quarantine" && (
+        <p className="text-sm text-amber-300">Quarantined by sender policy</p>
+      )}
       {status && <p role="status" className="text-sm text-zinc-300">{status}</p>}
       {moveError && <p role="alert" className="text-sm text-red-300">Could not move message ({moveError}).</p>}
 

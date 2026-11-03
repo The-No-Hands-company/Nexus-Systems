@@ -258,8 +258,8 @@ async fn smtp_quarantine_places_every_envelope_recipient_in_junk() {
         })
         .await;
     assert!(matches!(result, Ok(None)));
-    let memberships: Vec<(Uuid, String, Uuid)> = sqlx::query_as(
-        "SELECT mm.mailbox_id, f.name, mm.message_id FROM mailbox_messages mm
+    let memberships: Vec<(Uuid, String, Uuid, String)> = sqlx::query_as(
+        "SELECT mm.mailbox_id, f.name, mm.message_id, mm.disposition FROM mailbox_messages mm
              JOIN folders f ON f.id = mm.folder_id WHERE mm.mailbox_id = ANY($1)
              ORDER BY mm.mailbox_id",
     )
@@ -268,7 +268,9 @@ async fn smtp_quarantine_places_every_envelope_recipient_in_junk() {
     .await
     .unwrap();
     assert_eq!(memberships.len(), 2);
-    assert!(memberships.iter().all(|(_, name, _)| name == "Junk"));
+    assert!(memberships
+        .iter()
+        .all(|(_, name, _, disposition)| name == "Junk" && disposition == "dmarc_quarantine"));
     assert_eq!(memberships[0].2, memberships[1].2);
 }
 
@@ -303,7 +305,10 @@ async fn smtp_quarantine_moves_an_existing_identical_inbox_copy_to_junk() {
         client_ip: "198.51.100.66".parse().unwrap(),
         helo: "evil.test",
     };
-    for mode in [PolicyMode::Observe, PolicyMode::Enforce] {
+    for (mode, expected_disposition) in [
+        (PolicyMode::Observe, "none"),
+        (PolicyMode::Enforce, "dmarc_quarantine"),
+    ] {
         let sink = AuthenticatingSink {
             store: store.clone(),
             deliverer: deliverer.clone(),
@@ -312,6 +317,14 @@ async fn smtp_quarantine_moves_an_existing_identical_inbox_copy_to_junk() {
             mode,
         };
         assert!(matches!(sink.deliver(inbound.clone()).await, Ok(None)));
+        let (disposition,): (String,) = sqlx::query_as(
+            "SELECT disposition FROM mailbox_messages WHERE mailbox_id = $1",
+        )
+        .bind(mailbox.id)
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+        assert_eq!(disposition, expected_disposition);
     }
     let folders: Vec<(String,)> = sqlx::query_as(
         "SELECT f.name FROM mailbox_messages mm JOIN folders f ON f.id = mm.folder_id

@@ -11,6 +11,15 @@ pub enum RecipientIntentState {
     Failed,
 }
 
+/// Why this mailbox's copy was placed in a particular folder at delivery.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
+pub enum MessageDisposition {
+    None,
+    DmarcQuarantine,
+}
+
 /// Who owns a mailbox.
 ///
 /// Role addresses like `info@` and `postmaster@` belong to the node, not to a

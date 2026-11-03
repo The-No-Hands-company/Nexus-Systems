@@ -270,6 +270,20 @@ sender and raw MIME body.
   is refused at SMTP time with a 550, `p=quarantine` is delivered to a Junk
   folder.
 
+Enforced DMARC quarantine is recorded on each affected mailbox membership and
+shown in the message API as `dmarc_quarantine`. The provenance remains when a
+user moves the message; moving mail to Junk manually does not imply sender
+policy. Existing memberships are migrated to `none`, because their original
+reason for being in Junk cannot be established reliably. Apply
+`20261104000011_mail_disposition.sql` once before starting the updated Mail
+writers and readers, including on installations that have already applied the
+later-numbered submission migrations.
+
+Empty Trash erases all current Trash memberships, including those hidden by
+the IMAP `\Deleted` flag, in bounded batches through the same locked erasure
+path as individual deletion. Other mailbox copies and pending deliveries keep
+their normal lifetime protection.
+
 A rejection is a refusal during the SMTP conversation, not an accept-then-
 discard. A silent discard leaves the sender — sometimes a legitimate,
 misconfigured sender — believing the mail arrived.

@@ -401,6 +401,338 @@ async fn a_mailbox_owner_can_move_a_message_between_special_folders() {
 }
 
 #[tokio::test]
+async fn empty_trash_erases_imap_deleted_memberships() {
+    let api = start(None).await;
+    let subject = format!("usr-{}", Uuid::now_v7().simple());
+    let owner = api
+        .store
+        .create_identity_mailbox(&subject, "Owner")
+        .await
+        .unwrap();
+    let other = api.store.create_node_mailbox("Other").await.unwrap();
+    let owner_address = Address::parse(&format!("owner@{}", api.local)).unwrap();
+    let other_address = Address::parse(&format!("other@{}", api.local)).unwrap();
+    api.store
+        .add_address(owner.id, &owner_address, true)
+        .await
+        .unwrap();
+    api.store
+        .add_address(other.id, &other_address, true)
+        .await
+        .unwrap();
+    let deliverer = Deliverer::new(
+        api.store.clone(),
+        Queue::new(api.store.pool().clone()),
+        Router::new().with_local_domain(&api.local),
+    );
+    let from = Address::parse("sender@example.test").unwrap();
+    let raw = format!(
+        "From: sender@example.test\r\nSubject: {}\r\n\r\nbody",
+        Uuid::now_v7()
+    );
+    let message = deliverer
+        .accept_smtp_envelope(
+            raw.as_bytes(),
+            &from,
+            &[owner_address, other_address],
+            false,
+        )
+        .await
+        .unwrap();
+    let trash = api
+        .store
+        .folder(owner.id, nexus_mailstore::FolderKind::Trash)
+        .await
+        .unwrap();
+    api.store
+        .move_to_folder(owner.id, message, trash)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE mailbox_messages SET deleted = true WHERE mailbox_id = $1 AND message_id = $2",
+    )
+    .bind(owner.id)
+    .bind(message)
+    .execute(api.store.pool())
+    .await
+    .unwrap();
+    assert!(api
+        .store
+        .list_folder(owner.id, trash, 200, 0)
+        .await
+        .unwrap()
+        .is_empty());
+
+    let response = post(
+        api.addr,
+        "/api/v1/folders/trash/empty",
+        &[("X-Nexus-Subject", &subject)],
+        b"",
+    )
+    .await;
+    assert!(response.starts_with("HTTP/1.1 204"), "{response}");
+    let memberships: Vec<(Uuid,)> =
+        sqlx::query_as("SELECT mailbox_id FROM mailbox_messages WHERE message_id = $1")
+            .bind(message)
+            .fetch_all(api.store.pool())
+            .await
+            .unwrap();
+    assert_eq!(memberships, vec![(other.id,)]);
+    let (exists,): (bool,) = sqlx::query_as("SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1)")
+        .bind(message)
+        .fetch_one(api.store.pool())
+        .await
+        .unwrap();
+    assert!(exists, "the other mailbox still owns the shared message");
+    api.store.erase_membership(other.id, message).await.unwrap();
+    let (exists,): (bool,) = sqlx::query_as("SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1)")
+        .bind(message)
+        .fetch_one(api.store.pool())
+        .await
+        .unwrap();
+    assert!(!exists, "last membership erasure must clean up the message");
+}
+
+#[tokio::test]
+async fn empty_trash_drains_multiple_batches_including_hidden_messages() {
+    let api = start(None).await;
+    let subject = format!("usr-{}", Uuid::now_v7().simple());
+    let mailbox = api
+        .store
+        .create_identity_mailbox(&subject, "Batch")
+        .await
+        .unwrap();
+    let recipient = Address::parse(&format!("batch@{}", api.local)).unwrap();
+    api.store
+        .add_address(mailbox.id, &recipient, true)
+        .await
+        .unwrap();
+    let deliverer = Deliverer::new(
+        api.store.clone(),
+        Queue::new(api.store.pool().clone()),
+        Router::new().with_local_domain(&api.local),
+    );
+    let from = Address::parse("sender@example.test").unwrap();
+    let trash = api
+        .store
+        .folder(mailbox.id, nexus_mailstore::FolderKind::Trash)
+        .await
+        .unwrap();
+    for i in 0..201 {
+        let raw = format!(
+            "From: sender@example.test\r\nSubject: {}-{i}\r\n\r\nbody",
+            subject
+        );
+        let message = deliverer
+            .accept_smtp(raw.as_bytes(), &from, &recipient)
+            .await
+            .unwrap();
+        api.store
+            .move_to_folder(mailbox.id, message, trash)
+            .await
+            .unwrap();
+    }
+    sqlx::query("UPDATE mailbox_messages SET deleted = true WHERE mailbox_id = $1 AND uid % 2 = 0")
+        .bind(mailbox.id)
+        .execute(api.store.pool())
+        .await
+        .unwrap();
+
+    let response = post(
+        api.addr,
+        "/api/v1/folders/trash/empty",
+        &[("X-Nexus-Subject", &subject)],
+        b"",
+    )
+    .await;
+    assert!(response.starts_with("HTTP/1.1 204"), "{response}");
+    let (remaining,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM mailbox_messages WHERE mailbox_id = $1")
+            .bind(mailbox.id)
+            .fetch_one(api.store.pool())
+            .await
+            .unwrap();
+    assert_eq!(remaining, 0);
+}
+
+#[tokio::test]
+async fn empty_trash_preserves_pending_outbound_intent() {
+    let api = start(None).await;
+    let subject = format!("usr-{}", Uuid::now_v7().simple());
+    let mailbox = api
+        .store
+        .create_identity_mailbox(&subject, "Sender")
+        .await
+        .unwrap();
+    let from = Address::parse(&format!("sender@{}", api.local)).unwrap();
+    api.store
+        .add_address(mailbox.id, &from, true)
+        .await
+        .unwrap();
+    let recipient = Address::parse(&format!("{}@elsewhere.test", Uuid::now_v7().simple())).unwrap();
+    let deliverer = Deliverer::new(
+        api.store.clone(),
+        Queue::new(api.store.pool().clone()),
+        Router::new().with_local_domain(&api.local),
+    );
+    let raw = format!(
+        "From: {}\r\nSubject: {}\r\n\r\nbody",
+        from.as_string(),
+        Uuid::now_v7()
+    );
+    deliverer
+        .submit(
+            raw.as_bytes(),
+            &from,
+            std::slice::from_ref(&recipient),
+            Some(mailbox.id),
+        )
+        .await
+        .unwrap();
+    let (message,): (Uuid,) =
+        sqlx::query_as("SELECT message_id FROM outbound_queue WHERE recipient = $1")
+            .bind(recipient.as_string())
+            .fetch_one(api.store.pool())
+            .await
+            .unwrap();
+    let trash = api
+        .store
+        .folder(mailbox.id, nexus_mailstore::FolderKind::Trash)
+        .await
+        .unwrap();
+    api.store
+        .move_to_folder(mailbox.id, message, trash)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE mailbox_messages SET deleted = true WHERE mailbox_id = $1 AND message_id = $2",
+    )
+    .bind(mailbox.id)
+    .bind(message)
+    .execute(api.store.pool())
+    .await
+    .unwrap();
+
+    let response = post(
+        api.addr,
+        "/api/v1/folders/trash/empty",
+        &[("X-Nexus-Subject", &subject)],
+        b"",
+    )
+    .await;
+    assert!(response.starts_with("HTTP/1.1 204"), "{response}");
+    let (memberships, pending, messages): (i64, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM mailbox_messages WHERE message_id = $1),
+                (SELECT count(*) FROM outbound_queue WHERE message_id = $1 AND state = 'pending'),
+                (SELECT count(*) FROM messages WHERE id = $1)",
+    )
+    .bind(message)
+    .fetch_one(api.store.pool())
+    .await
+    .unwrap();
+    assert_eq!((memberships, pending, messages), (0, 1, 1));
+}
+
+#[tokio::test]
+async fn message_disposition_is_mailbox_scoped_and_survives_moves() {
+    let api = start(None).await;
+    let first_subject = format!("usr-{}", Uuid::now_v7().simple());
+    let second_subject = format!("usr-{}", Uuid::now_v7().simple());
+    let first = api
+        .store
+        .create_identity_mailbox(&first_subject, "First")
+        .await
+        .unwrap();
+    let second = api
+        .store
+        .create_identity_mailbox(&second_subject, "Second")
+        .await
+        .unwrap();
+    let first_address = Address::parse(&format!("first@{}", api.local)).unwrap();
+    let second_address = Address::parse(&format!("second@{}", api.local)).unwrap();
+    api.store
+        .add_address(first.id, &first_address, true)
+        .await
+        .unwrap();
+    api.store
+        .add_address(second.id, &second_address, true)
+        .await
+        .unwrap();
+    let deliverer = Deliverer::new(
+        api.store.clone(),
+        Queue::new(api.store.pool().clone()),
+        Router::new().with_local_domain(&api.local),
+    );
+    let from = Address::parse("sender@example.test").unwrap();
+    let raw = format!(
+        "From: sender@example.test\r\nSubject: {}\r\n\r\nbody",
+        Uuid::now_v7()
+    );
+    let message = deliverer
+        .accept_smtp_envelope(
+            raw.as_bytes(),
+            &from,
+            &[first_address.clone(), second_address],
+            false,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        deliverer
+            .accept_smtp_envelope(raw.as_bytes(), &from, &[first_address], true)
+            .await
+            .unwrap(),
+        message
+    );
+
+    for (subject, expected) in [
+        (&first_subject, "dmarc_quarantine"),
+        (&second_subject, "none"),
+    ] {
+        let response = get(
+            api.addr,
+            &format!("/api/v1/messages/{message}"),
+            &[("X-Nexus-Subject", subject)],
+        )
+        .await;
+        assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+        assert!(
+            response.contains(&format!(r#""disposition":"{expected}""#)),
+            "{response}"
+        );
+    }
+
+    for (subject, folder) in [(&first_subject, "inbox"), (&second_subject, "junk")] {
+        let response = post(
+            api.addr,
+            &format!("/api/v1/messages/{message}/folder"),
+            &[
+                ("Content-Type", "application/json"),
+                ("X-Nexus-Subject", subject),
+            ],
+            format!(r#"{{"folder":"{folder}"}}"#).as_bytes(),
+        )
+        .await;
+        assert!(response.starts_with("HTTP/1.1 204"), "{response}");
+    }
+    for (subject, expected) in [
+        (&first_subject, "dmarc_quarantine"),
+        (&second_subject, "none"),
+    ] {
+        let response = get(
+            api.addr,
+            &format!("/api/v1/messages/{message}"),
+            &[("X-Nexus-Subject", subject)],
+        )
+        .await;
+        assert!(
+            response.contains(&format!(r#""disposition":"{expected}""#)),
+            "{response}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn permanent_delete_and_empty_trash_are_idempotent_and_mailbox_scoped() {
     let api = start(None).await;
     let owner_subject = format!("usr-{}", Uuid::now_v7().simple());

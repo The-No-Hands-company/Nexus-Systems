@@ -1137,6 +1137,183 @@ async fn migration_backfill_keeps_existing_trash_for_at_least_seven_days() {
 }
 
 #[tokio::test]
+async fn disposition_migration_defaults_existing_memberships_and_rejects_unknown_values() {
+    let s = store().await;
+    let mut tx = s.pool().begin().await.unwrap();
+    sqlx::query("CREATE TEMP TABLE mailbox_messages (id UUID PRIMARY KEY)")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let id = Uuid::now_v7();
+    sqlx::query("INSERT INTO mailbox_messages (id) VALUES ($1)")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::raw_sql(include_str!(
+        "../migrations/20261104000011_mail_disposition.sql"
+    ))
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    let (disposition,): (String,) =
+        sqlx::query_as("SELECT disposition FROM mailbox_messages WHERE id = $1")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+    assert_eq!(disposition, "none");
+    assert!(
+        sqlx::query("UPDATE mailbox_messages SET disposition = 'unknown' WHERE id = $1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .is_err()
+    );
+    tx.rollback().await.unwrap();
+}
+
+#[tokio::test]
+async fn empty_trash_batches_include_imap_deleted_memberships() {
+    let s = store().await;
+    let mailbox = s
+        .create_identity_mailbox(&unique("usr"), "Alice")
+        .await
+        .unwrap();
+    let from = Address::parse("sender@example.test").unwrap();
+    let thread = s
+        .thread_for(None, &[], Some("trash batches"))
+        .await
+        .unwrap();
+    let trash = s.folder(mailbox.id, FolderKind::Trash).await.unwrap();
+    let inbox = s.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    let mut messages = Vec::new();
+    for folder in [trash, trash, trash, inbox] {
+        let message = s
+            .store_message(
+                unique("trash batch").as_bytes(),
+                thread,
+                &from,
+                Some("trash batches"),
+                None,
+                None,
+                &[],
+                Transport::Internal,
+                None,
+            )
+            .await
+            .unwrap();
+        s.deliver(mailbox.id, message, folder).await.unwrap();
+        finish_submission(&s, message).await;
+        messages.push(message);
+    }
+    sqlx::query(
+        "UPDATE mailbox_messages SET deleted = true WHERE mailbox_id = $1 AND message_id = $2",
+    )
+    .bind(mailbox.id)
+    .bind(messages[0])
+    .execute(s.pool())
+    .await
+    .unwrap();
+
+    assert_eq!(
+        s.erase_all_trash_memberships(mailbox.id, 2).await.unwrap(),
+        2
+    );
+    assert_eq!(
+        s.erase_all_trash_memberships(mailbox.id, 2).await.unwrap(),
+        1
+    );
+    assert_eq!(
+        s.erase_all_trash_memberships(mailbox.id, 2).await.unwrap(),
+        0
+    );
+    let remaining: Vec<(Uuid,)> =
+        sqlx::query_as("SELECT message_id FROM mailbox_messages WHERE mailbox_id = $1")
+            .bind(mailbox.id)
+            .fetch_all(s.pool())
+            .await
+            .unwrap();
+    assert_eq!(remaining, vec![(messages[3],)]);
+    let (trash_messages,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM messages WHERE id = ANY($1)")
+            .bind(&messages[..3])
+            .fetch_one(s.pool())
+            .await
+            .unwrap();
+    assert_eq!(trash_messages, 0);
+}
+
+#[tokio::test]
+async fn empty_trash_continues_after_an_entire_batch_is_restored() {
+    let s = store().await;
+    let mailbox = s.create_node_mailbox("trash race").await.unwrap();
+    let from = Address::parse("sender@example.test").unwrap();
+    let thread = s.thread_for(None, &[], Some("trash race")).await.unwrap();
+    let trash = s.folder(mailbox.id, FolderKind::Trash).await.unwrap();
+    let inbox = s.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    let mut messages = Vec::new();
+    for _ in 0..2 {
+        let message = s
+            .store_message(
+                unique("trash race").as_bytes(),
+                thread,
+                &from,
+                Some("trash race"),
+                None,
+                None,
+                &[],
+                Transport::Internal,
+                None,
+            )
+            .await
+            .unwrap();
+        s.deliver(mailbox.id, message, trash).await.unwrap();
+        finish_submission(&s, message).await;
+        messages.push(message);
+    }
+    sqlx::query("UPDATE mailbox_messages SET added_at = '2000-01-01' WHERE mailbox_id = $1 AND message_id = $2")
+        .bind(mailbox.id).bind(messages[0]).execute(s.pool()).await.unwrap();
+    let mut tx = s.pool().begin().await.unwrap();
+    let (pid,): (i32,) = sqlx::query_as("SELECT pg_backend_pid()")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("SELECT id FROM messages WHERE id = $1 FOR UPDATE")
+        .bind(messages[0])
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let other = s.clone();
+    let erase = tokio::spawn(async move { other.erase_all_trash_memberships(mailbox.id, 1).await });
+    wait_for_block_or_finish(&s, pid, &erase).await;
+    sqlx::query(
+        "UPDATE mailbox_messages SET folder_id = $1 WHERE mailbox_id = $2 AND message_id = $3",
+    )
+    .bind(inbox)
+    .bind(mailbox.id)
+    .bind(messages[0])
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(erase.await.unwrap().unwrap(), 1);
+    assert_eq!(
+        s.message_folder(mailbox.id, messages[0])
+            .await
+            .unwrap()
+            .unwrap()
+            .id,
+        inbox
+    );
+    assert!(s
+        .message_folder(mailbox.id, messages[1])
+        .await
+        .unwrap()
+        .is_none());
+}
+
+#[tokio::test]
 async fn empty_trash_does_not_erase_a_membership_restored_after_listing() {
     let s = store().await;
     let mailbox = s

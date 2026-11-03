@@ -709,6 +709,7 @@ export type MailMessage = {
   blocked_remote: boolean;
   folder_kind: string;
   folder_name: string;
+  disposition: "none" | "dmarc_quarantine";
   attachments: MailAttachment[];
 };
 
