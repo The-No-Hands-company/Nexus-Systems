@@ -20,6 +20,7 @@ use http_body::Frame;
 use nexus_mailstore::RecordedExternalBody;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tracing::instrument::WithSubscriber;
+use uuid::Uuid;
 
 pub const MAX_EXTERNAL_BODY_BYTES: usize = nexus_mailstore::MAX_EXTERNAL_BODY_BYTES;
 const STREAM_CHUNK_BYTES: usize = 64 * 1024;
@@ -234,6 +235,68 @@ impl S3BodyGateway {
                 .bucket(&self.bucket)
                 .key(&body.object_key)
                 .version_id(&body.version_id)
+                .send()
+                .await
+                .map_err(|_| GatewayError)?;
+            Ok(())
+        }
+        .with_subscriber(tracing::Dispatch::none())
+        .await
+    }
+
+    /// Check that the configured bucket has the capabilities that external
+    /// body storage requires: versioning must be enabled, and the storage must
+    /// honour conditional creates (`If-None-Match: *`).
+    ///
+    /// This writes and immediately deletes a zero-byte probe object under
+    /// `_cap-probe-<uuid>` to confirm both capabilities. Call once at startup,
+    /// after `NEXUS_EMAIL_OBJECT_STORAGE_MIGRATION_MARKER` is confirmed.
+    pub async fn verify_capabilities(&self) -> Result<(), GatewayError> {
+        self.verify_bucket_versioning().await?;
+        self.verify_conditional_create_and_version_delete().await
+    }
+
+    async fn verify_bucket_versioning(&self) -> Result<(), GatewayError> {
+        async {
+            let response = self
+                .client
+                .get_bucket_versioning()
+                .bucket(&self.bucket)
+                .send()
+                .await
+                .map_err(|_| GatewayError)?;
+            match response.status() {
+                Some(status) if status.as_str() == "Enabled" => Ok(()),
+                _ => Err(GatewayError),
+            }
+        }
+        .with_subscriber(tracing::Dispatch::none())
+        .await
+    }
+
+    async fn verify_conditional_create_and_version_delete(&self) -> Result<(), GatewayError> {
+        async {
+            let probe_key = format!("_cap-probe-{}", Uuid::new_v4());
+            let put = self
+                .client
+                .put_object()
+                .bucket(&self.bucket)
+                .key(&probe_key)
+                .if_none_match("*")
+                .body(aws_sdk_s3::primitives::ByteStream::from(vec![]))
+                .send()
+                .await
+                .map_err(|_| GatewayError)?;
+            let version_id = put
+                .version_id()
+                .filter(|v| !v.trim().is_empty() && *v != "null")
+                .ok_or(GatewayError)?
+                .to_string();
+            self.client
+                .delete_object()
+                .bucket(&self.bucket)
+                .key(&probe_key)
+                .version_id(&version_id)
                 .send()
                 .await
                 .map_err(|_| GatewayError)?;

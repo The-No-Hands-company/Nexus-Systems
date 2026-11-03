@@ -154,10 +154,17 @@ composite checksums, or multiple checksums, is rejected rather than served
 without validation. Storage responses with HTTP trailers are also rejected
 because the SDK cannot validate trailer checksums.
 
-The listener is groundwork, not a production rollout: clients and the
-capability/migration-inventory startup fence are not yet implemented. Do not
-enable it in production until those follow-up tasks and the controlled Mail
-migration are complete.
+Before enabling the object service in production, set
+`NEXUS_EMAIL_OBJECT_STORAGE_MIGRATION_MARKER` to any nonempty value. The daemon
+refuses to start the service without it, so it acts as a one-time rollout gate:
+an operator must consciously set the variable after running the mail-body
+migration and confirming zero legacy-body inventory. See
+`deploy/production/deploy.sh mail-rollout` for the controlled procedure.
+
+At startup the service runs `verify_capabilities()` against the configured
+bucket: it checks that versioning is enabled and that conditional writes
+(`If-None-Match: *`) are honoured. If the probe fails the daemon logs an error
+and starts without the object service rather than refusing to start entirely.
 
 ## Administration: `nexus-mailctl`
 

@@ -7,6 +7,8 @@ use std::{
     },
 };
 
+use axum::response::IntoResponse;
+
 use aws_smithy_runtime_api::client::{
     http::{http_client_fn, HttpConnector, HttpConnectorFuture, SharedHttpConnector},
     orchestrator::{HttpRequest, HttpResponse},
@@ -15,7 +17,7 @@ use axum::{
     body::Bytes,
     extract::{Path, Query},
     http::{HeaderMap, StatusCode},
-    routing::get,
+    routing::{self as method_router, get},
     Router,
 };
 use futures_util::{stream, FutureExt, StreamExt};
@@ -624,6 +626,103 @@ async fn gateway_deletes_only_the_recorded_version() {
     };
 
     gateway.delete_version(&record).await.unwrap();
+    server.abort();
+}
+
+async fn capability_gateway(address: std::net::SocketAddr) -> S3BodyGateway {
+    let shared = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new("us-east-1"))
+        .credentials_provider(aws_credential_types::Credentials::new(
+            "test", "test", None, None, "test",
+        ))
+        .endpoint_url(format!("http://{address}"))
+        .load()
+        .await;
+    let config = aws_sdk_s3::config::Builder::from(&shared)
+        .force_path_style(true)
+        .build();
+    S3BodyGateway::new(aws_sdk_s3::Client::from_conf(config), "mail".into())
+}
+
+const VERSIONING_ENABLED_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?><VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Status>Enabled</Status></VersioningConfiguration>"#;
+const VERSIONING_DISABLED_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?><VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"/>"#;
+const VERSIONING_SUSPENDED_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?><VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Status>Suspended</Status></VersioningConfiguration>"#;
+
+#[tokio::test]
+async fn capability_probe_rejects_storage_with_versioning_not_enabled() {
+    for xml in [VERSIONING_DISABLED_XML, VERSIONING_SUSPENDED_XML] {
+        let xml: &'static str = Box::leak(xml.to_string().into_boxed_str());
+        let app = Router::new().route(
+            "/mail/",
+            get(move || async move {
+                ([("content-type", "application/xml")], xml).into_response()
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let gateway = capability_gateway(address).await;
+        assert!(
+            gateway.verify_capabilities().await.is_err(),
+            "must reject storage with versioning xml: {xml}"
+        );
+        server.abort();
+    }
+}
+
+#[tokio::test]
+async fn capability_probe_rejects_storage_without_versioned_conditional_writes() {
+    let app = Router::new()
+        .route(
+            "/mail/",
+            get(|| async {
+                ([("content-type", "application/xml")], VERSIONING_ENABLED_XML).into_response()
+            }),
+        )
+        .route(
+            "/mail/*key",
+            // Returns 200 but no x-amz-version-id: models a non-versioned or
+            // non-conditional bucket (e.g. versioning configured after upload).
+            method_router::put(|| async { StatusCode::OK }),
+        );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let gateway = capability_gateway(address).await;
+    assert!(
+        gateway.verify_capabilities().await.is_err(),
+        "must reject storage that returns no version_id on conditional write"
+    );
+    server.abort();
+}
+
+#[tokio::test]
+async fn capability_probe_passes_for_versioned_conditional_storage() {
+    // GetBucketVersioning sends GET /mail/?versioning (bucket name + trailing
+    // slash). PutObject and DeleteObject go to /mail/<key>.
+    let app = Router::new()
+        .route(
+            "/mail/",
+            get(|| async {
+                ([("content-type", "application/xml")], VERSIONING_ENABLED_XML).into_response()
+            }),
+        )
+        .route(
+            "/mail/*key",
+            method_router::put(|| async {
+                ([("x-amz-version-id", "v-cap-probe-1")], StatusCode::OK)
+            })
+            .delete(|| async { StatusCode::NO_CONTENT }),
+        );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let gateway = capability_gateway(address).await;
+    let result = gateway.verify_capabilities().await;
+    assert!(
+        result.is_ok(),
+        "must pass for versioned storage with conditional write support: {result:?}"
+    );
     server.abort();
 }
 

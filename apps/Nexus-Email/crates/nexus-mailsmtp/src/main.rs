@@ -307,17 +307,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         imap_token.as_deref(),
         outbound_token.as_deref(),
     );
+    // Guard: the migration marker confirms that the mail-body migration has
+    // been applied and the operator has verified the inventory. Without it,
+    // enabling the object service would serve bodies that were never migrated.
+    let migration_marker = setting("NEXUS_EMAIL_OBJECT_STORAGE_MIGRATION_MARKER");
+    let object_config = match object_config {
+        Ok(Some(_)) if migration_marker.is_none() => {
+            tracing::warn!(
+                "object service disabled: set NEXUS_EMAIL_OBJECT_STORAGE_MIGRATION_MARKER \
+                 after running the mail-body migration and confirming zero legacy-body inventory"
+            );
+            Ok(None)
+        }
+        other => other,
+    };
     let object_service = match (object_config, object_store.as_ref()) {
-        (Ok(Some(config)), Some(gateway)) => match object_service::bind(&config).await {
-            Ok(listener) => {
-                let app = object_service::router(store.clone(), Arc::clone(gateway), config);
-                Some((listener, app))
-            }
-            Err(_) => {
-                tracing::warn!("object service disabled: listener unavailable");
+        (Ok(Some(config)), Some(gateway)) => {
+            if let Err(_) = gateway.verify_capabilities().await {
+                tracing::warn!(
+                    "object service disabled: bucket capability probe failed; \
+                     check that versioning is enabled and conditional writes (If-None-Match: *) work"
+                );
                 None
+            } else {
+                match object_service::bind(&config).await {
+                    Ok(listener) => {
+                        let app = object_service::router(store.clone(), Arc::clone(gateway), config);
+                        Some((listener, app))
+                    }
+                    Err(_) => {
+                        tracing::warn!("object service disabled: listener unavailable");
+                        None
+                    }
+                }
             }
-        },
+        }
         (Err(_), _) => {
             tracing::warn!("object service disabled: invalid configuration");
             None
