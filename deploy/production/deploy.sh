@@ -397,15 +397,32 @@ start_nexus_chat_web_service() {
         "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-chat.Caddyfile" --adapter caddyfile
 }
 
+start_auth_service() {
+    if [ -z "${NEXUS_AUTH_AUDIT_DATABASE_URL:-}" ] && [ -f "$ROOT/apps/Nexus-Auth/.env" ]; then
+        NEXUS_AUTH_AUDIT_DATABASE_URL="$(sed -n 's/^NEXUS_AUTH_AUDIT_DATABASE_URL=//p' "$ROOT/apps/Nexus-Auth/.env" \
+            | head -1 | tr -d '\r"')"
+        [ -n "$NEXUS_AUTH_AUDIT_DATABASE_URL" ] && log "Adopted NEXUS_AUTH_AUDIT_DATABASE_URL from apps/Nexus-Auth/.env"
+    fi
+    export NEXUS_AUTH_AUDIT_DATABASE_URL
+    start_service "auth" "$ROOT/apps/Nexus-Auth" 4310 \
+        PORT=4310 \
+        NEXUS_AUTH_BASE_URL="http://127.0.0.1:4310" \
+        NEXUS_AUTH_COOKIE_DOMAIN=".$DOMAIN" \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        bun run src/index.ts
+    export -n NEXUS_AUTH_AUDIT_DATABASE_URL
+}
+
 preflight_service_start() {
     case "$1" in
+        auth) : ;;
         cloud) validate_cloud_environment ;;
         nexus-api) : ;;
         dashboard) : ;;
         nexus-chat) validate_nexus_chat_environment ;;
         nexus-chat-web) validate_nexus_chat_caddy ;;
         proxy) adopt_cloud_registration_environment_for_dependents ;;
-        *) warn "Per-service recovery is limited to cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, and proxy"; return 1 ;;
+        *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, and proxy"; return 1 ;;
     esac
 }
 
@@ -420,13 +437,14 @@ start_proxy_service() {
 
 start_named_service() {
     case "$1" in
+        auth) start_auth_service ;;
         cloud) start_cloud_service ;;
         nexus-api) start_nexus_api_service ;;
         dashboard) start_dashboard_service ;;
         nexus-chat) start_nexus_chat_service ;;
         nexus-chat-web) start_nexus_chat_web_service ;;
         proxy) start_proxy_service ;;
-        *) warn "Per-service recovery is limited to cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, and proxy"; return 1 ;;
+        *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, and proxy"; return 1 ;;
     esac
 }
 
@@ -1184,7 +1202,7 @@ Usage: $(basename "$0") [command]
   bg, --bg          start in the background and return
   stop, --stop      stop all services and the infrastructure containers
   status, --status  report what is running
-  restart SERVICE   safely restart cloud, nexus-chat, nexus-chat-web, or proxy
+  restart SERVICE   safely restart auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, or proxy
   cleanup-log SERVICE
                     after both rotation checkpoints, stop one affected writer,
                     replace its exact historical log, and safely restart it
