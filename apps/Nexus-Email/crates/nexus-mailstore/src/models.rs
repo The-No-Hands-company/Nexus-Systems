@@ -114,8 +114,8 @@ pub struct Folder {
 /// Where a message body lives.
 ///
 /// Small bodies sit inline so reading a message is one query. Anything larger
-/// goes to object storage keyed by content hash: attachments are most of the
-/// bytes in real mail, and Postgres is a poor blob store.
+/// goes to object storage under a store-issued generation key: attachments are
+/// most of the bytes in real mail, and Postgres is a poor blob store.
 #[derive(Debug, Clone)]
 pub enum Body {
     Inline(Vec<u8>),
@@ -127,6 +127,13 @@ pub struct ExternalBodyReservation {
     pub generation_id: Uuid,
     pub object_key: String,
     pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordedExternalBody {
+    pub generation_id: Uuid,
+    pub object_key: String,
+    pub version_id: String,
 }
 
 /// A message as stored: immutable, content-addressed, owned by no mailbox.

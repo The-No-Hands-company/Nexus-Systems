@@ -54,6 +54,462 @@ async fn finish_submission(store: &MailStore, message: Uuid) {
     tx.commit().await.unwrap();
 }
 
+async fn record_test_upload(store: &MailStore, reservation: &ExternalBodyReservation) {
+    store
+        .record_external_body_upload(
+            reservation,
+            "test-version",
+            &reservation.generation_id.to_string(),
+            chrono::Utc::now(),
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn recorded_upload_requires_matching_generation_tag_and_version() {
+    let s = store().await;
+    let now =
+        chrono::DateTime::from_timestamp_micros(chrono::Utc::now().timestamp_micros()).unwrap();
+    let reservation = s.reserve_external_body(now).await.unwrap();
+    let tag = reservation.generation_id.to_string();
+    for (version, generation_tag) in [
+        ("v1", "wrong-generation"),
+        ("", tag.as_str()),
+        ("  ", tag.as_str()),
+        ("null", tag.as_str()),
+    ] {
+        assert!(s
+            .record_external_body_upload(&reservation, version, generation_tag, now)
+            .await
+            .is_err());
+    }
+
+    s.record_external_body_upload(&reservation, "version-1", &tag, now)
+        .await
+        .unwrap();
+    let evidence: (
+        Option<String>,
+        Option<String>,
+        Option<chrono::DateTime<chrono::Utc>>,
+    ) = sqlx::query_as(
+        "SELECT uploaded_version_id, uploaded_generation_tag, upload_recorded_at
+             FROM object_generations WHERE id = $1",
+    )
+    .bind(reservation.generation_id)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert_eq!(evidence, (Some("version-1".into()), Some(tag), Some(now)));
+}
+
+#[tokio::test]
+async fn external_message_requires_evidence_and_resolves_recorded_version() {
+    let s = store().await;
+    let now = chrono::Utc::now();
+    let reservation = s.reserve_external_body(now).await.unwrap();
+    let from = Address::parse("sender@example.test").unwrap();
+    let thread = s.thread_for(None, &[], Some("versioned")).await.unwrap();
+    let raw = unique("versioned-message");
+    let store_message = || {
+        s.store_message(
+            raw.as_bytes(),
+            thread,
+            &from,
+            Some("versioned"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            Some(&reservation),
+        )
+    };
+    assert!(matches!(
+        store_message().await,
+        Err(MailStoreError::ExternalBodyVersionEvidenceInvalid)
+    ));
+
+    s.record_external_body_upload(
+        &reservation,
+        "version-1",
+        &reservation.generation_id.to_string(),
+        now,
+    )
+    .await
+    .unwrap();
+    let message_id = store_message().await.unwrap();
+    let recorded = s.external_body_for_message(message_id).await.unwrap();
+    assert_eq!(recorded.generation_id, reservation.generation_id);
+    assert_eq!(recorded.object_key, reservation.object_key);
+    assert_eq!(recorded.version_id, "version-1");
+}
+
+#[tokio::test]
+async fn external_body_lookup_rejects_a_generation_not_finalized_for_the_message() {
+    let s = store().await;
+    let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    record_test_upload(&s, &reservation).await;
+    let from = Address::parse("sender@example.test").unwrap();
+    let thread = s.thread_for(None, &[], Some("unfinalized")).await.unwrap();
+    let message = s
+        .store_message(
+            unique("unfinalized").as_bytes(),
+            thread,
+            &from,
+            Some("unfinalized"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            Some(&reservation),
+        )
+        .await
+        .unwrap();
+    sqlx::query("UPDATE object_generations SET finalized_message_id = NULL WHERE id = $1")
+        .bind(reservation.generation_id)
+        .execute(s.pool())
+        .await
+        .unwrap();
+    assert!(matches!(
+        s.external_body_for_message(message).await,
+        Err(MailStoreError::ExternalBodyVersionEvidenceInvalid)
+    ));
+}
+
+#[tokio::test]
+async fn external_message_rejects_incomplete_upload_evidence() {
+    let s = store().await;
+    let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    record_test_upload(&s, &reservation).await;
+    sqlx::query("UPDATE object_generations SET upload_recorded_at = NULL WHERE id = $1")
+        .bind(reservation.generation_id)
+        .execute(s.pool())
+        .await
+        .unwrap();
+    let from = Address::parse("sender@example.test").unwrap();
+    let thread = s.thread_for(None, &[], Some("incomplete")).await.unwrap();
+    assert!(matches!(
+        s.store_message(
+            unique("incomplete").as_bytes(),
+            thread,
+            &from,
+            Some("incomplete"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            Some(&reservation),
+        )
+        .await,
+        Err(MailStoreError::ExternalBodyVersionEvidenceInvalid)
+    ));
+}
+
+#[tokio::test]
+async fn upload_recording_is_idempotent_and_cannot_replace_version_evidence() {
+    let s = store().await;
+    let now =
+        chrono::DateTime::from_timestamp_micros(chrono::Utc::now().timestamp_micros()).unwrap();
+    let reservation = s.reserve_external_body(now).await.unwrap();
+    let tag = reservation.generation_id.to_string();
+    s.record_external_body_upload(&reservation, "v1", &tag, now)
+        .await
+        .unwrap();
+    s.record_external_body_upload(&reservation, "v1", &tag, now + Duration::seconds(1))
+        .await
+        .unwrap();
+    assert!(matches!(
+        s.record_external_body_upload(&reservation, "v2", &tag, now)
+            .await,
+        Err(MailStoreError::ExternalBodyVersionEvidenceInvalid)
+    ));
+    let forged = ExternalBodyReservation {
+        object_key: unique("forged-key"),
+        ..reservation.clone()
+    };
+    assert!(s
+        .record_external_body_upload(&forged, "v1", &tag, now)
+        .await
+        .is_err());
+    let evidence: (String, chrono::DateTime<chrono::Utc>) = sqlx::query_as(
+        "SELECT uploaded_version_id, upload_recorded_at FROM object_generations WHERE id = $1",
+    )
+    .bind(reservation.generation_id)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert_eq!(evidence, ("v1".into(), now));
+}
+
+#[tokio::test]
+async fn cleanup_waits_for_quiescence_and_claims_only_the_recorded_version() {
+    let s = store().await;
+    let start = chrono::DateTime::from_timestamp_micros(
+        (chrono::Utc::now() - Duration::hours(1)).timestamp_micros(),
+    )
+    .unwrap();
+    let reservation = s.reserve_external_body(start).await.unwrap();
+    s.record_external_body_upload(
+        &reservation,
+        "version-for-cleanup",
+        &reservation.generation_id.to_string(),
+        start,
+    )
+    .await
+    .unwrap();
+    s.abandon_external_body_reservation(&reservation, start + Duration::minutes(1))
+        .await
+        .unwrap();
+    let before = reservation.expires_at + Duration::minutes(15) - Duration::microseconds(1);
+    assert!(s
+        .claim_object_deletion_jobs(before, 1_000)
+        .await
+        .unwrap()
+        .iter()
+        .all(|job| job.generation_id != reservation.generation_id));
+    let ready = reservation.expires_at + Duration::minutes(15);
+    let jobs = s.claim_object_deletion_jobs(ready, 1_000).await.unwrap();
+    let job = jobs
+        .iter()
+        .find(|job| job.generation_id == reservation.generation_id)
+        .unwrap();
+    assert_eq!(job.version_id, "version-for-cleanup");
+    assert_eq!(job.object_key, reservation.object_key);
+    s.complete_object_deletion(job.id, job.generation_id)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn late_upload_evidence_updates_a_queued_reservation() {
+    let s = store().await;
+    let start = chrono::DateTime::from_timestamp_micros(
+        (chrono::Utc::now() - Duration::hours(1)).timestamp_micros(),
+    )
+    .unwrap();
+    let reservation = s.reserve_external_body(start).await.unwrap();
+    s.abandon_external_body_reservation(&reservation, start + Duration::minutes(1))
+        .await
+        .unwrap();
+    s.record_external_body_upload(
+        &reservation,
+        "late-version",
+        &reservation.generation_id.to_string(),
+        reservation.expires_at + Duration::minutes(1),
+    )
+    .await
+    .unwrap();
+    let jobs = s
+        .claim_object_deletion_jobs(reservation.expires_at + Duration::minutes(15), 1_000)
+        .await
+        .unwrap();
+    let job = jobs
+        .iter()
+        .find(|job| job.generation_id == reservation.generation_id)
+        .unwrap();
+    assert_eq!(job.version_id, "late-version");
+    s.complete_object_deletion(job.id, job.generation_id)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn completing_deletion_locks_generation_before_queue() {
+    let s = store().await;
+    let start = chrono::Utc::now() - Duration::hours(1);
+    let reservation = s.reserve_external_body(start).await.unwrap();
+    s.record_external_body_upload(
+        &reservation,
+        "v1",
+        &reservation.generation_id.to_string(),
+        start,
+    )
+    .await
+    .unwrap();
+    s.abandon_external_body_reservation(&reservation, start + Duration::minutes(1))
+        .await
+        .unwrap();
+    let jobs = s
+        .claim_object_deletion_jobs(chrono::Utc::now(), 1_000)
+        .await
+        .unwrap();
+    let job = jobs
+        .iter()
+        .find(|job| job.generation_id == reservation.generation_id)
+        .unwrap()
+        .clone();
+    let mut tx = s.pool().begin().await.unwrap();
+    let (pid,): (i32,) = sqlx::query_as("SELECT pg_backend_pid()")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("SELECT id FROM object_generations WHERE id = $1 FOR UPDATE")
+        .bind(reservation.generation_id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let other = s.clone();
+    let task = tokio::spawn(async move {
+        other
+            .complete_object_deletion(job.id, job.generation_id)
+            .await
+    });
+    wait_for_block_or_finish(&s, pid, &task).await;
+    let queue_lock = sqlx::query(
+        "SELECT id FROM object_deletion_queue WHERE generation_id = $1 FOR UPDATE NOWAIT",
+    )
+    .bind(reservation.generation_id)
+    .execute(&mut *tx)
+    .await;
+    tx.rollback().await.unwrap();
+    let result = task.await.unwrap();
+    assert!(
+        queue_lock.is_ok(),
+        "completion must wait on the generation before locking the queue"
+    );
+    result.unwrap();
+}
+
+#[tokio::test]
+async fn completing_unversioned_deletion_does_not_discard_legacy_evidence() {
+    let s = store().await;
+    let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    s.abandon_external_body_reservation(&reservation, chrono::Utc::now())
+        .await
+        .unwrap();
+    let (job,): (Uuid,) =
+        sqlx::query_as("SELECT id FROM object_deletion_queue WHERE generation_id = $1")
+            .bind(reservation.generation_id)
+            .fetch_one(s.pool())
+            .await
+            .unwrap();
+    s.complete_object_deletion(job, reservation.generation_id)
+        .await
+        .unwrap();
+    let (state, queued): (String, bool) = sqlx::query_as(
+        "SELECT lifecycle_state, EXISTS (SELECT 1 FROM object_deletion_queue WHERE id = $2)
+         FROM object_generations WHERE id = $1",
+    )
+    .bind(reservation.generation_id)
+    .bind(job)
+    .fetch_one(s.pool())
+    .await
+    .unwrap();
+    assert_eq!(state, "cleanup_queued");
+    assert!(queued);
+}
+
+#[tokio::test]
+async fn completing_deletion_keeps_job_if_message_still_references_generation() {
+    let s = store().await;
+    let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    record_test_upload(&s, &reservation).await;
+    let from = Address::parse("sender@example.test").unwrap();
+    let thread = s
+        .thread_for(None, &[], Some("still-referenced"))
+        .await
+        .unwrap();
+    let message = s
+        .store_message(
+            unique("still-referenced").as_bytes(),
+            thread,
+            &from,
+            Some("still-referenced"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            Some(&reservation),
+        )
+        .await
+        .unwrap();
+    let job = Uuid::now_v7();
+    sqlx::query("UPDATE object_generations SET lifecycle_state = 'cleanup_queued' WHERE id = $1")
+        .bind(reservation.generation_id)
+        .execute(s.pool())
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO object_deletion_queue
+         (id, generation_id, object_key, version_id, next_attempt_at, created_at, lease_expires_at)
+         VALUES ($1, $2, $3, 'test-version', now(), now(), now() + interval '5 minutes')",
+    )
+    .bind(job)
+    .bind(reservation.generation_id)
+    .bind(&reservation.object_key)
+    .execute(s.pool())
+    .await
+    .unwrap();
+    s.complete_object_deletion(job, reservation.generation_id)
+        .await
+        .unwrap();
+    let (queued,): (bool,) =
+        sqlx::query_as("SELECT EXISTS (SELECT 1 FROM object_deletion_queue WHERE id = $1)")
+            .bind(job)
+            .fetch_one(s.pool())
+            .await
+            .unwrap();
+    assert!(
+        queued,
+        "completion must retain the job while the message exists"
+    );
+    // Restore the deliberately inconsistent fixture for other tests.
+    sqlx::query("DELETE FROM object_deletion_queue WHERE id = $1")
+        .bind(job)
+        .execute(s.pool())
+        .await
+        .unwrap();
+    sqlx::query("UPDATE object_generations SET lifecycle_state = 'referenced' WHERE id = $1")
+        .bind(reservation.generation_id)
+        .execute(s.pool())
+        .await
+        .unwrap();
+    assert!(s.external_body_for_message(message).await.is_ok());
+}
+
+#[tokio::test]
+async fn legacy_key_without_version_is_never_claimed_for_deletion() {
+    let s = store().await;
+    let generation = Uuid::now_v7();
+    let job = Uuid::now_v7();
+    let key = unique("legacy-object");
+    let now = chrono::Utc::now();
+    sqlx::query(
+        "INSERT INTO object_generations (id, object_key, lifecycle_state, created_at)
+         VALUES ($1, $2, 'cleanup_queued', $3)",
+    )
+    .bind(generation)
+    .bind(&key)
+    .bind(now)
+    .execute(s.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO object_deletion_queue (id, generation_id, object_key, next_attempt_at, created_at)
+         VALUES ($1, $2, $3, $4, $4)",
+    )
+    .bind(job)
+    .bind(generation)
+    .bind(&key)
+    .bind(now)
+    .execute(s.pool())
+    .await
+    .unwrap();
+
+    let claimed = s.claim_object_deletion_jobs(now, 1_000).await.unwrap();
+    sqlx::query("DELETE FROM object_deletion_queue WHERE id = $1")
+        .bind(job)
+        .execute(s.pool())
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM object_generations WHERE id = $1")
+        .bind(generation)
+        .execute(s.pool())
+        .await
+        .unwrap();
+    assert!(claimed.iter().all(|candidate| candidate.id != job));
+}
+
 async fn wait_for_block_or_finish<T>(
     store: &MailStore,
     blocker_pid: i32,
@@ -590,6 +1046,7 @@ async fn concurrent_final_membership_erasure_deletes_shared_message_once() {
     let from = Address::parse("sender@example.test").unwrap();
     let thread = s.thread_for(None, &[], None).await.unwrap();
     let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    record_test_upload(&s, &reservation).await;
     let msg = s
         .store_message(
             unique("concurrent-erase").as_bytes(),
@@ -1382,6 +1839,7 @@ async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
         .await
         .unwrap();
     let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    record_test_upload(&s, &reservation).await;
     let external_key = reservation.object_key.clone();
     let raw = format!("stored externally {}", unique("body"));
     let message_id = s
@@ -1404,7 +1862,7 @@ async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
     finish_submission(&s, message_id).await;
     s.erase_membership(mailbox.id, message_id).await.unwrap();
 
-    let now = chrono::Utc::now();
+    let now = reservation.expires_at + Duration::minutes(15);
     sqlx::query(
         "UPDATE object_deletion_queue q
          SET next_attempt_at = $1
@@ -1417,10 +1875,11 @@ async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
     .await
     .unwrap();
     let job = s
-        .claim_object_deletion_jobs(now, 1)
+        .claim_object_deletion_jobs(now, 1_000)
         .await
         .unwrap()
-        .pop()
+        .into_iter()
+        .find(|candidate| candidate.generation_id == reservation.generation_id)
         .expect("the erased generation is queued");
     assert_eq!(
         job.object_key, external_key,
@@ -1429,7 +1888,7 @@ async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
 
     s.retry_object_deletion(job.id, now).await.unwrap();
     assert!(
-        s.claim_object_deletion_jobs(now, 1)
+        s.claim_object_deletion_jobs(now, 1_000)
             .await
             .unwrap()
             .into_iter()
@@ -1437,18 +1896,18 @@ async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
         "a failed deletion must remain durably queued until its retry delay"
     );
     let retry = s
-        .claim_object_deletion_jobs(now + Duration::minutes(2), 1)
+        .claim_object_deletion_jobs(now + Duration::minutes(2), 1_000)
         .await
         .unwrap();
     let retry = retry
         .into_iter()
-        .next()
+        .find(|candidate| candidate.id == job.id)
         .expect("the queued external object must become retryable");
     s.complete_object_deletion(retry.id, retry.generation_id)
         .await
         .unwrap();
     assert!(
-        s.claim_object_deletion_jobs(now + Duration::minutes(4), 1)
+        s.claim_object_deletion_jobs(now + Duration::minutes(4), 1_000)
             .await
             .unwrap()
             .into_iter()
@@ -1462,6 +1921,7 @@ async fn external_body_keeps_the_reserved_object_key() {
     let s = store().await;
     let from = Address::parse("sender@example.test").unwrap();
     let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    record_test_upload(&s, &reservation).await;
     let external_key = reservation.object_key.clone();
     let raw = format!("externally uploaded content {}", unique("body"));
     let thread = s
@@ -1516,6 +1976,7 @@ async fn deduplicated_reservation_locks_message_before_generation() {
         .await
         .unwrap();
     let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    record_test_upload(&s, &reservation).await;
     let mut tx = s.pool().begin().await.unwrap();
     let (pid,): (i32,) = sqlx::query_as("SELECT pg_backend_pid()")
         .fetch_one(&mut *tx)
@@ -1562,6 +2023,7 @@ async fn deduplicated_reservation_locks_message_before_generation() {
 async fn finalized_reservation_retry_locks_message_before_generation() {
     let s = store().await;
     let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    record_test_upload(&s, &reservation).await;
     let thread = s.thread_for(None, &[], Some("lock order")).await.unwrap();
     let from = Address::parse("sender@example.test").unwrap();
     let raw = format!(
@@ -1631,6 +2093,7 @@ async fn finalized_reservation_retry_returns_the_original_message_when_metadata_
     let s = store().await;
     let from = Address::parse("sender@example.test").unwrap();
     let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    record_test_upload(&s, &reservation).await;
     let thread = s.thread_for(None, &[], Some("retry-match")).await.unwrap();
     let raw = format!(
         "{}{}",
@@ -1684,6 +2147,7 @@ async fn finalized_reservation_retry_rejects_metadata_mismatch() {
     let s = store().await;
     let from = Address::parse("sender@example.test").unwrap();
     let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    record_test_upload(&s, &reservation).await;
     let thread = s
         .thread_for(None, &[], Some("retry-mismatch"))
         .await

@@ -15,13 +15,15 @@ pub const INLINE_BODY_LIMIT: usize = 256 * 1024;
 
 /// A leased deletion of an object that held a message body or attachments.
 ///
-/// The object key stays in the durable queue until the object-storage owner
-/// confirms deletion. It is intentionally not logged by this crate.
+/// The object key and immutable version stay in the durable queue until the
+/// object-storage owner confirms version-targeted deletion. Neither is logged
+/// by this crate.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectDeletionJob {
     pub id: Uuid,
     pub generation_id: Uuid,
     pub object_key: String,
+    pub version_id: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,6 +47,16 @@ enum StoreReservationLock {
     Live { object_key: String },
     Finalized { message_id: Uuid },
 }
+
+type StoredReservationRow = (
+    String,
+    String,
+    Option<DateTime<Utc>>,
+    Option<Uuid>,
+    Option<String>,
+    Option<String>,
+    Option<DateTime<Utc>>,
+);
 
 pub fn content_hash(raw: &[u8]) -> String {
     hex::encode(Sha256::digest(raw))
@@ -406,8 +418,8 @@ impl MailStore {
         let expires_at = now + Duration::minutes(15);
         sqlx::query(
             "INSERT INTO object_generations
-             (id, object_key, lifecycle_state, created_at, reservation_expires_at)
-             VALUES ($1, $2, 'reserved', $3, $4)",
+             (id, object_key, lifecycle_state, created_at, reservation_expires_at, cleanup_eligible_at)
+             VALUES ($1, $2, 'reserved', $3, $4, $4 + interval '15 minutes')",
         )
         .bind(generation_id)
         .bind(&object_key)
@@ -419,6 +431,94 @@ impl MailStore {
             generation_id,
             object_key,
             expires_at,
+        })
+    }
+
+    /// Record evidence supplied by the trusted storage gateway, including a
+    /// late completion after abandonment. Identical retries are idempotent.
+    pub async fn record_external_body_upload(
+        &self,
+        reservation: &ExternalBodyReservation,
+        version_id: &str,
+        generation_tag: &str,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        if version_id.trim().is_empty()
+            || version_id == "null"
+            || generation_tag != reservation.generation_id.to_string()
+        {
+            return Err(MailStoreError::ExternalBodyVersionEvidenceInvalid);
+        }
+        let mut tx = self.pool.begin().await?;
+        let updated: Option<(String,)> = sqlx::query_as(
+            "UPDATE object_generations
+             SET uploaded_version_id = $3, uploaded_generation_tag = $4,
+                 upload_recorded_at = COALESCE(upload_recorded_at, $5)
+             WHERE id = $1 AND object_key = $2
+               AND (lifecycle_state IN ('reserved', 'cleanup_queued')
+                    OR (lifecycle_state = 'referenced' AND uploaded_version_id = $3))
+               AND (uploaded_version_id IS NULL OR
+                    (uploaded_version_id = $3 AND uploaded_generation_tag = $4))
+             RETURNING lifecycle_state",
+        )
+        .bind(reservation.generation_id)
+        .bind(&reservation.object_key)
+        .bind(version_id)
+        .bind(generation_tag)
+        .bind(now)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some((state,)) = updated else {
+            return Err(MailStoreError::ExternalBodyVersionEvidenceInvalid);
+        };
+        if state == "cleanup_queued" {
+            let queued = sqlx::query(
+                "UPDATE object_deletion_queue SET version_id = $2
+                 WHERE generation_id = $1 AND object_key = $3
+                   AND (version_id IS NULL OR version_id = $2)",
+            )
+            .bind(reservation.generation_id)
+            .bind(version_id)
+            .bind(&reservation.object_key)
+            .execute(&mut *tx)
+            .await?;
+            if queued.rows_affected() != 1 {
+                return Err(MailStoreError::ExternalBodyVersionEvidenceInvalid);
+            }
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Resolve a previously authorized message to its recorded immutable body.
+    /// This does not authorize the caller; authorization must happen first.
+    pub async fn external_body_for_message(
+        &self,
+        message_id: Uuid,
+    ) -> Result<RecordedExternalBody> {
+        let row: Option<(Uuid, String, String)> = sqlx::query_as(
+            "SELECT g.id, g.object_key, g.uploaded_version_id
+             FROM messages m
+             JOIN object_generations g ON g.id = m.body_object_generation_id
+             WHERE m.id = $1 AND g.lifecycle_state = 'referenced'
+               AND g.finalized_message_id = m.id
+               AND m.body_object_key = g.object_key
+               AND g.uploaded_generation_tag = g.id::text
+               AND g.upload_recorded_at IS NOT NULL
+               AND g.uploaded_version_id IS NOT NULL
+               AND btrim(g.uploaded_version_id) <> ''
+               AND g.uploaded_version_id <> 'null'",
+        )
+        .bind(message_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some((generation_id, object_key, version_id)) = row else {
+            return Err(MailStoreError::ExternalBodyVersionEvidenceInvalid);
+        };
+        Ok(RecordedExternalBody {
+            generation_id,
+            object_key,
+            version_id,
         })
     }
 
@@ -754,8 +854,9 @@ impl MailStore {
         references: &[String],
         transport: Transport,
     ) -> Result<StoreReservationLock> {
-        let row: Option<(String, String, Option<DateTime<Utc>>, Option<Uuid>)> = sqlx::query_as(
-            "SELECT object_key, lifecycle_state, reservation_expires_at, finalized_message_id
+        let row: Option<StoredReservationRow> = sqlx::query_as(
+            "SELECT object_key, lifecycle_state, reservation_expires_at, finalized_message_id,
+                    uploaded_version_id, uploaded_generation_tag, upload_recorded_at
              FROM object_generations
              WHERE id = $1
              FOR UPDATE",
@@ -763,12 +864,26 @@ impl MailStore {
         .bind(reservation.generation_id)
         .fetch_optional(&mut **tx)
         .await?;
-        let Some((object_key, lifecycle_state, reservation_expires_at, finalized_message_id)) = row
+        let Some((
+            object_key,
+            lifecycle_state,
+            reservation_expires_at,
+            finalized_message_id,
+            version_id,
+            generation_tag,
+            recorded_at,
+        )) = row
         else {
             return Err(MailStoreError::ExternalBodyReservationMissing);
         };
         if object_key != reservation.object_key {
             return Err(MailStoreError::ExternalBodyReservationUnavailable);
+        }
+        if !matches!(version_id.as_deref(), Some(version) if !version.trim().is_empty() && version != "null")
+            || generation_tag.as_deref() != Some(reservation.generation_id.to_string().as_str())
+            || recorded_at.is_none()
+        {
+            return Err(MailStoreError::ExternalBodyVersionEvidenceInvalid);
         }
 
         if let Some(message_id) = finalized_message_id {
@@ -949,8 +1064,11 @@ impl MailStore {
     ) -> Result<()> {
         sqlx::query(
             "INSERT INTO object_deletion_queue
-             (id, generation_id, object_key, next_attempt_at, created_at)
-             VALUES ($1, $2, $3, $4, $4)
+             (id, generation_id, object_key, next_attempt_at, created_at, version_id)
+             SELECT $1, g.id, g.object_key, $4, $4,
+                    CASE WHEN g.uploaded_generation_tag = g.id::text
+                         THEN g.uploaded_version_id END
+             FROM object_generations g WHERE g.id = $2 AND g.object_key = $3
              ON CONFLICT DO NOTHING",
         )
         .bind(Uuid::now_v7())
@@ -1769,6 +1887,14 @@ impl MailStore {
                  FROM object_deletion_queue q
                  JOIN object_generations g ON g.id = q.generation_id
                  WHERE q.next_attempt_at <= $1
+                   AND q.version_id IS NOT NULL
+                   AND btrim(q.version_id) <> ''
+                   AND q.version_id <> 'null'
+                   AND q.version_id = g.uploaded_version_id
+                   AND q.object_key = g.object_key
+                   AND g.uploaded_generation_tag = g.id::text
+                   AND g.upload_recorded_at IS NOT NULL
+                   AND g.cleanup_eligible_at <= $1
                    AND (q.lease_expires_at IS NULL OR q.lease_expires_at <= $1)
                    AND g.lifecycle_state = 'cleanup_queued'
                    AND NOT EXISTS (
@@ -1776,7 +1902,7 @@ impl MailStore {
                        WHERE m.body_object_generation_id = q.generation_id
                    )
                  ORDER BY q.next_attempt_at, q.created_at
-                 FOR UPDATE SKIP LOCKED
+                 FOR UPDATE OF q SKIP LOCKED
                  LIMIT $2
              ),
              claimed AS (
@@ -1785,9 +1911,9 @@ impl MailStore {
                      attempts = q.attempts + 1
                  FROM candidates c
                  WHERE q.id = c.id
-                 RETURNING q.id, q.generation_id, q.object_key
+                 RETURNING q.id, q.generation_id, q.object_key, q.version_id
              )
-             SELECT c.id, c.generation_id, c.object_key
+             SELECT c.id, c.generation_id, c.object_key, c.version_id
              FROM claimed c
              JOIN object_generations g ON g.id = c.generation_id
              WHERE g.lifecycle_state = 'cleanup_queued'
@@ -1803,21 +1929,39 @@ impl MailStore {
 
         Ok(rows
             .into_iter()
-            .map(|(id, generation_id, object_key)| ObjectDeletionJob {
-                id,
-                generation_id,
-                object_key,
-            })
+            .map(
+                |(id, generation_id, object_key, version_id)| ObjectDeletionJob {
+                    id,
+                    generation_id,
+                    object_key,
+                    version_id,
+                },
+            )
             .collect())
     }
 
     /// Mark an object deletion as confirmed by the object-storage owner.
     pub async fn complete_object_deletion(&self, job_id: Uuid, generation_id: Uuid) -> Result<()> {
         let mut tx = self.pool.begin().await?;
+        sqlx::query("SELECT id FROM object_generations WHERE id = $1 FOR UPDATE")
+            .bind(generation_id)
+            .fetch_optional(&mut *tx)
+            .await?;
         let deleted: Option<(Uuid,)> = sqlx::query_as(
-            "DELETE FROM object_deletion_queue
-             WHERE id = $1 AND generation_id = $2
-             RETURNING generation_id",
+            "DELETE FROM object_deletion_queue q
+             USING object_generations g
+             WHERE q.id = $1 AND q.generation_id = $2 AND g.id = q.generation_id
+               AND g.lifecycle_state = 'cleanup_queued'
+               AND q.lease_expires_at IS NOT NULL
+               AND q.object_key = g.object_key
+               AND q.version_id = g.uploaded_version_id
+               AND g.uploaded_generation_tag = g.id::text
+               AND g.upload_recorded_at IS NOT NULL
+               AND btrim(q.version_id) <> '' AND q.version_id <> 'null'
+               AND NOT EXISTS (
+                   SELECT 1 FROM messages WHERE body_object_generation_id = q.generation_id
+               )
+             RETURNING q.generation_id",
         )
         .bind(job_id)
         .bind(generation_id)

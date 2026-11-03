@@ -21,7 +21,7 @@ pub use address::Address;
 pub use error::{MailStoreError, Result};
 pub use models::{
     Body, ExternalBodyReservation, Flags, Folder, FolderKind, Mailbox, Message, MessageDisposition,
-    OwnerKind, RecipientIntentState, Transport,
+    OwnerKind, RecipientIntentState, RecordedExternalBody, Transport,
 };
 pub use store::{
     content_hash, normalise_subject, ImapMessage, MailStore, MessageReferenceKind, MessageSummary,

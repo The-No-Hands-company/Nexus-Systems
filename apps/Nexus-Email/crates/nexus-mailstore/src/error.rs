@@ -30,6 +30,9 @@ pub enum MailStoreError {
 
     #[error("external body reservation is no longer usable")]
     ExternalBodyReservationUnavailable,
+
+    #[error("external body version evidence is missing or mismatched")]
+    ExternalBodyVersionEvidenceInvalid,
 }
 
 impl MailStoreError {
