@@ -372,6 +372,25 @@ start_nexus_api_service() {
         bun run src/gateway-index.ts
 }
 
+start_dashboard_service() {
+    if [ ! -f "$ROOT/apps/Nexus-Dashboard/frontend/dist/index.html" ]; then
+        warn "dashboard UI not built — run: (cd apps/Nexus-Dashboard/frontend && VITE_NEXUS_API_URL=https://api.$DOMAIN npm install && npm run build)"
+        return 1
+    fi
+    if [ ! -d "$ROOT/apps/Nexus-Dashboard/src" ]; then
+        warn "apps/Nexus-Dashboard/src missing — cannot start dashboard"
+        return 1
+    fi
+    start_service "dashboard" "$ROOT/apps/Nexus-Dashboard" 3132 \
+        PORT=3132 DOMAIN="$DOMAIN" \
+        NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
+        NEXUS_API_INTERNAL_URL=http://127.0.0.1:3036 \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_TERMINAL_URL=http://127.0.0.1:3110 \
+        NEXUS_ISSUES_TOKEN="${NEXUS_ISSUES_TOKEN:-}" \
+        bun run src/index.ts
+}
+
 start_nexus_chat_web_service() {
     validate_nexus_chat_caddy || return 1
     start_service "nexus-chat-web" "$ROOT" 8095 \
@@ -382,10 +401,11 @@ preflight_service_start() {
     case "$1" in
         cloud) validate_cloud_environment ;;
         nexus-api) : ;;
+        dashboard) : ;;
         nexus-chat) validate_nexus_chat_environment ;;
         nexus-chat-web) validate_nexus_chat_caddy ;;
         proxy) adopt_cloud_registration_environment_for_dependents ;;
-        *) warn "Per-service recovery is limited to cloud, nexus-chat, nexus-chat-web, and proxy"; return 1 ;;
+        *) warn "Per-service recovery is limited to cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, and proxy"; return 1 ;;
     esac
 }
 
@@ -402,10 +422,11 @@ start_named_service() {
     case "$1" in
         cloud) start_cloud_service ;;
         nexus-api) start_nexus_api_service ;;
+        dashboard) start_dashboard_service ;;
         nexus-chat) start_nexus_chat_service ;;
         nexus-chat-web) start_nexus_chat_web_service ;;
         proxy) start_proxy_service ;;
-        *) warn "Per-service recovery is limited to cloud, nexus-chat, nexus-chat-web, and proxy"; return 1 ;;
+        *) warn "Per-service recovery is limited to cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, and proxy"; return 1 ;;
     esac
 }
 
