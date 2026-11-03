@@ -18,6 +18,9 @@ use nexus_mailstore::{
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
+#[path = "support/isolation.rs"]
+mod isolation;
+
 async fn store() -> MailStore {
     let url = std::env::var("NEXUS_EMAIL_TEST_DATABASE_URL").expect(
         "NEXUS_EMAIL_TEST_DATABASE_URL must be set; these tests assert database behaviour \
@@ -145,6 +148,49 @@ async fn external_message_requires_evidence_and_resolves_recorded_version() {
 }
 
 #[tokio::test]
+async fn external_raw_message_error_never_exposes_object_evidence() {
+    let s = store().await;
+    let mailbox = s.create_node_mailbox("raw external body").await.unwrap();
+    let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    let version = "sensitive-version-canary";
+    s.record_external_body_upload(
+        &reservation,
+        version,
+        &reservation.generation_id.to_string(),
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap();
+    let from = Address::parse("sender@example.test").unwrap();
+    let thread = s.thread_for(None, &[], Some("raw external")).await.unwrap();
+    let message = s
+        .store_message(
+            unique("raw-external").as_bytes(),
+            thread,
+            &from,
+            Some("raw external"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            Some(&reservation),
+        )
+        .await
+        .unwrap();
+    let inbox = s.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    s.deliver(mailbox.id, message, inbox).await.unwrap();
+    let err = s.raw_message(mailbox.id, message).await.unwrap_err();
+    for output in [err.to_string(), format!("{err:?}"), err.detail_for_user()] {
+        assert!(
+            !output.contains(&reservation.object_key),
+            "object key leaked"
+        );
+        assert!(!output.contains(version), "object version leaked");
+    }
+    assert!(matches!(err, MailStoreError::ExternalBodyGatewayRequired));
+}
+
+#[tokio::test]
 async fn external_body_lookup_rejects_a_generation_not_finalized_for_the_message() {
     let s = store().await;
     let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
@@ -242,132 +288,171 @@ async fn upload_recording_is_idempotent_and_cannot_replace_version_evidence() {
 }
 
 #[tokio::test]
+async fn parallel_claim_test_fixtures_do_not_lease_each_others_jobs() {
+    isolation::with_two_stores(|first, second| async move {
+        let now = chrono::Utc::now();
+        let start = now - Duration::hours(1);
+        let a = first.reserve_external_body(start).await.unwrap();
+        let b = second.reserve_external_body(start).await.unwrap();
+        record_test_upload(&first, &a).await;
+        record_test_upload(&second, &b).await;
+        first
+            .abandon_external_body_reservation(&a, start + Duration::minutes(1))
+            .await
+            .unwrap();
+        second
+            .abandon_external_body_reservation(&b, start + Duration::minutes(1))
+            .await
+            .unwrap();
+
+        let first_jobs = first.claim_object_deletion_jobs(now, 1_000).await.unwrap();
+        let second_jobs = second.claim_object_deletion_jobs(now, 1_000).await.unwrap();
+        assert!(first_jobs
+            .iter()
+            .any(|job| job.generation_id == a.generation_id));
+        assert!(first_jobs
+            .iter()
+            .all(|job| job.generation_id != b.generation_id));
+        assert!(second_jobs
+            .iter()
+            .any(|job| job.generation_id == b.generation_id));
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn cleanup_waits_for_quiescence_and_claims_only_the_recorded_version() {
-    let s = store().await;
-    let start = chrono::DateTime::from_timestamp_micros(
-        (chrono::Utc::now() - Duration::hours(1)).timestamp_micros(),
-    )
-    .unwrap();
-    let reservation = s.reserve_external_body(start).await.unwrap();
-    s.record_external_body_upload(
-        &reservation,
-        "version-for-cleanup",
-        &reservation.generation_id.to_string(),
-        start,
-    )
-    .await
-    .unwrap();
-    s.abandon_external_body_reservation(&reservation, start + Duration::minutes(1))
+    isolation::with_store(|s| async move {
+        let start = chrono::DateTime::from_timestamp_micros(
+            (chrono::Utc::now() - Duration::hours(1)).timestamp_micros(),
+        )
+        .unwrap();
+        let reservation = s.reserve_external_body(start).await.unwrap();
+        s.record_external_body_upload(
+            &reservation,
+            "version-for-cleanup",
+            &reservation.generation_id.to_string(),
+            start,
+        )
         .await
         .unwrap();
-    let before = reservation.expires_at + Duration::minutes(15) - Duration::microseconds(1);
-    assert!(s
-        .claim_object_deletion_jobs(before, 1_000)
-        .await
-        .unwrap()
-        .iter()
-        .all(|job| job.generation_id != reservation.generation_id));
-    let ready = reservation.expires_at + Duration::minutes(15);
-    let jobs = s.claim_object_deletion_jobs(ready, 1_000).await.unwrap();
-    let job = jobs
-        .iter()
-        .find(|job| job.generation_id == reservation.generation_id)
-        .unwrap();
-    assert_eq!(job.version_id, "version-for-cleanup");
-    assert_eq!(job.object_key, reservation.object_key);
-    s.complete_object_deletion(job.id, job.generation_id)
-        .await
-        .unwrap();
+        s.abandon_external_body_reservation(&reservation, start + Duration::minutes(1))
+            .await
+            .unwrap();
+        let before = reservation.expires_at + Duration::minutes(15) - Duration::microseconds(1);
+        assert!(s
+            .claim_object_deletion_jobs(before, 1_000)
+            .await
+            .unwrap()
+            .iter()
+            .all(|job| job.generation_id != reservation.generation_id));
+        let ready = reservation.expires_at + Duration::minutes(15);
+        let jobs = s.claim_object_deletion_jobs(ready, 1_000).await.unwrap();
+        let job = jobs
+            .iter()
+            .find(|job| job.generation_id == reservation.generation_id)
+            .unwrap();
+        assert_eq!(job.version_id, "version-for-cleanup");
+        assert_eq!(job.object_key, reservation.object_key);
+        s.complete_object_deletion(job.id, job.generation_id)
+            .await
+            .unwrap();
+    })
+    .await;
 }
 
 #[tokio::test]
 async fn late_upload_evidence_updates_a_queued_reservation() {
-    let s = store().await;
-    let start = chrono::DateTime::from_timestamp_micros(
-        (chrono::Utc::now() - Duration::hours(1)).timestamp_micros(),
-    )
-    .unwrap();
-    let reservation = s.reserve_external_body(start).await.unwrap();
-    s.abandon_external_body_reservation(&reservation, start + Duration::minutes(1))
+    isolation::with_store(|s| async move {
+        let start = chrono::DateTime::from_timestamp_micros(
+            (chrono::Utc::now() - Duration::hours(1)).timestamp_micros(),
+        )
+        .unwrap();
+        let reservation = s.reserve_external_body(start).await.unwrap();
+        s.abandon_external_body_reservation(&reservation, start + Duration::minutes(1))
+            .await
+            .unwrap();
+        s.record_external_body_upload(
+            &reservation,
+            "late-version",
+            &reservation.generation_id.to_string(),
+            reservation.expires_at + Duration::minutes(1),
+        )
         .await
         .unwrap();
-    s.record_external_body_upload(
-        &reservation,
-        "late-version",
-        &reservation.generation_id.to_string(),
-        reservation.expires_at + Duration::minutes(1),
-    )
-    .await
-    .unwrap();
-    let jobs = s
-        .claim_object_deletion_jobs(reservation.expires_at + Duration::minutes(15), 1_000)
-        .await
-        .unwrap();
-    let job = jobs
-        .iter()
-        .find(|job| job.generation_id == reservation.generation_id)
-        .unwrap();
-    assert_eq!(job.version_id, "late-version");
-    s.complete_object_deletion(job.id, job.generation_id)
-        .await
-        .unwrap();
+        let jobs = s
+            .claim_object_deletion_jobs(reservation.expires_at + Duration::minutes(15), 1_000)
+            .await
+            .unwrap();
+        let job = jobs
+            .iter()
+            .find(|job| job.generation_id == reservation.generation_id)
+            .unwrap();
+        assert_eq!(job.version_id, "late-version");
+        s.complete_object_deletion(job.id, job.generation_id)
+            .await
+            .unwrap();
+    })
+    .await;
 }
 
 #[tokio::test]
 async fn completing_deletion_locks_generation_before_queue() {
-    let s = store().await;
-    let start = chrono::Utc::now() - Duration::hours(1);
-    let reservation = s.reserve_external_body(start).await.unwrap();
-    s.record_external_body_upload(
-        &reservation,
-        "v1",
-        &reservation.generation_id.to_string(),
-        start,
-    )
-    .await
-    .unwrap();
-    s.abandon_external_body_reservation(&reservation, start + Duration::minutes(1))
+    isolation::with_store(|s| async move {
+        let start = chrono::Utc::now() - Duration::hours(1);
+        let reservation = s.reserve_external_body(start).await.unwrap();
+        s.record_external_body_upload(
+            &reservation,
+            "v1",
+            &reservation.generation_id.to_string(),
+            start,
+        )
         .await
         .unwrap();
-    let jobs = s
-        .claim_object_deletion_jobs(chrono::Utc::now(), 1_000)
-        .await
-        .unwrap();
-    let job = jobs
-        .iter()
-        .find(|job| job.generation_id == reservation.generation_id)
-        .unwrap()
-        .clone();
-    let mut tx = s.pool().begin().await.unwrap();
-    let (pid,): (i32,) = sqlx::query_as("SELECT pg_backend_pid()")
-        .fetch_one(&mut *tx)
-        .await
-        .unwrap();
-    sqlx::query("SELECT id FROM object_generations WHERE id = $1 FOR UPDATE")
+        s.abandon_external_body_reservation(&reservation, start + Duration::minutes(1))
+            .await
+            .unwrap();
+        let jobs = s
+            .claim_object_deletion_jobs(chrono::Utc::now(), 1_000)
+            .await
+            .unwrap();
+        let job = jobs
+            .iter()
+            .find(|job| job.generation_id == reservation.generation_id)
+            .unwrap()
+            .clone();
+        let mut tx = s.pool().begin().await.unwrap();
+        let (pid,): (i32,) = sqlx::query_as("SELECT pg_backend_pid()")
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+        sqlx::query("SELECT id FROM object_generations WHERE id = $1 FOR UPDATE")
+            .bind(reservation.generation_id)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let other = s.clone();
+        let task = tokio::spawn(async move {
+            other
+                .complete_object_deletion(job.id, job.generation_id)
+                .await
+        });
+        wait_for_block_or_finish(&s, pid, &task).await;
+        let queue_lock = sqlx::query(
+            "SELECT id FROM object_deletion_queue WHERE generation_id = $1 FOR UPDATE NOWAIT",
+        )
         .bind(reservation.generation_id)
         .execute(&mut *tx)
-        .await
-        .unwrap();
-    let other = s.clone();
-    let task = tokio::spawn(async move {
-        other
-            .complete_object_deletion(job.id, job.generation_id)
-            .await
-    });
-    wait_for_block_or_finish(&s, pid, &task).await;
-    let queue_lock = sqlx::query(
-        "SELECT id FROM object_deletion_queue WHERE generation_id = $1 FOR UPDATE NOWAIT",
-    )
-    .bind(reservation.generation_id)
-    .execute(&mut *tx)
+        .await;
+        tx.rollback().await.unwrap();
+        let result = task.await.unwrap();
+        assert!(
+            queue_lock.is_ok(),
+            "completion must wait on the generation before locking the queue"
+        );
+        result.unwrap();
+    })
     .await;
-    tx.rollback().await.unwrap();
-    let result = task.await.unwrap();
-    assert!(
-        queue_lock.is_ok(),
-        "completion must wait on the generation before locking the queue"
-    );
-    result.unwrap();
 }
 
 #[tokio::test]
@@ -469,7 +554,7 @@ async fn completing_deletion_keeps_job_if_message_still_references_generation() 
 
 #[tokio::test]
 async fn legacy_key_without_version_is_never_claimed_for_deletion() {
-    let s = store().await;
+    isolation::with_store(|s| async move {
     let generation = Uuid::now_v7();
     let job = Uuid::now_v7();
     let key = unique("legacy-object");
@@ -508,6 +593,7 @@ async fn legacy_key_without_version_is_never_claimed_for_deletion() {
         .await
         .unwrap();
     assert!(claimed.iter().all(|candidate| candidate.id != job));
+    }).await;
 }
 
 async fn wait_for_block_or_finish<T>(
@@ -1828,92 +1914,94 @@ async fn empty_trash_does_not_erase_a_membership_restored_after_listing() {
 
 #[tokio::test]
 async fn final_erasure_durably_queues_external_body_deletion_for_retry() {
-    let s = store().await;
-    let mailbox = s
-        .create_identity_mailbox(&unique("usr"), "Alice")
-        .await
-        .unwrap();
-    let from = Address::parse("sender@example.test").unwrap();
-    let thread = s
-        .thread_for(None, &[], Some("external-body-delete"))
-        .await
-        .unwrap();
-    let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
-    record_test_upload(&s, &reservation).await;
-    let external_key = reservation.object_key.clone();
-    let raw = format!("stored externally {}", unique("body"));
-    let message_id = s
-        .store_message(
-            raw.as_bytes(),
-            thread,
-            &from,
-            Some("external-body-delete"),
-            None,
-            None,
-            &[],
-            Transport::Internal,
-            Some(&reservation),
-        )
-        .await
-        .unwrap();
-    let inbox = s.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
-    s.deliver(mailbox.id, message_id, inbox).await.unwrap();
+    isolation::with_store(|s| async move {
+        let mailbox = s
+            .create_identity_mailbox(&unique("usr"), "Alice")
+            .await
+            .unwrap();
+        let from = Address::parse("sender@example.test").unwrap();
+        let thread = s
+            .thread_for(None, &[], Some("external-body-delete"))
+            .await
+            .unwrap();
+        let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+        record_test_upload(&s, &reservation).await;
+        let external_key = reservation.object_key.clone();
+        let raw = format!("stored externally {}", unique("body"));
+        let message_id = s
+            .store_message(
+                raw.as_bytes(),
+                thread,
+                &from,
+                Some("external-body-delete"),
+                None,
+                None,
+                &[],
+                Transport::Internal,
+                Some(&reservation),
+            )
+            .await
+            .unwrap();
+        let inbox = s.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+        s.deliver(mailbox.id, message_id, inbox).await.unwrap();
 
-    finish_submission(&s, message_id).await;
-    s.erase_membership(mailbox.id, message_id).await.unwrap();
+        finish_submission(&s, message_id).await;
+        s.erase_membership(mailbox.id, message_id).await.unwrap();
 
-    let now = reservation.expires_at + Duration::minutes(15);
-    sqlx::query(
-        "UPDATE object_deletion_queue q
+        let now = reservation.expires_at + Duration::minutes(15);
+        sqlx::query(
+            "UPDATE object_deletion_queue q
          SET next_attempt_at = $1
          FROM object_generations g
          WHERE q.generation_id = g.id AND g.object_key = $2",
-    )
-    .bind(now - Duration::days(36_500))
-    .bind(&external_key)
-    .execute(s.pool())
-    .await
-    .unwrap();
-    let job = s
-        .claim_object_deletion_jobs(now, 1_000)
+        )
+        .bind(now - Duration::days(36_500))
+        .bind(&external_key)
+        .execute(s.pool())
         .await
-        .unwrap()
-        .into_iter()
-        .find(|candidate| candidate.generation_id == reservation.generation_id)
-        .expect("the erased generation is queued");
-    assert_eq!(
-        job.object_key, external_key,
-        "external cleanup must use the exact key already uploaded by the caller"
-    );
+        .unwrap();
+        let job = s
+            .claim_object_deletion_jobs(now, 1_000)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|candidate| candidate.generation_id == reservation.generation_id)
+            .expect("the erased generation is queued");
+        assert_eq!(
+            job.object_key, external_key,
+            "external cleanup must use the exact key already uploaded by the caller"
+        );
 
-    s.retry_object_deletion(job.id, now).await.unwrap();
-    assert!(
-        s.claim_object_deletion_jobs(now, 1_000)
+        s.retry_object_deletion(job.id, now).await.unwrap();
+        assert!(
+            s.claim_object_deletion_jobs(now, 1_000)
+                .await
+                .unwrap()
+                .into_iter()
+                .all(|candidate| candidate.id != job.id),
+            "a failed deletion must remain durably queued until its retry delay"
+        );
+        let retry = s
+            .claim_object_deletion_jobs(now + Duration::minutes(2), 1_000)
             .await
-            .unwrap()
+            .unwrap();
+        let retry = retry
             .into_iter()
-            .all(|candidate| candidate.id != job.id),
-        "a failed deletion must remain durably queued until its retry delay"
-    );
-    let retry = s
-        .claim_object_deletion_jobs(now + Duration::minutes(2), 1_000)
-        .await
-        .unwrap();
-    let retry = retry
-        .into_iter()
-        .find(|candidate| candidate.id == job.id)
-        .expect("the queued external object must become retryable");
-    s.complete_object_deletion(retry.id, retry.generation_id)
-        .await
-        .unwrap();
-    assert!(
-        s.claim_object_deletion_jobs(now + Duration::minutes(4), 1_000)
+            .find(|candidate| candidate.id == job.id)
+            .expect("the queued external object must become retryable");
+        s.complete_object_deletion(retry.id, retry.generation_id)
             .await
-            .unwrap()
-            .into_iter()
-            .all(|candidate| candidate.id != job.id),
-        "only a successful object-store deletion may remove the durable job"
-    );
+            .unwrap();
+        assert!(
+            s.claim_object_deletion_jobs(now + Duration::minutes(4), 1_000)
+                .await
+                .unwrap()
+                .into_iter()
+                .all(|candidate| candidate.id != job.id),
+            "only a successful object-store deletion may remove the durable job"
+        );
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -2226,35 +2314,37 @@ async fn externally_stored_body_rejects_a_caller_selected_key() {
 
 #[tokio::test]
 async fn expired_uploaded_reservation_is_queued_without_affecting_live_body() {
-    let s = store().await;
-    let expired = s
-        .reserve_external_body(chrono::Utc::now() - Duration::minutes(16))
-        .await
-        .unwrap();
-    let live = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
-
-    assert_eq!(
-        s.queue_expired_external_body_reservations(chrono::Utc::now(), 10)
-            .await
-            .unwrap(),
-        1
-    );
-
-    let (expired_jobs,): (i64,) =
-        sqlx::query_as("SELECT count(*) FROM object_deletion_queue WHERE generation_id = $1")
-            .bind(expired.generation_id)
-            .fetch_one(s.pool())
+    isolation::with_store(|s| async move {
+        let expired = s
+            .reserve_external_body(chrono::Utc::now() - Duration::minutes(16))
             .await
             .unwrap();
-    let (live_jobs,): (i64,) =
-        sqlx::query_as("SELECT count(*) FROM object_deletion_queue WHERE generation_id = $1")
-            .bind(live.generation_id)
-            .fetch_one(s.pool())
-            .await
-            .unwrap();
+        let live = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
 
-    assert_eq!(expired_jobs, 1);
-    assert_eq!(live_jobs, 0);
+        assert_eq!(
+            s.queue_expired_external_body_reservations(chrono::Utc::now(), 10)
+                .await
+                .unwrap(),
+            1
+        );
+
+        let (expired_jobs,): (i64,) =
+            sqlx::query_as("SELECT count(*) FROM object_deletion_queue WHERE generation_id = $1")
+                .bind(expired.generation_id)
+                .fetch_one(s.pool())
+                .await
+                .unwrap();
+        let (live_jobs,): (i64,) =
+            sqlx::query_as("SELECT count(*) FROM object_deletion_queue WHERE generation_id = $1")
+                .bind(live.generation_id)
+                .fetch_one(s.pool())
+                .await
+                .unwrap();
+
+        assert_eq!(expired_jobs, 1);
+        assert_eq!(live_jobs, 0);
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -2310,44 +2400,47 @@ async fn lifecycle_migration_rollback_removes_and_restores_its_column_and_index(
         "/migrations/20261101000006_mail_lifecycle.sql"
     ))
     .unwrap();
-    let s = store().await;
-    let mut tx = s.pool().begin().await.unwrap();
-    for statement in down
-        .split(';')
-        .filter(|statement| !statement.trim().is_empty())
-    {
-        sqlx::query(statement).execute(&mut *tx).await.unwrap();
-    }
+    isolation::with_store(|s| async move {
+        let mut tx = s.pool().begin().await.unwrap();
+        for statement in down
+            .split(';')
+            .filter(|statement| !statement.trim().is_empty())
+        {
+            sqlx::query(statement).execute(&mut *tx).await.unwrap();
+        }
 
-    let (column_removed,): (bool,) = sqlx::query_as(
-        "SELECT NOT EXISTS (
+        let (column_removed,): (bool,) = sqlx::query_as(
+            "SELECT NOT EXISTS (
              SELECT 1
              FROM information_schema.columns
              WHERE table_name = 'mailbox_messages'
+               AND table_schema = current_schema()
                AND column_name = 'trash_expires_at'
          )",
-    )
-    .fetch_one(&mut *tx)
-    .await
-    .unwrap();
-    let (index_removed,): (bool,) = sqlx::query_as(
-        "SELECT NOT EXISTS (
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+        let (index_removed,): (bool,) = sqlx::query_as(
+            "SELECT NOT EXISTS (
              SELECT 1
              FROM pg_indexes
              WHERE schemaname = current_schema()
                AND indexname = 'mailbox_messages_trash_expiry_idx'
          )",
-    )
-    .fetch_one(&mut *tx)
-    .await
-    .unwrap();
-    assert!(column_removed && index_removed);
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+        assert!(column_removed && index_removed);
 
-    for statement in up
-        .split(';')
-        .filter(|statement| !statement.trim().is_empty())
-    {
-        sqlx::query(statement).execute(&mut *tx).await.unwrap();
-    }
-    tx.rollback().await.unwrap();
+        for statement in up
+            .split(';')
+            .filter(|statement| !statement.trim().is_empty())
+        {
+            sqlx::query(statement).execute(&mut *tx).await.unwrap();
+        }
+        tx.rollback().await.unwrap();
+    })
+    .await;
 }

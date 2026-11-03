@@ -1473,8 +1473,8 @@ impl MailStore {
     pub async fn raw_message(&self, mailbox_id: Uuid, message_id: Uuid) -> Result<Vec<u8>> {
         // The membership join is the authorisation check: a message is only
         // readable through a mailbox that actually holds it.
-        let row: Option<(Option<Vec<u8>>, Option<String>)> = sqlx::query_as(
-            "SELECT m.body_inline, m.body_object_key
+        let row: Option<(Option<Vec<u8>>, bool)> = sqlx::query_as(
+            "SELECT m.body_inline, m.body_object_key IS NOT NULL
              FROM mailbox_messages mm
              JOIN messages m ON m.id = mm.message_id
              WHERE mm.mailbox_id = $1 AND mm.message_id = $2",
@@ -1486,12 +1486,7 @@ impl MailStore {
 
         match row {
             Some((Some(bytes), _)) => Ok(bytes),
-            // Object-storage bodies are fetched by the caller, which owns the
-            // storage client; the store deliberately does not open network
-            // connections.
-            Some((None, Some(key))) => Err(MailStoreError::NoSuchAddress(format!(
-                "message body is in object storage at {key}"
-            ))),
+            Some((None, true)) => Err(MailStoreError::ExternalBodyGatewayRequired),
             _ => Err(MailStoreError::NoSuchAddress(message_id.to_string())),
         }
     }
