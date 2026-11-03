@@ -11,10 +11,11 @@ use axum::{
     routing::get,
     Extension, Router,
 };
+use futures_util::StreamExt;
 use nexus_mailstore::{MailStore, MailStoreError};
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, sync::Semaphore};
 use uuid::Uuid;
 
 use crate::object_gateway::S3BodyGateway;
@@ -104,6 +105,7 @@ struct ObjectService {
     store: MailStore,
     gateway: Arc<S3BodyGateway>,
     credentials: Option<[[u8; 32]; 3]>,
+    active_reads: Arc<Semaphore>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -130,6 +132,7 @@ pub fn router(
         store,
         gateway,
         credentials,
+        active_reads: Arc::new(Semaphore::new(4)),
     };
     Router::new()
         .route("/internal/object/messages/:message_id", get(body))
@@ -198,15 +201,27 @@ async fn body(
     let Ok(message_id) = Uuid::parse_str(&message) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
+    let Ok(permit) = service.active_reads.clone().try_acquire_owned() else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
     let recorded = match service.store.external_body_for_message(message_id).await {
         Ok(recorded) => recorded,
-        Err(MailStoreError::ExternalBodyVersionEvidenceInvalid) => {
-            return StatusCode::NOT_FOUND.into_response()
-        }
+        Err(MailStoreError::ExternalBodyMissing) => return StatusCode::NOT_FOUND.into_response(),
         Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
     match service.gateway.read_version(&recorded).await {
-        Ok(bytes) => ([(header::CONTENT_TYPE, "application/octet-stream")], bytes).into_response(),
+        Ok(body) => {
+            let length = body.len();
+            let stream = body.into_stream().map(move |item| {
+                let _ = &permit;
+                item
+            });
+            Response::builder()
+                .header(header::CONTENT_TYPE, "application/octet-stream")
+                .header(header::CONTENT_LENGTH, length)
+                .body(Body::from_stream(stream))
+                .expect("static response headers are valid")
+        }
         Err(_) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
     }
 }

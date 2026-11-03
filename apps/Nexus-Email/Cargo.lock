@@ -2031,6 +2031,7 @@ dependencies = [
  "aws-sdk-s3",
  "axum",
  "chrono",
+ "futures-util",
  "nexus-mailauth",
  "nexus-maildelivery",
  "nexus-mailfed",

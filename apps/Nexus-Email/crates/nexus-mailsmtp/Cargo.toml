@@ -29,6 +29,7 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 sha2 = { workspace = true }
 subtle = "2"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 tokio = { workspace = true }

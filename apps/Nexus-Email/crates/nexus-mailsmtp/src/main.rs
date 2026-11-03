@@ -268,8 +268,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .endpoint_url(endpoint)
                 .load()
                 .await;
+            let s3_config = aws_sdk_s3::config::Builder::from(&config)
+                .force_path_style(true)
+                .build();
             Some(Arc::new(S3BodyGateway::new(
-                aws_sdk_s3::Client::new(&config),
+                aws_sdk_s3::Client::from_conf(s3_config),
                 bucket,
             )))
         }
@@ -286,11 +289,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         outbound_token.as_deref(),
     );
     let object_service = match (object_config, object_store.as_ref()) {
-        (Ok(Some(config)), Some(gateway)) => {
-            let listener = object_service::bind(&config).await?;
-            let app = object_service::router(store.clone(), Arc::clone(gateway), config);
-            Some((listener, app))
-        }
+        (Ok(Some(config)), Some(gateway)) => match object_service::bind(&config).await {
+            Ok(listener) => {
+                let app = object_service::router(store.clone(), Arc::clone(gateway), config);
+                Some((listener, app))
+            }
+            Err(_) => {
+                tracing::warn!("object service disabled: listener unavailable");
+                None
+            }
+        },
         (Err(_), _) => {
             tracing::warn!("object service disabled: invalid configuration");
             None

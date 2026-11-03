@@ -20,9 +20,10 @@ use nexus_mailsmtp::{
 };
 use nexus_mailstore::{Address, MailStore, RecordedExternalBody, Transport};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncReadExt, BufReader},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::TcpListener,
     process::Command,
+    sync::watch,
     task::JoinHandle,
 };
 use tracing::instrument::WithSubscriber;
@@ -51,9 +52,17 @@ async fn object_server() -> (Arc<S3BodyGateway>, JoinHandle<()>) {
         "/mail/*key",
         get(|Query(query): Query<HashMap<String, String>>| async move {
             if query.get("versionId").map(String::as_str) == Some(VERSION) {
-                (StatusCode::OK, "recorded-v1")
+                (
+                    StatusCode::OK,
+                    [("x-amz-version-id", VERSION)],
+                    "recorded-v1",
+                )
             } else {
-                (StatusCode::OK, "wrong-version")
+                (
+                    StatusCode::OK,
+                    [("x-amz-version-id", "wrong")],
+                    "wrong-version",
+                )
             }
         }),
     );
@@ -76,6 +85,72 @@ async fn object_server() -> (Arc<S3BodyGateway>, JoinHandle<()>) {
             aws_sdk_s3::Client::from_conf(s3),
             "mail".into(),
         )),
+        task,
+    )
+}
+
+async fn delayed_storage(
+    length: Option<usize>,
+) -> (Arc<S3BodyGateway>, watch::Sender<bool>, JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let (release, receiver) = watch::channel(false);
+    let task = tokio::spawn(async move {
+        loop {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut receiver = receiver.clone();
+            tokio::spawn(async move {
+                let mut request = Vec::new();
+                let mut buffer = [0; 1024];
+                loop {
+                    let n = socket.read(&mut buffer).await.unwrap();
+                    if n == 0 {
+                        return;
+                    }
+                    request.extend_from_slice(&buffer[..n]);
+                    if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let framing = match length {
+                    Some(length) => format!("Content-Length: {length}\r\n"),
+                    None => "Transfer-Encoding: chunked\r\n".to_string(),
+                };
+                let headers = format!(
+                    "HTTP/1.1 200 OK\r\n{framing}\
+                     x-amz-version-id: {VERSION}\r\nConnection: close\r\n\r\n"
+                );
+                if socket.write_all(headers.as_bytes()).await.is_err() {
+                    return;
+                }
+                while !*receiver.borrow_and_update() {
+                    if receiver.changed().await.is_err() {
+                        return;
+                    }
+                }
+                if matches!(length, Some(1 | 2)) {
+                    let _ = socket.write_all(b"x").await;
+                }
+            });
+        }
+    });
+    let shared = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new("us-east-1"))
+        .credentials_provider(aws_credential_types::Credentials::new(
+            "test", "test", None, None, "test",
+        ))
+        .endpoint_url(format!("http://{address}"))
+        .load()
+        .await;
+    let config = aws_sdk_s3::config::Builder::from(&shared)
+        .force_path_style(true)
+        .build();
+    (
+        Arc::new(S3BodyGateway::new(
+            aws_sdk_s3::Client::from_conf(config),
+            "mail".into(),
+        )),
+        release,
         task,
     )
 }
@@ -168,6 +243,206 @@ async fn authenticated_service_streams_only_the_message_recorded_version() {
         let error = missing.text().await.unwrap();
         for secret in [&key, &generation, VERSION, BODY] {
             assert!(!error.contains(secret));
+        }
+        service_task.abort();
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn missing_or_inline_body_is_not_found_but_invalid_evidence_is_unavailable() {
+    isolation::with_store(|store| async move {
+        let (message, key, generation) = recorded_message(&store).await;
+        let sender = Address::parse("sender@example.test").unwrap();
+        let thread = store.thread_for(None, &[], None).await.unwrap();
+        let inline = store
+            .store_message(
+                b"inline-only",
+                thread,
+                &sender,
+                None,
+                None,
+                None,
+                &[],
+                Transport::Internal,
+                None,
+            )
+            .await
+            .unwrap();
+        let (gateway, object_task) = object_server().await;
+        let (url, service_task) = serve(
+            object_service::router(store.clone(), gateway, config()),
+            None,
+        )
+        .await;
+        let client = reqwest::Client::new();
+        for id in [Uuid::new_v4(), inline] {
+            let response = client
+                .get(format!("{url}/internal/object/messages/{id}"))
+                .bearer_auth(API)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        }
+        sqlx::query("UPDATE object_generations SET uploaded_version_id = NULL WHERE id = $1")
+            .bind(Uuid::parse_str(&generation).unwrap())
+            .execute(store.pool())
+            .await
+            .unwrap();
+        let response = client
+            .get(format!("{url}/internal/object/messages/{message}"))
+            .bearer_auth(API)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let text = response.text().await.unwrap();
+        for secret in [&key, &generation, VERSION, BODY] {
+            assert!(!text.contains(secret));
+        }
+        sqlx::query(
+            "UPDATE messages SET body_inline = NULL, body_object_key = $2, \
+             body_object_generation_id = NULL WHERE id = $1",
+        )
+        .bind(inline)
+        .bind(&key)
+        .execute(store.pool())
+        .await
+        .unwrap();
+        let response = client
+            .get(format!("{url}/internal/object/messages/{inline}"))
+            .bearer_auth(API)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert!(response.text().await.unwrap().is_empty());
+        service_task.abort();
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn oversized_storage_body_is_rejected_without_waiting_for_its_contents() {
+    isolation::with_store(|store| async move {
+        let (message, _, _) = recorded_message(&store).await;
+        let (gateway, _release, object_task) = delayed_storage(Some(25 * 1024 * 1024 + 1)).await;
+        let (url, service_task) =
+            serve(object_service::router(store, gateway, config()), None).await;
+        let response = tokio::time::timeout(
+            Duration::from_secs(3),
+            reqwest::Client::new()
+                .get(format!("{url}/internal/object/messages/{message}"))
+                .bearer_auth(API)
+                .send(),
+        )
+        .await
+        .expect("oversized response was buffered instead of rejected")
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert!(response.text().await.unwrap().is_empty());
+        service_task.abort();
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn active_streams_are_bounded_and_hold_capacity_until_completion() {
+    isolation::with_store(|store| async move {
+        let (message, _, _) = recorded_message(&store).await;
+        let (gateway, release, object_task) = delayed_storage(Some(1)).await;
+        let (url, service_task) =
+            serve(object_service::router(store, gateway, config()), None).await;
+        let client = reqwest::Client::new();
+        let path = format!("{url}/internal/object/messages/{message}");
+        let mut active = Vec::new();
+        for _ in 0..4 {
+            let response = tokio::time::timeout(
+                Duration::from_secs(3),
+                client.get(&path).bearer_auth(API).send(),
+            )
+            .await
+            .expect("response waited for the whole body")
+            .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            active.push(response);
+        }
+        let response = client.get(&path).bearer_auth(API).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        drop(active.pop());
+        let replacement = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let response = client.get(&path).bearer_auth(API).send().await.unwrap();
+                if response.status() == StatusCode::OK {
+                    break response;
+                }
+                assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("disconnected stream did not release its capacity");
+        active.push(replacement);
+        release.send(true).unwrap();
+        for response in active {
+            assert_eq!(response.bytes().await.unwrap(), "x");
+        }
+        let response = client.get(&path).bearer_auth(API).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.bytes().await.unwrap(), "x");
+        service_task.abort();
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn unknown_storage_body_size_is_rejected_without_buffering() {
+    isolation::with_store(|store| async move {
+        let (message, _, _) = recorded_message(&store).await;
+        let (gateway, _release, object_task) = delayed_storage(None).await;
+        let (url, service_task) =
+            serve(object_service::router(store, gateway, config()), None).await;
+        let response = tokio::time::timeout(
+            Duration::from_secs(3),
+            reqwest::Client::new()
+                .get(format!("{url}/internal/object/messages/{message}"))
+                .bearer_auth(API)
+                .send(),
+        )
+        .await
+        .expect("unknown-size response was buffered")
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert!(response.text().await.unwrap().is_empty());
+        service_task.abort();
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn truncated_storage_stream_aborts_the_response_without_exposing_evidence() {
+    isolation::with_store(|store| async move {
+        let (message, key, generation) = recorded_message(&store).await;
+        let (gateway, release, object_task) = delayed_storage(Some(2)).await;
+        let (url, service_task) =
+            serve(object_service::router(store, gateway, config()), None).await;
+        let response = reqwest::Client::new()
+            .get(format!("{url}/internal/object/messages/{message}"))
+            .bearer_auth(API)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        release.send(true).unwrap();
+        let error = response.bytes().await.unwrap_err().to_string();
+        for value in [&key, &generation, VERSION, BODY, API] {
+            assert!(!error.contains(value));
         }
         service_task.abort();
         object_task.abort();
@@ -289,7 +564,11 @@ async fn gateway_never_logs_object_evidence_even_when_trace_is_enabled() {
         .finish();
     async {
         tracing::info!("capture active");
-        assert_eq!(gateway.read_version(&record).await.unwrap(), b"recorded-v1");
+        let body = gateway.read_version(&record).await.unwrap();
+        let body = axum::body::to_bytes(axum::body::Body::from_stream(body.into_stream()), 1024)
+            .await
+            .unwrap();
+        assert_eq!(body, "recorded-v1");
     }
     .with_subscriber(subscriber)
     .await;
@@ -410,9 +689,9 @@ async fn daemon_hosts_service_without_leaking_evidence_in_trace_logs() {
             "/mail/*key",
             get(|Query(query): Query<HashMap<String, String>>| async move {
                 if query.get("versionId").map(String::as_str) == Some(VERSION) {
-                    (StatusCode::OK, BODY)
+                    (StatusCode::OK, [("x-amz-version-id", VERSION)], BODY)
                 } else {
-                    (StatusCode::NOT_FOUND, "")
+                    (StatusCode::NOT_FOUND, [("x-amz-version-id", "wrong")], "")
                 }
             }),
         );
@@ -431,6 +710,10 @@ async fn daemon_hosts_service_without_leaking_evidence_in_trace_logs() {
             object_address,
             &service_address.to_string(),
             "127.0.0.1:0",
+        )
+        .env(
+            "S3_ENDPOINT",
+            format!("http://localhost:{}", object_address.port()),
         )
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -558,6 +841,72 @@ async fn daemon_leaves_object_service_disabled_when_configuration_is_unsafe() {
             daemon.kill().await.unwrap();
             daemon.wait().await.unwrap();
         }
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn occupied_object_listener_does_not_stop_smtp_or_imap() {
+    isolation::with_store(|store| async move {
+        let schema: String = sqlx::query_scalar("SELECT current_schema()")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        let mut db_url =
+            reqwest::Url::parse(&std::env::var("NEXUS_EMAIL_TEST_DATABASE_URL").unwrap()).unwrap();
+        db_url
+            .query_pairs_mut()
+            .append_pair("options", &format!("-csearch_path={schema}"));
+        let occupied = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let object_bind = occupied.local_addr().unwrap();
+        let mx = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mx_address = mx.local_addr().unwrap();
+        let imap = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let imap_address = imap.local_addr().unwrap();
+        drop((mx, imap));
+        let node_key = NodeKeyFile(PathBuf::from(format!(".test-node-key-{}", Uuid::new_v4())));
+        let mut daemon = daemon_command(
+            db_url.as_str(),
+            &node_key.0,
+            "127.0.0.1:1".parse().unwrap(),
+            &object_bind.to_string(),
+            &mx_address.to_string(),
+        )
+        .env("NEXUS_EMAIL_IMAP_BIND", imap_address.to_string())
+        .env("RUST_LOG", "info")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+        wait_for_listener(mx_address, &mut daemon).await;
+        wait_for_listener(imap_address, &mut daemon).await;
+        let mut lines = BufReader::new(daemon.stdout.take().unwrap()).lines();
+        let mut logs = String::new();
+        tokio::time::timeout(Duration::from_secs(30), async {
+            while let Some(line) = lines.next_line().await.unwrap() {
+                logs.push_str(&line);
+                if line.contains("nexus-mailsmtpd listening") {
+                    return;
+                }
+            }
+            panic!("daemon exited during startup");
+        })
+        .await
+        .unwrap();
+        assert!(logs.contains("object service disabled"));
+        for secret in [API, IMAP, OUTBOUND] {
+            assert!(!logs.contains(secret));
+        }
+        for (address, prefix) in [(mx_address, "220"), (imap_address, "* OK")] {
+            let socket = tokio::net::TcpStream::connect(address).await.unwrap();
+            let mut reader = BufReader::new(socket);
+            let mut greeting = String::new();
+            reader.read_line(&mut greeting).await.unwrap();
+            assert!(greeting.starts_with(prefix));
+        }
+        daemon.kill().await.unwrap();
+        daemon.wait().await.unwrap();
+        drop(occupied);
     })
     .await;
 }

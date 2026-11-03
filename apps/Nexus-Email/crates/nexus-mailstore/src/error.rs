@@ -34,6 +34,9 @@ pub enum MailStoreError {
     #[error("external body version evidence is missing or mismatched")]
     ExternalBodyVersionEvidenceInvalid,
 
+    #[error("external body does not exist")]
+    ExternalBodyMissing,
+
     #[error("external body requires the mail object gateway")]
     ExternalBodyGatewayRequired,
 }

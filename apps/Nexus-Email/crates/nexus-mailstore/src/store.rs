@@ -496,30 +496,37 @@ impl MailStore {
         &self,
         message_id: Uuid,
     ) -> Result<RecordedExternalBody> {
-        let row: Option<(Uuid, String, String)> = sqlx::query_as(
-            "SELECT g.id, g.object_key, g.uploaded_version_id
+        type BodyLookup = (bool, Option<Uuid>, Option<String>, Option<String>);
+        let row: Option<BodyLookup> = sqlx::query_as(
+            "SELECT m.body_inline IS NOT NULL AND m.body_object_key IS NULL
+                    AND m.body_object_generation_id IS NULL,
+                    g.id, g.object_key, g.uploaded_version_id
              FROM messages m
-             JOIN object_generations g ON g.id = m.body_object_generation_id
-             WHERE m.id = $1 AND g.lifecycle_state = 'referenced'
+             LEFT JOIN object_generations g ON g.id = m.body_object_generation_id
+               AND g.lifecycle_state = 'referenced'
                AND g.finalized_message_id = m.id
                AND m.body_object_key = g.object_key
                AND g.uploaded_generation_tag = g.id::text
                AND g.upload_recorded_at IS NOT NULL
                AND g.uploaded_version_id IS NOT NULL
                AND btrim(g.uploaded_version_id) <> ''
-               AND g.uploaded_version_id <> 'null'",
+               AND g.uploaded_version_id <> 'null'
+             WHERE m.id = $1",
         )
         .bind(message_id)
         .fetch_optional(&self.pool)
         .await?;
-        let Some((generation_id, object_key, version_id)) = row else {
-            return Err(MailStoreError::ExternalBodyVersionEvidenceInvalid);
-        };
-        Ok(RecordedExternalBody {
-            generation_id,
-            object_key,
-            version_id,
-        })
+        match row {
+            None | Some((true, _, _, _)) => Err(MailStoreError::ExternalBodyMissing),
+            Some((false, Some(generation_id), Some(object_key), Some(version_id))) => {
+                Ok(RecordedExternalBody {
+                    generation_id,
+                    object_key,
+                    version_id,
+                })
+            }
+            _ => Err(MailStoreError::ExternalBodyVersionEvidenceInvalid),
+        }
     }
 
     /// Store a message once, content-addressed.

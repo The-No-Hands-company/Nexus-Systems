@@ -137,6 +137,12 @@ socket address. The existing S3 settings must also be present. Requests use
 Callers must authorize access to the message before making this request: a
 service credential grants access to any recorded external message body.
 
+The service validates the storage-returned version and content length before
+responding. It permits bodies up to 25 MiB, streams them in chunks of at most
+64 KiB, and allows four concurrent reads; unknown or oversized lengths and
+capacity exhaustion return 503. If storage fails after response headers are
+sent, the response is truncated and clients must treat that as unavailable.
+
 The listener is groundwork, not a production rollout: clients and the
 capability/migration-inventory startup fence are not yet implemented. Do not
 enable it in production until those follow-up tasks and the controlled Mail
