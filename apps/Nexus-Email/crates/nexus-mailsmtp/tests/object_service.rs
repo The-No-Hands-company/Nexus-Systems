@@ -858,6 +858,43 @@ async fn composite_checksum_returns_sanitized_unavailable() {
 }
 
 #[tokio::test]
+async fn non_utf8_checksum_evidence_returns_sanitized_unavailable() {
+    isolation::with_store(|store| async move {
+        let (message, key, generation) = recorded_message(&store).await;
+        let app = Router::new().route(
+            "/mail/*key",
+            get(|| async {
+                let mut headers = axum::http::HeaderMap::new();
+                headers.insert("x-amz-version-id", VERSION.parse().unwrap());
+                headers.insert(
+                    "content-md5",
+                    axum::http::HeaderValue::from_bytes(b"invalid-\xff-canary").unwrap(),
+                );
+                (headers, BODY)
+            }),
+        );
+        let (gateway, object_task) = storage_for_app(app).await;
+        let (url, service_task) =
+            serve(object_service::router(store, gateway, config()), None).await;
+        let response = reqwest::Client::new()
+            .get(format!("{url}/internal/object/messages/{message}"))
+            .bearer_auth(API)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let error = response.text().await.unwrap();
+        assert!(error.is_empty());
+        for value in [&key, &generation, VERSION, BODY, API, "invalid-"] {
+            assert!(!error.contains(value));
+        }
+        service_task.abort();
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn truncated_storage_stream_aborts_the_response_without_exposing_evidence() {
     isolation::with_store(|store| async move {
         let (message, key, generation) = recorded_message(&store).await;

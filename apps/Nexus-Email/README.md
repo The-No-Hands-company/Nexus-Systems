@@ -149,9 +149,10 @@ return 503. The final body chunk is withheld until storage EOF and checksum
 validation succeed. If a failure or timeout occurs after headers are sent,
 the response is incomplete and clients must treat it as unavailable. GetObject
 explicitly requests checksum validation, independent of ambient AWS settings.
-Unverifiable checksum evidence, including composite or multiple checksums, is
-rejected rather than served without validation. Storage responses with HTTP
-trailers are also rejected because the SDK cannot validate trailer checksums.
+Unverifiable checksum evidence, including non-UTF-8 checksum-related headers,
+composite checksums, or multiple checksums, is rejected rather than served
+without validation. Storage responses with HTTP trailers are also rejected
+because the SDK cannot validate trailer checksums.
 
 The listener is groundwork, not a production rollout: clients and the
 capability/migration-inventory startup fence are not yet implemented. Do not

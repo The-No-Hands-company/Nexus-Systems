@@ -345,6 +345,105 @@ async fn gateway_rejects_unverifiable_checksum_evidence() {
     server.abort();
 }
 
+#[tokio::test]
+async fn gateway_rejects_non_utf8_checksum_evidence() {
+    let app = Router::new().route(
+        "/mail/*key",
+        get(|Path(key): Path<String>| async move {
+            let mut headers = HeaderMap::new();
+            headers.insert("x-amz-version-id", "v1".parse().unwrap());
+            let invalid = axum::http::HeaderValue::from_bytes(b"invalid-\xff-canary").unwrap();
+            let name = match key.as_str() {
+                "checksum-type" => "x-amz-checksum-type",
+                "checksum-crc32" | "duplicate-checksum" => "x-amz-checksum-crc32",
+                "unknown-checksum" => "x-amz-checksum-future",
+                "content-md5" => "content-md5",
+                "digest" => "digest",
+                "content-digest" => "content-digest",
+                "repr-digest" => "repr-digest",
+                "trailer" => "trailer",
+                "x-amz-trailer" => "x-amz-trailer",
+                "unrelated" => "x-unrelated",
+                _ => unreachable!(),
+            };
+            if key == "duplicate-checksum" {
+                headers.append(name, "o40Npg==".parse().unwrap());
+            }
+            headers.append(name, invalid);
+            (headers, "checksum-body-canary")
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let shared = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new("us-east-1"))
+        .credentials_provider(aws_credential_types::Credentials::new(
+            "test", "test", None, None, "test",
+        ))
+        .endpoint_url(format!("http://{address}"))
+        .load()
+        .await;
+    let config = aws_sdk_s3::config::Builder::from(&shared)
+        .force_path_style(true)
+        .build();
+    let gateway = S3BodyGateway::new(aws_sdk_s3::Client::from_conf(config), "mail".into());
+    let mut accepted = Vec::new();
+    let mut served = Vec::new();
+    for key in [
+        "checksum-type",
+        "checksum-crc32",
+        "duplicate-checksum",
+        "unknown-checksum",
+        "content-md5",
+        "digest",
+        "content-digest",
+        "repr-digest",
+        "trailer",
+        "x-amz-trailer",
+    ] {
+        let record = RecordedExternalBody {
+            generation_id: Uuid::new_v4(),
+            object_key: key.into(),
+            version_id: "v1".into(),
+        };
+        match gateway.read_version(&record).await {
+            Ok(body) => {
+                accepted.push(key);
+                if axum::body::to_bytes(axum::body::Body::from_stream(body.into_stream()), 1024)
+                    .await
+                    .is_ok_and(|bytes| bytes == "checksum-body-canary")
+                {
+                    served.push(key);
+                }
+            }
+            Err(error) => {
+                let output = format!("{error} {error:?}");
+                assert!(!output.contains(key));
+                assert!(!output.contains("invalid-"));
+                assert!(!output.contains("checksum-body-canary"));
+            }
+        }
+    }
+    let unrelated = RecordedExternalBody {
+        generation_id: Uuid::new_v4(),
+        object_key: "unrelated".into(),
+        version_id: "v1".into(),
+    };
+    let body = gateway.read_version(&unrelated).await.unwrap();
+    assert_eq!(
+        axum::body::to_bytes(axum::body::Body::from_stream(body.into_stream()), 1024)
+            .await
+            .unwrap(),
+        "checksum-body-canary"
+    );
+    assert!(
+        accepted.is_empty(),
+        "non-UTF-8 checksum evidence accepted: {accepted:?}; bodies served: {served:?}"
+    );
+    server.abort();
+}
+
 #[derive(Debug)]
 struct TrailerConnector {
     empty: bool,

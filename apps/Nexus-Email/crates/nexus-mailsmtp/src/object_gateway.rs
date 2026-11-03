@@ -128,13 +128,15 @@ impl Intercept for ChecksumEvidenceGuard {
         let response = context.response_mut();
         let mut checksum_count = 0;
         let mut checksum_type_count = 0;
-        for (name, value) in response.headers().iter() {
+        for (name, value) in response.headers().iter_bytes() {
             if name == "x-amz-checksum-type" {
+                let value = std::str::from_utf8(value).map_err(|_| GatewayError)?;
                 checksum_type_count += 1;
                 if checksum_type_count > 1 || value != "FULL_OBJECT" {
                     return Err(GatewayError.into());
                 }
             } else if name.starts_with("x-amz-checksum-") {
+                let value = std::str::from_utf8(value).map_err(|_| GatewayError)?;
                 checksum_count += 1;
                 // The SDK validates only one of its supported checksum headers.
                 let expected_length: usize = match name {
