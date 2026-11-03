@@ -17,6 +17,7 @@ use nexus_mailout::{DeliveryWorker, Egress, SmtpRelayConfig, WorkerConfig};
 use nexus_mailsmtp::authenticator::AuthService;
 use nexus_mailsmtp::inbound::{AuthenticatingSink, PolicyMode};
 use nexus_mailsmtp::object_cleanup::run_object_deletion_pass;
+use nexus_mailsmtp::object_gateway::S3BodyGateway;
 use nexus_mailsmtp::policy::MailboxPolicy;
 use nexus_mailsmtp::purge::run_bounded_purge_pass;
 use nexus_mailsmtp::{Limits, Role, SmtpServer};
@@ -266,7 +267,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .endpoint_url(endpoint)
                 .load()
                 .await;
-            Some((aws_sdk_s3::Client::new(&config), bucket))
+            Some(Arc::new(S3BodyGateway::new(
+                aws_sdk_s3::Client::new(&config),
+                bucket,
+            )))
         }
         _ => None,
     };
@@ -346,7 +350,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let object_cleanup = async move {
-        let Some((client, bucket)) = object_store else {
+        let Some(gateway) = object_store else {
             tracing::warn!(
                 "object deletion queue is disabled until S3_ENDPOINT, S3_ACCESS_KEY, \
                  S3_SECRET_KEY, and S3_BUCKET are configured"
@@ -362,20 +366,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 sqlx::types::chrono::Utc::now(),
                 object_delete_batch_size,
                 {
-                    let client = client.clone();
-                    let bucket = bucket.clone();
-                    move |object_key| {
-                        let client = client.clone();
-                        let bucket = bucket.clone();
+                    let gateway = Arc::clone(&gateway);
+                    move |body| {
+                        let gateway = Arc::clone(&gateway);
                         async move {
-                            client
-                                .delete_object()
-                                .bucket(bucket)
-                                .key(object_key)
-                                .send()
-                                .await
-                                .map(|_| ())
-                                .map_err(|_| ())
+                            gateway.delete_version(&body).await.map_err(|_| ())
                         }
                     }
                 },

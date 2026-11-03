@@ -11,6 +11,50 @@ use nexus_mailsmtp::object_cleanup::run_object_deletion_pass;
 mod isolation;
 
 #[tokio::test]
+async fn cleanup_deletes_recorded_version_without_touching_a_newer_version() {
+    isolation::with_store(|store| async move {
+        let start = chrono::Utc::now();
+        let reservation = store.reserve_external_body(start).await.unwrap();
+        store
+            .record_external_body_upload(
+                &reservation,
+                "v1",
+                &reservation.generation_id.to_string(),
+                start,
+            )
+            .await
+            .unwrap();
+        store
+            .abandon_external_body_reservation(&reservation, start)
+            .await
+            .unwrap();
+
+        let versions = Arc::new(Mutex::new(HashSet::from([
+            (reservation.object_key.clone(), "v1".to_string()),
+            (reservation.object_key.clone(), "v2".to_string()),
+        ])));
+        let objects = Arc::clone(&versions);
+        let pass = run_object_deletion_pass(
+            &store,
+            reservation.expires_at + Duration::minutes(15),
+            10,
+            move |body| {
+                let mut objects = objects.lock().unwrap();
+                objects.remove(&(body.object_key, body.version_id));
+                future::ready(Ok(()))
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(pass.deleted, 1);
+        let objects = versions.lock().unwrap();
+        assert!(!objects.contains(&(reservation.object_key.clone(), "v1".to_string())));
+        assert!(objects.contains(&(reservation.object_key.clone(), "v2".to_string())));
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn deletion_pass_cleans_only_the_expired_reserved_generation() {
     isolation::with_store(|store| async move {
         let start =
@@ -41,9 +85,9 @@ async fn deletion_pass_cleans_only_the_expired_reserved_generation() {
             .unwrap();
 
         let objects = Arc::new(Mutex::new(HashSet::from([
-            expired.object_key.clone(),
-            unverified.object_key.clone(),
-            live.object_key.clone(),
+            (expired.object_key.clone(), "expired-version".to_string()),
+            (unverified.object_key.clone(), "unknown".to_string()),
+            (live.object_key.clone(), "live-version".to_string()),
         ])));
         let deleted = Arc::new(Mutex::new(Vec::new()));
         for now in [
@@ -54,9 +98,10 @@ async fn deletion_pass_cleans_only_the_expired_reserved_generation() {
         ] {
             let callback_objects = Arc::clone(&objects);
             let callback_deleted = Arc::clone(&deleted);
-            let pass = run_object_deletion_pass(&store, now, 1_000, move |key| {
-                callback_deleted.lock().unwrap().push(key.clone());
-                let removed = callback_objects.lock().unwrap().remove(&key);
+            let pass = run_object_deletion_pass(&store, now, 1_000, move |body| {
+                let identity = (body.object_key, body.version_id);
+                callback_deleted.lock().unwrap().push(identity.clone());
+                let removed = callback_objects.lock().unwrap().remove(&identity);
                 future::ready(if removed { Ok(()) } else { Err(()) })
             })
             .await
@@ -66,12 +111,15 @@ async fn deletion_pass_cleans_only_the_expired_reserved_generation() {
             assert_eq!(pass.failed, 0);
         }
 
-        assert_eq!(*deleted.lock().unwrap(), vec![expired.object_key.clone()]);
+        assert_eq!(
+            *deleted.lock().unwrap(),
+            vec![(expired.object_key.clone(), "expired-version".to_string())]
+        );
         {
             let objects = objects.lock().unwrap();
-            assert!(!objects.contains(&expired.object_key));
-            assert!(objects.contains(&unverified.object_key));
-            assert!(objects.contains(&live.object_key));
+            assert!(!objects.contains(&(expired.object_key.clone(), "expired-version".to_string())));
+            assert!(objects.contains(&(unverified.object_key.clone(), "unknown".to_string())));
+            assert!(objects.contains(&(live.object_key.clone(), "live-version".to_string())));
         }
         let (version,): (Option<String>,) =
             sqlx::query_as("SELECT version_id FROM object_deletion_queue WHERE generation_id = $1")

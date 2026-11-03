@@ -15,6 +15,9 @@ use nexus_mailstore::{Address, FolderKind, MailStore, MessageReferenceKind, Tran
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
+#[path = "../../nexus-mailstore/tests/support/isolation.rs"]
+mod isolation;
+
 /// Records every handoff and answers with a fixed outcome.
 struct FakeTransport {
     outcome: HandoffOutcome,
@@ -274,6 +277,76 @@ async fn a_deferred_handoff_stays_queued_for_a_retry() {
     worker.process(item).await;
 
     assert_eq!(state_of(&store, &rcpt).await, ("pending".to_string(), 1));
+}
+
+#[tokio::test]
+async fn unavailable_external_body_never_exhausts_delivery_attempts() {
+    isolation::with_store(|store| async move {
+        let queue = Queue::new(store.pool().clone());
+        let rcpt = unique("peer.test");
+        let (item, _) = queued(
+            &store,
+            &queue,
+            &rcpt,
+            Route::Federated {
+                node: "peer.test".into(),
+            },
+        )
+        .await;
+        let reservation = store
+            .reserve_external_body(chrono::Utc::now())
+            .await
+            .unwrap();
+        store
+            .record_external_body_upload(
+                &reservation,
+                "v1",
+                &reservation.generation_id.to_string(),
+                chrono::Utc::now(),
+            )
+            .await
+            .unwrap();
+        sqlx::query(
+            "UPDATE object_generations SET lifecycle_state = 'referenced',
+             finalized_message_id = $2 WHERE id = $1",
+        )
+        .bind(reservation.generation_id)
+        .bind(item.message_id)
+        .execute(store.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "UPDATE messages SET body_inline = NULL, body_object_key = $2,
+             body_object_generation_id = $3 WHERE id = $1",
+        )
+        .bind(item.message_id)
+        .bind(&reservation.object_key)
+        .bind(reservation.generation_id)
+        .execute(store.pool())
+        .await
+        .unwrap();
+        sqlx::query("UPDATE outbound_queue SET attempts = $2 WHERE id = $1")
+            .bind(item.queue_id)
+            .bind(nexus_maildelivery::max_attempts() - 1)
+            .execute(store.pool())
+            .await
+            .unwrap();
+        let worker = DeliveryWorker::new(store.clone(), queue, WorkerConfig::default());
+
+        worker.process(item).await;
+
+        let (state, attempts) = state_of(&store, &rcpt).await;
+        assert_eq!(state, "pending");
+        assert_eq!(attempts, nexus_maildelivery::max_attempts() - 1);
+        let (recipient_state,): (String,) =
+            sqlx::query_as("SELECT state FROM mail_submission_recipients WHERE recipient = $1")
+                .bind(rcpt)
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(recipient_state, "outbound_pending");
+    })
+    .await;
 }
 
 #[tokio::test]

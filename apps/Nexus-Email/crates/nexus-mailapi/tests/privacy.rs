@@ -6,7 +6,7 @@ use std::sync::{Arc, Once};
 
 use nexus_mailapi::{router, AppState};
 use nexus_maildelivery::{Deliverer, Queue, Router};
-use nexus_mailstore::{Address, MailStore, MessageReferenceKind};
+use nexus_mailstore::{Address, FolderKind, MailStore, MessageReferenceKind, Transport};
 use sqlx::postgres::PgPoolOptions;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -135,6 +135,69 @@ async fn delete(addr: std::net::SocketAddr, path: &str, headers: &[(&str, &str)]
     let mut out = Vec::new();
     s.read_to_end(&mut out).await.unwrap();
     String::from_utf8_lossy(&out).into_owned()
+}
+
+#[tokio::test]
+async fn unavailable_external_body_is_transient_only_for_the_authorized_mailbox() {
+    let api = start(None).await;
+    let subject = format!("usr-{}", Uuid::now_v7().simple());
+    let stranger = format!("usr-{}", Uuid::now_v7().simple());
+    let mailbox = api
+        .store
+        .create_identity_mailbox(&subject, "Owner")
+        .await
+        .unwrap();
+    api.store
+        .create_identity_mailbox(&stranger, "Other")
+        .await
+        .unwrap();
+    let now = chrono::Utc::now();
+    let reservation = api.store.reserve_external_body(now).await.unwrap();
+    api.store
+        .record_external_body_upload(
+            &reservation,
+            "version-secret",
+            &reservation.generation_id.to_string(),
+            now,
+        )
+        .await
+        .unwrap();
+    let raw = vec![b'x'; nexus_mailstore::INLINE_BODY_LIMIT + 1];
+    let sender = Address::parse("sender@example.test").unwrap();
+    let thread = api.store.thread_for(None, &[], None).await.unwrap();
+    let message = api
+        .store
+        .store_message(
+            &raw,
+            thread,
+            &sender,
+            None,
+            None,
+            None,
+            &[],
+            Transport::Smtp,
+            Some(&reservation),
+        )
+        .await
+        .unwrap();
+    let inbox = api
+        .store
+        .folder(mailbox.id, FolderKind::Inbox)
+        .await
+        .unwrap();
+    api.store.deliver(mailbox.id, message, inbox).await.unwrap();
+
+    for path in [
+        format!("/api/v1/messages/{message}"),
+        format!("/api/v1/messages/{message}/attachments/0"),
+    ] {
+        let owner = get(api.addr, &path, &[("X-Nexus-Subject", &subject)]).await;
+        assert!(owner.starts_with("HTTP/1.1 503"), "{owner}");
+        assert!(!owner.contains(&reservation.object_key));
+        assert!(!owner.contains("version-secret"));
+        let other = get(api.addr, &path, &[("X-Nexus-Subject", &stranger)]).await;
+        assert!(other.starts_with("HTTP/1.1 404"), "{other}");
+    }
 }
 
 #[tokio::test]

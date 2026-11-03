@@ -195,13 +195,10 @@ impl DeliveryWorker {
     pub async fn process(&self, item: QueuedDelivery) {
         let raw = match self.raw_for(item.message_id).await {
             Ok(r) => r,
-            Err(e) => {
-                // The message is unreadable, which will not improve with
-                // time — but bouncing on a storage error would lose mail
-                // over a transient database problem, so it is deferred.
+            Err(_) => {
                 let _ = self
                     .queue
-                    .mark_attempt_failed(item.queue_id, item.lease_token, false, &format!("message unreadable: {e}"))
+                    .defer_unreadable_message(item.queue_id, item.lease_token)
                     .await;
                 return;
             }

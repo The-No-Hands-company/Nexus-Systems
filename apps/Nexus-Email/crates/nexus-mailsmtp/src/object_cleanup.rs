@@ -1,7 +1,7 @@
 use std::future::Future;
 
 use chrono::{DateTime, Utc};
-use nexus_mailstore::{MailStore, Result};
+use nexus_mailstore::{MailStore, RecordedExternalBody, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ObjectDeletionPass {
@@ -21,7 +21,7 @@ pub async fn run_object_deletion_pass<F, Fut>(
     mut delete_object: F,
 ) -> Result<ObjectDeletionPass>
 where
-    F: FnMut(String) -> Fut,
+    F: FnMut(RecordedExternalBody) -> Fut,
     Fut: Future<Output = std::result::Result<(), ()>>,
 {
     store
@@ -35,7 +35,12 @@ where
     };
 
     for job in jobs {
-        if delete_object(job.object_key).await.is_ok() {
+        let body = RecordedExternalBody {
+            generation_id: job.generation_id,
+            object_key: job.object_key,
+            version_id: job.version_id,
+        };
+        if delete_object(body).await.is_ok() {
             store
                 .complete_object_deletion(job.id, job.generation_id)
                 .await?;

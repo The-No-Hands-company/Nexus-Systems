@@ -275,6 +275,25 @@ impl Queue {
         Ok(())
     }
 
+    /// Storage failures do not consume remote-delivery attempts.
+    pub async fn defer_unreadable_message(&self, id: Uuid, token: Uuid) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        Self::lock_claim(&mut tx, id, token).await?;
+        sqlx::query(
+            "UPDATE outbound_queue SET state = 'pending',
+             next_attempt_at = now() + interval '5 minutes',
+             last_error = 'message temporarily unreadable',
+             lease_token = NULL, lease_expires_at = NULL
+             WHERE id = $1 AND lease_token = $2",
+        )
+        .bind(id)
+        .bind(token)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn mark_attempt_failed(
         &self,
         id: Uuid,

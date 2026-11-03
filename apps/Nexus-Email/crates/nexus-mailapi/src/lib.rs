@@ -21,7 +21,9 @@ use axum::{
 };
 use nexus_maildelivery::{Deliverer, Disposition};
 use nexus_mailmsg::MessageBuilder;
-use nexus_mailstore::{Address, FolderKind, MailStore, MessageDisposition, MessageSummary};
+use nexus_mailstore::{
+    Address, FolderKind, MailStore, MailStoreError, MessageDisposition, MessageSummary,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -63,6 +65,22 @@ fn server(msg: &str) -> ApiError {
     // Deliberately vague to the caller; the detail goes to the log.
     tracing::error!("{msg}");
     ApiError(StatusCode::INTERNAL_SERVER_ERROR, "internal error".into())
+}
+
+fn message_read_error(error: MailStoreError) -> ApiError {
+    match error {
+        MailStoreError::ExternalBodyGatewayRequired => ApiError(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "message body temporarily unavailable".into(),
+        ),
+        MailStoreError::NoSuchAddress(_) => {
+            ApiError(StatusCode::NOT_FOUND, "no such message".into())
+        }
+        _ => ApiError(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "message body temporarily unavailable".into(),
+        ),
+    }
 }
 
 /// The caller's ecosystem identity, or 401.
@@ -421,7 +439,7 @@ async fn read_message(
         .store
         .raw_message(mailbox, message_id)
         .await
-        .map_err(|_| ApiError(StatusCode::NOT_FOUND, "no such message".into()))?;
+        .map_err(message_read_error)?;
     let (folder, disposition) = state
         .store
         .message_location(mailbox, message_id)
@@ -870,7 +888,7 @@ async fn download_attachment(
         .store
         .raw_message(mailbox, message_id)
         .await
-        .map_err(|_| ApiError(StatusCode::NOT_FOUND, "no such message".into()))?;
+        .map_err(message_read_error)?;
 
     let parsed = nexus_mailmsg::parse(&raw, nexus_mailmsg::Limits::default())
         .map_err(|e| server(&format!("parse: {e}")))?;

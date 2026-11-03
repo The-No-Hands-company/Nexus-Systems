@@ -220,7 +220,11 @@ impl<A: Authenticator> ImapServer<A> {
                                     String::from_utf8_lossy(&raw)
                                 ));
                             }
-                            Err(_) => parts.push("BODY[] NIL".into()),
+                            Err(_) => {
+                                return format!(
+                                    "{tag} NO [UNAVAILABLE] Message body temporarily unavailable\r\n"
+                                )
+                            }
                         }
                     }
 
