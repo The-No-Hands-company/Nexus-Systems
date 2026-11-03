@@ -1,11 +1,27 @@
-use std::{fmt, pin::Pin};
+use std::{
+    fmt,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
+use aws_sdk_s3::{
+    config::{
+        interceptors::BeforeDeserializationInterceptorContextMut, ConfigBag, Intercept,
+        RuntimeComponents,
+    },
+    error::BoxError,
+    primitives::SdkBody,
+    types::ChecksumMode,
+};
+use axum::body::{Bytes, HttpBody};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use futures_util::{stream, Stream};
+use http_body::Frame;
 use nexus_mailstore::RecordedExternalBody;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tracing::instrument::WithSubscriber;
 
-pub const MAX_EXTERNAL_BODY_BYTES: usize = nexus_mailfed::wire::MAX_BODY_BYTES;
+pub const MAX_EXTERNAL_BODY_BYTES: usize = nexus_mailstore::MAX_EXTERNAL_BODY_BYTES;
 const STREAM_CHUNK_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, thiserror::Error)]
@@ -72,12 +88,103 @@ async fn verify_eof(reader: &mut Pin<Box<dyn AsyncRead + Send>>) -> Result<(), G
 
 pub struct S3BodyGateway {
     client: aws_sdk_s3::Client,
+    read_client: aws_sdk_s3::Client,
     bucket: String,
+}
+
+struct RejectTrailersBody(SdkBody);
+
+impl HttpBody for RejectTrailersBody {
+    type Data = Bytes;
+    type Error = BoxError;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        match Pin::new(&mut self.0).poll_frame(cx) {
+            Poll::Ready(Some(Ok(frame))) if frame.is_trailers() => {
+                Poll::Ready(Some(Err(GatewayError.into())))
+            }
+            other => other,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ChecksumEvidenceGuard;
+
+impl Intercept for ChecksumEvidenceGuard {
+    fn name(&self) -> &'static str {
+        "ChecksumEvidenceGuard"
+    }
+
+    fn modify_before_deserialization(
+        &self,
+        context: &mut BeforeDeserializationInterceptorContextMut<'_>,
+        _runtime: &RuntimeComponents,
+        _config: &mut ConfigBag,
+    ) -> Result<(), BoxError> {
+        let response = context.response_mut();
+        let mut checksum_count = 0;
+        let mut checksum_type_count = 0;
+        for (name, value) in response.headers().iter() {
+            if name == "x-amz-checksum-type" {
+                checksum_type_count += 1;
+                if checksum_type_count > 1 || value != "FULL_OBJECT" {
+                    return Err(GatewayError.into());
+                }
+            } else if name.starts_with("x-amz-checksum-") {
+                checksum_count += 1;
+                // The SDK validates only one of its supported checksum headers.
+                let expected_length: usize = match name {
+                    "x-amz-checksum-crc32" | "x-amz-checksum-crc32c" => 4,
+                    "x-amz-checksum-crc64nvme" => 8,
+                    "x-amz-checksum-sha1" => 20,
+                    "x-amz-checksum-sha256" => 32,
+                    _ => return Err(GatewayError.into()),
+                };
+                if checksum_count > 1
+                    || value.len() != expected_length.div_ceil(3) * 4
+                    || STANDARD
+                        .decode(value)
+                        .ok()
+                        .is_none_or(|decoded| decoded.len() != expected_length)
+                {
+                    return Err(GatewayError.into());
+                }
+            } else if matches!(
+                name,
+                "content-md5"
+                    | "digest"
+                    | "content-digest"
+                    | "repr-digest"
+                    | "trailer"
+                    | "x-amz-trailer"
+            ) {
+                return Err(GatewayError.into());
+            }
+        }
+        let body = std::mem::replace(response.body_mut(), SdkBody::taken());
+        *response.body_mut() = SdkBody::from_body_1_x(RejectTrailersBody(body));
+        Ok(())
+    }
 }
 
 impl S3BodyGateway {
     pub fn new(client: aws_sdk_s3::Client, bucket: String) -> Self {
-        Self { client, bucket }
+        // Client interceptors wrap trailers before the SDK's checksum interceptor.
+        let read_config = client
+            .config()
+            .to_builder()
+            .interceptor(ChecksumEvidenceGuard)
+            .build();
+        let read_client = aws_sdk_s3::Client::from_conf(read_config);
+        Self {
+            client,
+            read_client,
+            bucket,
+        }
     }
 
     /// Call only after authorizing a message and resolving its record in the store.
@@ -89,11 +196,12 @@ impl S3BodyGateway {
         async {
             validate_version(body)?;
             let response = self
-                .client
+                .read_client
                 .get_object()
                 .bucket(&self.bucket)
                 .key(&body.object_key)
                 .version_id(&body.version_id)
+                .checksum_mode(ChecksumMode::Enabled)
                 .send()
                 .await
                 .map_err(|_| GatewayError)?;

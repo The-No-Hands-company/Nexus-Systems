@@ -19,6 +19,9 @@ pub enum MailStoreError {
     #[error("external body reservation is required")]
     ExternalBodyReservationRequired,
 
+    #[error("external body exceeds supported size")]
+    ExternalBodyTooLarge,
+
     #[error("external body reservation does not exist")]
     ExternalBodyReservationMissing,
 

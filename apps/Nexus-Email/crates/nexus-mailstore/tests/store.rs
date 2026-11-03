@@ -148,6 +148,103 @@ async fn external_message_requires_evidence_and_resolves_recorded_version() {
 }
 
 #[tokio::test]
+async fn external_body_finalization_enforces_supported_size_boundary() {
+    isolation::with_store(|s| async move {
+        let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+        record_test_upload(&s, &reservation).await;
+        let from = Address::parse("sender@example.test").unwrap();
+        let thread = s.thread_for(None, &[], None).await.unwrap();
+        let raw = vec![b'x'; 26 * 1024 * 1024 + 1];
+        let error = s
+            .store_message(
+                &raw,
+                thread,
+                &from,
+                None,
+                None,
+                None,
+                &[],
+                Transport::Internal,
+                Some(&reservation),
+            )
+            .await
+            .expect_err("oversized external body was finalized");
+        let text = format!("{error} {error:?}");
+        for value in [
+            reservation.object_key.as_str(),
+            "test-version",
+            &reservation.generation_id.to_string(),
+        ] {
+            assert!(!text.contains(value));
+        }
+        let state: (String, Option<String>) = sqlx::query_as(
+            "SELECT lifecycle_state, uploaded_version_id FROM object_generations WHERE id = $1",
+        )
+        .bind(reservation.generation_id)
+        .fetch_one(s.pool())
+        .await
+        .unwrap();
+        assert_eq!(state, ("reserved".into(), Some("test-version".into())));
+        let queued: (i64,) =
+            sqlx::query_as("SELECT count(*) FROM object_deletion_queue WHERE generation_id = $1")
+                .bind(reservation.generation_id)
+                .fetch_one(s.pool())
+                .await
+                .unwrap();
+        assert_eq!(queued.0, 0);
+
+        let message = s
+            .store_message(
+                &raw[..26 * 1024 * 1024],
+                thread,
+                &from,
+                None,
+                None,
+                None,
+                &[],
+                Transport::Internal,
+                Some(&reservation),
+            )
+            .await
+            .expect("maximum supported size should be finalizable");
+        assert_eq!(
+            s.external_body_for_message(message).await.unwrap().version_id,
+            "test-version"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn submission_transaction_rejects_oversized_external_body() {
+    isolation::with_store(|s| async move {
+        let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+        record_test_upload(&s, &reservation).await;
+        let from = Address::parse("sender@example.test").unwrap();
+        let thread = s.thread_for(None, &[], None).await.unwrap();
+        let raw = vec![b'y'; 26 * 1024 * 1024 + 1];
+        let mut tx = s.pool().begin().await.unwrap();
+        let result = s
+            .store_submission_message_in_transaction(
+                &mut tx,
+                &raw,
+                thread,
+                &from,
+                None,
+                None,
+                None,
+                &[],
+                Transport::Internal,
+                Some(&reservation),
+            )
+            .await;
+        assert!(result.is_err(), "oversized submission was finalized");
+        tx.rollback().await.unwrap();
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn external_raw_message_error_never_exposes_object_evidence() {
     let s = store().await;
     let mailbox = s.create_node_mailbox("raw external body").await.unwrap();

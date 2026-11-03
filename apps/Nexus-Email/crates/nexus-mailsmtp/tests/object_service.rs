@@ -388,12 +388,21 @@ async fn missing_or_inline_body_is_not_found_but_invalid_evidence_is_unavailable
 }
 
 #[tokio::test]
-async fn oversized_storage_body_is_rejected_without_waiting_for_its_contents() {
+async fn oversized_recorded_body_is_unavailable_without_deletion_or_truncation() {
     isolation::with_store(|store| async move {
-        let (message, _, _) = recorded_message(&store).await;
+        let (message, key, generation) = recorded_message(&store).await;
+        sqlx::query("UPDATE messages SET size_bytes = $2 WHERE id = $1")
+            .bind(message)
+            .bind((26 * 1024 * 1024 + 1) as i64)
+            .execute(store.pool())
+            .await
+            .unwrap();
         let (gateway, _release, object_task) = delayed_storage(Some(26 * 1024 * 1024 + 1)).await;
-        let (url, service_task) =
-            serve(object_service::router(store, gateway, config()), None).await;
+        let (url, service_task) = serve(
+            object_service::router(store.clone(), gateway, config()),
+            None,
+        )
+        .await;
         let response = tokio::time::timeout(
             Duration::from_secs(3),
             reqwest::Client::new()
@@ -406,6 +415,26 @@ async fn oversized_storage_body_is_rejected_without_waiting_for_its_contents() {
         .unwrap();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert!(response.text().await.unwrap().is_empty());
+        let record = store.external_body_for_message(message).await.unwrap();
+        assert_eq!(record.object_key, key);
+        assert_eq!(record.generation_id.to_string(), generation);
+        assert_eq!(record.version_id, VERSION);
+        let state: (String, i64) = sqlx::query_as(
+            "SELECT g.lifecycle_state, m.size_bytes FROM messages m
+             JOIN object_generations g ON g.id = m.body_object_generation_id WHERE m.id = $1",
+        )
+        .bind(message)
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+        assert_eq!(state, ("referenced".into(), 26 * 1024 * 1024 + 1));
+        let queued: (i64,) =
+            sqlx::query_as("SELECT count(*) FROM object_deletion_queue WHERE generation_id = $1")
+                .bind(record.generation_id)
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(queued.0, 0);
         service_task.abort();
         object_task.abort();
     })
@@ -784,6 +813,44 @@ async fn checksum_failure_for_empty_body_returns_unavailable() {
             .unwrap();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert!(response.text().await.unwrap().is_empty());
+        service_task.abort();
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn composite_checksum_returns_sanitized_unavailable() {
+    isolation::with_store(|store| async move {
+        let (message, key, generation) = recorded_message(&store).await;
+        let app = Router::new().route(
+            "/mail/*key",
+            get(|| async {
+                (
+                    [
+                        ("x-amz-version-id", VERSION),
+                        ("x-amz-checksum-type", "COMPOSITE"),
+                        ("x-amz-checksum-crc32", "AQIDBA==-2"),
+                    ],
+                    BODY,
+                )
+            }),
+        );
+        let (gateway, object_task) = storage_for_app(app).await;
+        let (url, service_task) =
+            serve(object_service::router(store, gateway, config()), None).await;
+        let response = reqwest::Client::new()
+            .get(format!("{url}/internal/object/messages/{message}"))
+            .bearer_auth(API)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let error = response.text().await.unwrap();
+        assert!(error.is_empty());
+        for value in [&key, &generation, VERSION, BODY, API] {
+            assert!(!error.contains(value));
+        }
         service_task.abort();
         object_task.abort();
     })

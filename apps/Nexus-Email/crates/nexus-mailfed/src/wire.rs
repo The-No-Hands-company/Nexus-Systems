@@ -19,7 +19,7 @@ pub const MAX_SKEW_SECS: i64 = 300;
 
 /// Hard cap on a handoff body. Matches what the SMTP side will accept, with
 /// headroom for a DKIM-Signature header added at the origin.
-pub const MAX_BODY_BYTES: usize = 26 * 1024 * 1024;
+pub const MAX_BODY_BYTES: usize = nexus_mailstore::MAX_EXTERNAL_BODY_BYTES;
 
 /// A handoff about to be sent.
 #[derive(Debug, Clone)]

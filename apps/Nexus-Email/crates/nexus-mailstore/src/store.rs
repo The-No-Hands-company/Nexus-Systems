@@ -13,6 +13,9 @@ use crate::models::*;
 /// bytes that actually make mail large never enter the database.
 pub const INLINE_BODY_LIMIT: usize = 256 * 1024;
 
+/// Maximum size that can be finalized as an external message body.
+pub const MAX_EXTERNAL_BODY_BYTES: usize = 26 * 1024 * 1024;
+
 /// A leased deletion of an object that held a message body or attachments.
 ///
 /// The object key and immutable version stay in the durable queue until the
@@ -652,6 +655,9 @@ impl MailStore {
     ) -> Result<Uuid> {
         if raw.len() > INLINE_BODY_LIMIT && reservation.is_none() {
             return Err(MailStoreError::ExternalBodyReservationRequired);
+        }
+        if reservation.is_some() && raw.len() > MAX_EXTERNAL_BODY_BYTES {
+            return Err(MailStoreError::ExternalBodyTooLarge);
         }
 
         let hash = content_hash(raw);
