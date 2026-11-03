@@ -138,10 +138,14 @@ Callers must authorize access to the message before making this request: a
 service credential grants access to any recorded external message body.
 
 The service validates the storage-returned version and content length before
-responding. It permits bodies up to 25 MiB, streams them in chunks of at most
-64 KiB, and allows four concurrent reads; unknown or oversized lengths and
-capacity exhaustion return 503. If storage fails after response headers are
-sent, the response is truncated and clients must treat that as unavailable.
+responding. It permits bodies up to the shared federation limit of 26 MiB,
+streams them in chunks of at most 64 KiB, and allows four concurrent reads.
+Each read has a 30-second total deadline, including lookup, storage response,
+body, checksum verification, and downstream backpressure. Unknown or
+oversized lengths, exhausted capacity, and timeouts before response headers
+return 503. The final body chunk is withheld until storage EOF and checksum
+validation succeed. If a failure or timeout occurs after headers are sent,
+the response is incomplete and clients must treat it as unavailable.
 
 The listener is groundwork, not a production rollout: clients and the
 capability/migration-inventory startup fence are not yet implemented. Do not

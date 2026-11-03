@@ -5,7 +5,7 @@ use nexus_mailstore::RecordedExternalBody;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tracing::instrument::WithSubscriber;
 
-pub const MAX_EXTERNAL_BODY_BYTES: usize = 25 * 1024 * 1024;
+pub const MAX_EXTERNAL_BODY_BYTES: usize = nexus_mailfed::wire::MAX_BODY_BYTES;
 const STREAM_CHUNK_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, thiserror::Error)]
@@ -48,10 +48,26 @@ impl VersionedBody {
                 return Err(GatewayError);
             }
             body.length -= read;
+            if body.length == 0 {
+                verify_eof(&mut body.reader).await?;
+            }
             chunk.truncate(read);
             Ok(Some((chunk, body)))
         })
     }
+}
+
+async fn verify_eof(reader: &mut Pin<Box<dyn AsyncRead + Send>>) -> Result<(), GatewayError> {
+    let mut extra = [0; 1];
+    let read = reader
+        .read(&mut extra)
+        .with_subscriber(tracing::Dispatch::none())
+        .await
+        .map_err(|_| GatewayError)?;
+    if read != 0 {
+        return Err(GatewayError);
+    }
+    Ok(())
 }
 
 pub struct S3BodyGateway {
@@ -89,10 +105,12 @@ impl S3BodyGateway {
                 .and_then(|length| usize::try_from(length).ok())
                 .filter(|length| *length <= MAX_EXTERNAL_BODY_BYTES)
                 .ok_or(GatewayError)?;
-            Ok(VersionedBody {
-                reader: Box::pin(response.body.into_async_read()),
-                length,
-            })
+            let mut reader: Pin<Box<dyn AsyncRead + Send>> =
+                Box::pin(response.body.into_async_read());
+            if length == 0 {
+                verify_eof(&mut reader).await?;
+            }
+            Ok(VersionedBody { reader, length })
         }
         .with_subscriber(tracing::Dispatch::none())
         .await

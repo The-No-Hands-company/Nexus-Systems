@@ -1,6 +1,11 @@
 //! Private, message-ID-only access to recorded external message bodies.
 
-use std::{fmt, net::SocketAddr, sync::Arc};
+use std::{
+    fmt,
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use axum::{
     body::{to_bytes, Body},
@@ -11,14 +16,21 @@ use axum::{
     routing::get,
     Extension, Router,
 };
-use futures_util::StreamExt;
+use futures_util::{stream, StreamExt};
 use nexus_mailstore::{MailStore, MailStoreError};
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
-use tokio::{net::TcpListener, sync::Semaphore};
+use tokio::{
+    net::TcpListener,
+    sync::{mpsc, Semaphore},
+    time::{timeout_at, Instant},
+};
 use uuid::Uuid;
 
-use crate::object_gateway::S3BodyGateway;
+use crate::object_gateway::{GatewayError, S3BodyGateway};
+
+const READ_DEADLINE: Duration = Duration::from_secs(30);
+type PendingChunk = Arc<Mutex<Option<Vec<u8>>>>;
 
 #[derive(Clone)]
 pub struct SecretString(String);
@@ -204,26 +216,85 @@ async fn body(
     let Ok(permit) = service.active_reads.clone().try_acquire_owned() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
-    let recorded = match service.store.external_body_for_message(message_id).await {
-        Ok(recorded) => recorded,
-        Err(MailStoreError::ExternalBodyMissing) => return StatusCode::NOT_FOUND.into_response(),
+    let deadline = Instant::now() + READ_DEADLINE;
+    let result = timeout_at(deadline, async {
+        let recorded = match service.store.external_body_for_message(message_id).await {
+            Ok(recorded) => recorded,
+            Err(MailStoreError::ExternalBodyMissing) => return Err(StatusCode::NOT_FOUND),
+            Err(_) => return Err(StatusCode::SERVICE_UNAVAILABLE),
+        };
+        service
+            .gateway
+            .read_version(&recorded)
+            .await
+            .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)
+    })
+    .await;
+    let body = match result {
+        Ok(Ok(body)) => body,
+        Ok(Err(status)) => return status.into_response(),
         Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
-    match service.gateway.read_version(&recorded).await {
-        Ok(body) => {
-            let length = body.len();
-            let stream = body.into_stream().map(move |item| {
-                let _ = &permit;
-                item
-            });
-            Response::builder()
-                .header(header::CONTENT_TYPE, "application/octet-stream")
-                .header(header::CONTENT_LENGTH, length)
-                .body(Body::from_stream(stream))
-                .expect("static response headers are valid")
+    let length = body.len();
+    let (sender, receiver) = mpsc::channel(1);
+    let pending: Arc<Mutex<Option<PendingChunk>>> = Arc::new(Mutex::new(None));
+    let producer_pending = Arc::clone(&pending);
+    tokio::spawn(async move {
+        let _permit = permit;
+        let pump = async {
+            let stream = body.into_stream();
+            futures_util::pin_mut!(stream);
+            loop {
+                let slot = tokio::select! {
+                    _ = sender.closed() => break,
+                    slot = sender.reserve() => match slot {
+                        Ok(slot) => slot,
+                        Err(_) => break,
+                    },
+                };
+                let item = tokio::select! {
+                    _ = sender.closed() => break,
+                    item = stream.next() => item,
+                };
+                match item {
+                    Some(Ok(chunk)) => {
+                        let chunk = Arc::new(Mutex::new(Some(chunk)));
+                        *producer_pending.lock().expect("body buffer lock") = Some(chunk.clone());
+                        slot.send(Ok(chunk));
+                    }
+                    Some(Err(error)) => {
+                        slot.send(Err(error));
+                        break;
+                    }
+                    None => break,
+                }
+            }
+        };
+        let timed_out = timeout_at(deadline, pump).await.is_err();
+        if timed_out {
+            // Expired responses must not retain an unread body chunk.
+            if let Some(chunk) = producer_pending.lock().expect("body buffer lock").take() {
+                chunk.lock().expect("body chunk lock").take();
+            }
+            let _ = sender.try_send(Err(GatewayError));
         }
-        Err(_) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
-    }
+    });
+    let stream = stream::unfold(receiver, |mut receiver| async move {
+        let item = receiver.recv().await?;
+        let result = item.and_then(|chunk| {
+            chunk
+                .lock()
+                .expect("body chunk lock")
+                .take()
+                .ok_or(GatewayError)
+        });
+        Some((result, receiver))
+    });
+    Response::builder()
+        .header(header::CONTENT_TYPE, "application/octet-stream")
+        .header(header::CONTENT_LENGTH, length)
+        .body(Body::from_stream(stream))
+        .expect("static response headers are valid")
 }
 
 #[cfg(test)]

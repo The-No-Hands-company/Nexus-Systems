@@ -14,6 +14,7 @@ use axum::{
     routing::get,
     Extension, Router,
 };
+use futures_util::StreamExt;
 use nexus_mailsmtp::{
     object_gateway::S3BodyGateway,
     object_service::{self, ObjectServiceConfig},
@@ -23,7 +24,7 @@ use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::TcpListener,
     process::Command,
-    sync::watch,
+    sync::{mpsc, watch},
     task::JoinHandle,
 };
 use tracing::instrument::WithSubscriber;
@@ -66,6 +67,66 @@ async fn object_server() -> (Arc<S3BodyGateway>, JoinHandle<()>) {
             }
         }),
     );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let shared = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new("us-east-1"))
+        .credentials_provider(aws_credential_types::Credentials::new(
+            "test", "test", None, None, "test",
+        ))
+        .endpoint_url(format!("http://{address}"))
+        .load()
+        .await;
+    let s3 = aws_sdk_s3::config::Builder::from(&shared)
+        .force_path_style(true)
+        .build();
+    (
+        Arc::new(S3BodyGateway::new(
+            aws_sdk_s3::Client::from_conf(s3),
+            "mail".into(),
+        )),
+        task,
+    )
+}
+
+async fn checksum_storage(body: &'static str) -> (Arc<S3BodyGateway>, JoinHandle<()>) {
+    let app = Router::new().route(
+        "/mail/*key",
+        get(move || async move {
+            (
+                [
+                    ("x-amz-version-id", VERSION),
+                    ("x-amz-checksum-crc32", "AQIDBA=="),
+                ],
+                body,
+            )
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let shared = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new("us-east-1"))
+        .credentials_provider(aws_credential_types::Credentials::new(
+            "test", "test", None, None, "test",
+        ))
+        .endpoint_url(format!("http://{address}"))
+        .load()
+        .await;
+    let s3 = aws_sdk_s3::config::Builder::from(&shared)
+        .force_path_style(true)
+        .build();
+    (
+        Arc::new(S3BodyGateway::new(
+            aws_sdk_s3::Client::from_conf(s3),
+            "mail".into(),
+        )),
+        task,
+    )
+}
+
+async fn storage_for_app(app: Router) -> (Arc<S3BodyGateway>, JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -144,6 +205,7 @@ async fn delayed_storage(
         .await;
     let config = aws_sdk_s3::config::Builder::from(&shared)
         .force_path_style(true)
+        .stalled_stream_protection(aws_sdk_s3::config::StalledStreamProtectionConfig::disabled())
         .build();
     (
         Arc::new(S3BodyGateway::new(
@@ -329,7 +391,7 @@ async fn missing_or_inline_body_is_not_found_but_invalid_evidence_is_unavailable
 async fn oversized_storage_body_is_rejected_without_waiting_for_its_contents() {
     isolation::with_store(|store| async move {
         let (message, _, _) = recorded_message(&store).await;
-        let (gateway, _release, object_task) = delayed_storage(Some(25 * 1024 * 1024 + 1)).await;
+        let (gateway, _release, object_task) = delayed_storage(Some(26 * 1024 * 1024 + 1)).await;
         let (url, service_task) =
             serve(object_service::router(store, gateway, config()), None).await;
         let response = tokio::time::timeout(
@@ -401,6 +463,203 @@ async fn active_streams_are_bounded_and_hold_capacity_until_completion() {
 }
 
 #[tokio::test]
+async fn stalled_storage_headers_timeout_and_release_all_capacity() {
+    isolation::with_store(|store| async move {
+        let (message, key, generation) = recorded_message(&store).await;
+        let (arrived, mut arrivals) = mpsc::unbounded_channel();
+        let (release, receiver) = watch::channel(false);
+        let app = Router::new().route(
+            "/mail/*key",
+            get(move || {
+                let arrived = arrived.clone();
+                let mut receiver = receiver.clone();
+                async move {
+                    arrived.send(()).unwrap();
+                    while !*receiver.borrow_and_update() {
+                        if receiver.changed().await.is_err() {
+                            break;
+                        }
+                    }
+                    ([("x-amz-version-id", VERSION)], "x")
+                }
+            }),
+        );
+        let (gateway, object_task) = storage_for_app(app).await;
+        let (url, service_task) =
+            serve(object_service::router(store, gateway, config()), None).await;
+        let client = reqwest::Client::new();
+        let path = format!("{url}/internal/object/messages/{message}");
+        let mut requests = Vec::new();
+        for _ in 0..4 {
+            let request = client.get(&path).bearer_auth(API);
+            requests.push(tokio::spawn(async move { request.send().await.unwrap() }));
+        }
+        for _ in 0..4 {
+            tokio::time::timeout(Duration::from_secs(5), arrivals.recv())
+                .await
+                .expect("request did not reach storage")
+                .expect("storage stopped");
+        }
+        let full = client.get(&path).bearer_auth(API).send().await.unwrap();
+        assert_eq!(full.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let responses = tokio::time::timeout(
+            Duration::from_secs(35),
+            futures_util::future::join_all(requests),
+        )
+        .await
+        .expect("stalled requests retained capacity indefinitely");
+        for response in responses {
+            let response = response.unwrap();
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+            let text = response.text().await.unwrap();
+            assert!(text.is_empty());
+            for value in [&key, &generation, VERSION, BODY, API] {
+                assert!(!text.contains(value));
+            }
+        }
+        release.send(true).unwrap();
+        let response = tokio::time::timeout(
+            Duration::from_secs(5),
+            client.get(&path).bearer_auth(API).send(),
+        )
+        .await
+        .expect("capacity was not released")
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.bytes().await.unwrap(), "x");
+        service_task.abort();
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn stalled_storage_body_times_out_as_incomplete() {
+    isolation::with_store(|store| async move {
+        let (message, key, generation) = recorded_message(&store).await;
+        let (gateway, _release, object_task) = delayed_storage(Some(1)).await;
+        let (url, service_task) =
+            serve(object_service::router(store, gateway, config()), None).await;
+        let response = reqwest::Client::new()
+            .get(format!("{url}/internal/object/messages/{message}"))
+            .bearer_auth(API)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let result = tokio::time::timeout(Duration::from_secs(35), response.bytes())
+            .await
+            .expect("stalled body was not timed out");
+        let error = result
+            .expect_err("stalled body was reported complete")
+            .to_string();
+        for value in [&key, &generation, VERSION, BODY, API] {
+            assert!(!error.contains(value));
+        }
+        service_task.abort();
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn unconsumed_responses_do_not_hold_read_capacity_after_deadline() {
+    isolation::with_store(|store| async move {
+        let (message, _, _) = recorded_message(&store).await;
+        let app = Router::new().route(
+            "/mail/*key",
+            get(|| async {
+                let chunks = futures_util::stream::iter(
+                    (0..416).map(|_| Ok::<_, io::Error>(vec![7u8; 65536])),
+                );
+                (
+                    [
+                        ("x-amz-version-id", VERSION),
+                        ("content-length", "27262976"),
+                    ],
+                    axum::body::Body::from_stream(chunks),
+                )
+            }),
+        );
+        let (gateway, object_task) = storage_for_app(app).await;
+        let (url, service_task) =
+            serve(object_service::router(store, gateway, config()), None).await;
+        let client = reqwest::Client::new();
+        let path = format!("{url}/internal/object/messages/{message}");
+        let mut active = Vec::new();
+        for _ in 0..4 {
+            let response = client.get(&path).bearer_auth(API).send().await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            active.push(response);
+        }
+        let full = client.get(&path).bearer_auth(API).send().await.unwrap();
+        assert_eq!(full.status(), StatusCode::SERVICE_UNAVAILABLE);
+        tokio::time::sleep(Duration::from_secs(32)).await;
+        let response = client.get(&path).bearer_auth(API).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        drop(response);
+        for response in active {
+            let result = tokio::time::timeout(Duration::from_secs(5), response.bytes())
+                .await
+                .expect("expired response did not terminate");
+            assert!(result.is_err(), "expired response was reported complete");
+        }
+        service_task.abort();
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_large_streams_preserve_every_byte_in_order() {
+    isolation::with_store(|store| async move {
+        let (message, _, _) = recorded_message(&store).await;
+        let app = Router::new().route(
+            "/mail/*key",
+            get(|| async {
+                let chunks = futures_util::stream::iter(
+                    (0..256).map(|i| Ok::<_, io::Error>(vec![(i % 251) as u8; 65536])),
+                );
+                (
+                    [
+                        ("x-amz-version-id", VERSION),
+                        ("content-length", "16777216"),
+                    ],
+                    axum::body::Body::from_stream(chunks),
+                )
+            }),
+        );
+        let (gateway, object_task) = storage_for_app(app).await;
+        let (url, service_task) =
+            serve(object_service::router(store, gateway, config()), None).await;
+        let client = reqwest::Client::new();
+        let path = format!("{url}/internal/object/messages/{message}");
+        let mut tasks = Vec::new();
+        for _ in 0..4 {
+            let request = client.get(&path).bearer_auth(API);
+            tasks.push(tokio::spawn(async move {
+                let mut response = request.send().await.unwrap();
+                assert_eq!(response.status(), StatusCode::OK);
+                let mut offset = 0usize;
+                while let Some(chunk) = response.chunk().await.unwrap() {
+                    for byte in chunk {
+                        assert_eq!(byte, ((offset / 65536) % 251) as u8);
+                        offset += 1;
+                    }
+                }
+                assert_eq!(offset, 256 * 65536);
+            }));
+        }
+        for task in tasks {
+            task.await.unwrap();
+        }
+        service_task.abort();
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn unknown_storage_body_size_is_rejected_without_buffering() {
     isolation::with_store(|store| async move {
         let (message, _, _) = recorded_message(&store).await;
@@ -417,6 +676,112 @@ async fn unknown_storage_body_size_is_rejected_without_buffering() {
         .await
         .expect("unknown-size response was buffered")
         .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert!(response.text().await.unwrap().is_empty());
+        service_task.abort();
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn checksum_failure_after_body_is_detectably_incomplete() {
+    isolation::with_store(|store| async move {
+        let (message, key, generation) = recorded_message(&store).await;
+        let (gateway, object_task) = checksum_storage(BODY).await;
+        let (url, service_task) =
+            serve(object_service::router(store, gateway, config()), None).await;
+        let response = reqwest::Client::new()
+            .get(format!("{url}/internal/object/messages/{message}"))
+            .bearer_auth(API)
+            .send()
+            .await;
+        let error = match response {
+            Ok(response) => {
+                assert_eq!(response.status(), StatusCode::OK);
+                let result = response.bytes().await;
+                assert!(result.is_err(), "corrupt body was reported complete");
+                result.unwrap_err().to_string()
+            }
+            Err(error) => error.to_string(),
+        };
+        for value in [&key, &generation, VERSION, BODY, API] {
+            assert!(!error.contains(value));
+        }
+        service_task.abort();
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn checksum_failure_after_headers_truncates_multi_chunk_response() {
+    isolation::with_store(|store| async move {
+        let (message, key, generation) = recorded_message(&store).await;
+        let (release, receiver) = watch::channel(false);
+        let app = Router::new().route(
+            "/mail/*key",
+            get(move || {
+                let mut receiver = receiver.clone();
+                async move {
+                    let first =
+                        futures_util::stream::once(async { Ok::<_, io::Error>(vec![b'x'; 65536]) });
+                    let last = futures_util::stream::once(async move {
+                        while !*receiver.borrow_and_update() {
+                            if receiver.changed().await.is_err() {
+                                return Err(io::Error::other("storage stopped"));
+                            }
+                        }
+                        Ok(vec![b'y'])
+                    });
+                    (
+                        [
+                            ("x-amz-version-id", VERSION),
+                            ("x-amz-checksum-crc32", "AQIDBA=="),
+                            ("content-length", "65537"),
+                        ],
+                        axum::body::Body::from_stream(first.chain(last)),
+                    )
+                }
+            }),
+        );
+        let (gateway, object_task) = storage_for_app(app).await;
+        let (url, service_task) =
+            serve(object_service::router(store, gateway, config()), None).await;
+        let mut response = reqwest::Client::new()
+            .get(format!("{url}/internal/object/messages/{message}"))
+            .bearer_auth(API)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let first = response.chunk().await.unwrap().unwrap();
+        assert!(!first.is_empty());
+        assert!(first.iter().all(|byte| *byte == b'x'));
+        release.send(true).unwrap();
+        let error = response.bytes().await.unwrap_err().to_string();
+        for value in [&key, &generation, VERSION, BODY, API] {
+            assert!(!error.contains(value));
+        }
+        service_task.abort();
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn checksum_failure_for_empty_body_returns_unavailable() {
+    isolation::with_store(|store| async move {
+        let (message, _, _) = recorded_message(&store).await;
+        let (gateway, object_task) = checksum_storage("").await;
+        let (url, service_task) =
+            serve(object_service::router(store, gateway, config()), None).await;
+        let response = reqwest::Client::new()
+            .get(format!("{url}/internal/object/messages/{message}"))
+            .bearer_auth(API)
+            .send()
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert!(response.text().await.unwrap().is_empty());
         service_task.abort();

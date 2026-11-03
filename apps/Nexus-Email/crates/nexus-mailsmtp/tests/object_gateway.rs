@@ -90,13 +90,60 @@ async fn gateway_rejects_missing_or_mismatched_response_version() {
 }
 
 #[tokio::test]
+async fn gateway_checks_storage_checksum_after_final_body_chunk() {
+    let app = Router::new().route(
+        "/mail/key-canary",
+        get(|| async {
+            (
+                [
+                    ("x-amz-version-id", "v1"),
+                    ("x-amz-checksum-crc32", "AQIDBA=="),
+                ],
+                "checksum-body-canary",
+            )
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let shared = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new("us-east-1"))
+        .credentials_provider(aws_credential_types::Credentials::new(
+            "test", "test", None, None, "test",
+        ))
+        .endpoint_url(format!("http://{address}"))
+        .load()
+        .await;
+    let config = aws_sdk_s3::config::Builder::from(&shared)
+        .force_path_style(true)
+        .build();
+    let gateway = S3BodyGateway::new(aws_sdk_s3::Client::from_conf(config), "mail".into());
+    let record = RecordedExternalBody {
+        generation_id: Uuid::new_v4(),
+        object_key: "key-canary".into(),
+        version_id: "v1".into(),
+    };
+    let body = gateway.read_version(&record).await.unwrap();
+    let result =
+        axum::body::to_bytes(axum::body::Body::from_stream(body.into_stream()), 1024).await;
+    assert!(
+        result.is_err(),
+        "checksum mismatch must not complete successfully"
+    );
+    let error = result.unwrap_err().to_string();
+    assert!(!error.contains("checksum-body-canary"));
+    assert!(!error.contains("key-canary"));
+    server.abort();
+}
+
+#[tokio::test]
 async fn gateway_streams_a_maximum_size_body_in_bounded_chunks() {
     let app = Router::new().route(
         "/mail/key",
         get(|| async {
-            let chunks = stream::iter((0..400).map(|_| Ok::<_, std::io::Error>(vec![7u8; 65536])));
+            let chunks = stream::iter((0..416).map(|_| Ok::<_, std::io::Error>(vec![7u8; 65536])));
             (
-                [("x-amz-version-id", "v1"), ("content-length", "26214400")],
+                [("x-amz-version-id", "v1"), ("content-length", "27262976")],
                 axum::body::Body::from_stream(chunks),
             )
         }),
@@ -122,7 +169,7 @@ async fn gateway_streams_a_maximum_size_body_in_bounded_chunks() {
         version_id: "v1".into(),
     };
     let body = gateway.read_version(&record).await.unwrap();
-    assert_eq!(body.len(), 25 * 1024 * 1024);
+    assert_eq!(body.len(), 26 * 1024 * 1024);
     let mut stream = Box::pin(body.into_stream());
     let mut total = 0;
     while let Some(chunk) = stream.next().await {
@@ -131,7 +178,7 @@ async fn gateway_streams_a_maximum_size_body_in_bounded_chunks() {
         assert!(chunk.iter().all(|byte| *byte == 7));
         total += chunk.len();
     }
-    assert_eq!(total, 25 * 1024 * 1024);
+    assert_eq!(total, 26 * 1024 * 1024);
     server.abort();
 }
 
