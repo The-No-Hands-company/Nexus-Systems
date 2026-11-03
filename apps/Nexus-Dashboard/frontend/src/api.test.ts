@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { listApps, me, platformApiOrigin } from "./api";
+import { ApiError, listApps, me, moveMailMessage, platformApiOrigin } from "./api";
 
 const mockFetch = vi.fn<typeof fetch>();
 
@@ -8,6 +8,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
   mockFetch.mockReset();
 });
 
@@ -18,7 +19,7 @@ describe("platformApiOrigin", () => {
 });
 
 describe("me()", () => {
-  it("calls /api/v1/me with credentials include", async () => {
+  it("calls /ipa/v1/me with credentials include", async () => {
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ user: { id: "u1", username: "alice", email: "a@b.com", role: "member" } }), {
         status: 200,
@@ -29,9 +30,10 @@ describe("me()", () => {
     const user = await me();
 
     expect(mockFetch).toHaveBeenCalledOnce();
-    const [url, init] = mockFetch.mock.calls[0];
-    expect(url).toBe("/api/v1/me");
-    expect((init as RequestInit).credentials).toBe("include");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/ipa/v1/me",
+      expect.objectContaining({ credentials: "include" }),
+    );
     expect(user).toMatchObject({ id: "u1", username: "alice" });
   });
 
@@ -66,7 +68,7 @@ describe("listApps()", () => {
     visibility: "default" as const,
   };
 
-  it("calls /api/v1/apps with credentials include", async () => {
+  it("calls /ipa/v1/apps with credentials include", async () => {
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ apps: [releaseApp] }), {
         status: 200,
@@ -77,9 +79,23 @@ describe("listApps()", () => {
     await listApps();
 
     expect(mockFetch).toHaveBeenCalledOnce();
-    const [url, init] = mockFetch.mock.calls[0];
-    expect(url).toBe("/api/v1/apps");
-    expect((init as RequestInit).credentials).toBe("include");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/ipa/v1/apps",
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  describe("moveMailMessage()", () => {
+    it("uses the same-origin Dashboard Mail proxy", async () => {
+      mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+      await moveMailMessage("m-1", "trash");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/ipa/mail/messages/m-1/folder",
+        expect.objectContaining({ credentials: "same-origin", method: "POST" }),
+      );
+    });
   });
 
   it("returns normalized app entries", async () => {
@@ -96,5 +112,25 @@ describe("listApps()", () => {
     const draw = apps.find((a) => a.id === "nexus-draw");
     expect(draw).toBeDefined();
     expect(draw!.path).toBe("/draw");
+  });
+
+  it("fails with timeout when the platform facade does not answer in time", async () => {
+    vi.useFakeTimers();
+    mockFetch.mockImplementationOnce(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("signal timed out", "AbortError"));
+          });
+        }),
+    );
+
+    const pending = listApps();
+    const rejection = expect(pending).rejects.toEqual(
+      new ApiError("timeout", "The server took too long to respond. Please try again."),
+    );
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    await rejection;
   });
 });

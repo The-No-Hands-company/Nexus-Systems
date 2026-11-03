@@ -99,4 +99,88 @@ describe("mail proxy", () => {
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: "mail_unavailable" });
   });
+
+  it("returns a correlation id and logs only safe mail proxy diagnostics", async () => {
+    const originalInfo = console.info;
+    const calls: unknown[][] = [];
+    console.info = (...args: unknown[]) => {
+      calls.push(args);
+    };
+
+    try {
+      const res = await handleRequest(
+        new Request("http://app.test/ipa/mail/search?q=invoice", {
+          headers: {
+            cookie: "nexus_session=abc123",
+            authorization: "Bearer secret",
+            "x-nexus-subject": "usr-victim",
+          },
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      const requestId = res.headers.get("x-request-id");
+      expect(typeof requestId).toBe("string");
+      expect(requestId?.length).toBeGreaterThan(0);
+
+      const logCall = calls.find((args) => args[0] === "[mail-proxy]");
+      expect(logCall).toBeDefined();
+      expect(logCall?.[1]).toEqual({
+        requestId,
+        method: "GET",
+        status: 200,
+      });
+
+      const logPayload = JSON.stringify(logCall?.[1] ?? {});
+      for (const forbidden of [
+        "cookie",
+        "authorization",
+        "x-nexus-subject",
+        "messageId",
+        "message_id",
+        "invoice",
+        "body",
+        "usr-alice",
+      ]) {
+        expect(logPayload).not.toContain(forbidden);
+      }
+    } finally {
+      console.info = originalInfo;
+    }
+  });
+
+  it("correlates rate-limited Mail responses", async () => {
+    const originalInfo = console.info;
+    const calls: unknown[][] = [];
+    console.info = (...args: unknown[]) => {
+      calls.push(args);
+    };
+
+    try {
+      let response: Response | undefined;
+      for (let attempt = 0; attempt < 200; attempt += 1) {
+        response = await handleRequest(
+          new Request("http://app.test/ipa/mail/folders", {
+            headers: { "x-nexus-client-tag": "mail-rate-limit-test" },
+          }),
+        );
+        if (response.status === 429) break;
+      }
+
+      expect(response?.status).toBe(429);
+      const requestId = response?.headers.get("x-request-id");
+      expect(typeof requestId).toBe("string");
+
+      const logCall = calls.find(
+        (args) => args[0] === "[mail-proxy]" && (args[1] as { status?: number }).status === 429,
+      );
+      expect(logCall?.[1]).toEqual({
+        requestId,
+        method: "GET",
+        status: 429,
+      });
+    } finally {
+      console.info = originalInfo;
+    }
+  });
 });

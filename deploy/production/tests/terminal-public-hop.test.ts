@@ -53,7 +53,7 @@ function transcript(messages: MessageEvent[]): string {
 
 function openPublicTerminal(proxyPort: number): Client {
   const socket = new WebSocket(
-    `ws://127.0.0.1:${proxyPort}/api/terminal/attach?cols=100&rows=30`,
+    `ws://127.0.0.1:${proxyPort}/ipa/terminal/attach?cols=100&rows=30`,
     {
       headers: {
         host: "app.tnhc.dev",

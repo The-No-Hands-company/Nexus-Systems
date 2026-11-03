@@ -18,6 +18,9 @@ export type NexusApiContract = {
   routes: readonly ApiContractRoute[];
 };
 
+const PRIVATE_API_PREFIX = "/api/v1";
+export const PUBLIC_API_PREFIX = "/ipa/v1";
+
 const ROUTES: readonly ApiContractRoute[] = [
   {
     method: "GET",
@@ -190,16 +193,23 @@ const ROUTES: readonly ApiContractRoute[] = [
   },
 ];
 
+function asPublicPath(path: string): string {
+  return path.startsWith(PRIVATE_API_PREFIX)
+    ? `${PUBLIC_API_PREFIX}${path.slice(PRIVATE_API_PREFIX.length)}`
+    : path;
+}
+
 export function buildApiContract(baseUrl: string): NexusApiContract {
+  const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, "");
   return {
     protocol: "nexus-api/1",
     service: {
       id: "nexus-api",
       name: "Nexus API",
       version: process.env.NEXUS_API_VERSION?.trim() || "1.0.0",
-      baseUrl,
+      baseUrl: `${normalizedBaseUrl}${PUBLIC_API_PREFIX}`,
       auth: "Bearer token or hosted session",
     },
-    routes: ROUTES,
+    routes: ROUTES.map((route) => ({ ...route, path: asPublicPath(route.path) })),
   };
 }

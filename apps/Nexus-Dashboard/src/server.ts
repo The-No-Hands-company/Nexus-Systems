@@ -169,17 +169,28 @@ function terminalUrl(): string {
   return (process.env.NEXUS_TERMINAL_URL || "http://127.0.0.1:3110").replace(/\/+$/, "");
 }
 
+function withMailDiagnostics(req: Request, requestId: string, response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set("x-request-id", requestId);
+  console.info("[mail-proxy]", { requestId, method: req.method, status: response.status });
+  return new Response(response.body, { status: response.status, headers });
+}
+
 async function proxyToMail(req: Request, rest: string, search: string): Promise<Response> {
+  const requestId = crypto.randomUUID();
+  const respond = (response: Response): Response => withMailDiagnostics(req, requestId, response);
   const platform = platformApiUrl();
   const who = platform ? null : await callerIdentity(req);
-  if (!platform && !who) return Response.json({ error: "not_authenticated" }, { status: 401 });
+  if (!platform && !who) {
+    return respond(Response.json({ error: "not_authenticated" }, { status: 401 }));
+  }
 
   // Only the mail API's own surface, and only the methods it serves.
   if (!/^(folders|messages|search|threads)(\/|$)/.test(rest)) {
-    return Response.json({ error: "not_found" }, { status: 404 });
+    return respond(Response.json({ error: "not_found" }, { status: 404 }));
   }
   if (req.method !== "GET" && req.method !== "POST") {
-    return Response.json({ error: "method_not_allowed" }, { status: 405 });
+    return respond(Response.json({ error: "method_not_allowed" }, { status: 405 }));
   }
 
   const headers = platform
@@ -218,10 +229,10 @@ async function proxyToMail(req: Request, rest: string, search: string): Promise<
       if (v) passthrough.set(h, v);
     }
     if (!passthrough.has("content-type")) passthrough.set("content-type", "application/json");
-    return new Response(res.body, { status: res.status, headers: passthrough });
+    return respond(new Response(res.body, { status: res.status, headers: passthrough }));
   } catch {
     // Mail being down must not take the shell page with it.
-    return Response.json({ error: "mail_unavailable" }, { status: 503 });
+    return respond(Response.json({ error: "mail_unavailable" }, { status: 503 }));
   }
 }
 const CLOUD_ALLOWLIST: Record<string, { upstream: string; adminOnly?: boolean }> = {
@@ -461,14 +472,17 @@ export async function handleRequest(
   req: Request,
   server?: UpgradeServer,
 ): Promise<Response | undefined> {
+  const url = new URL(req.url);
+  const path = url.pathname;
+
   // Apply rate limiting to all API routes
   const rateLimitResult = checkRateLimit(req, { maxTokens: 100, refillRatePerSecond: 20 });
   if (!rateLimitResult.allowed) {
-    return createRateLimitResponse(rateLimitResult);
+    const response = createRateLimitResponse(rateLimitResult);
+    return path.startsWith(MAIL_PREFIX)
+      ? withMailDiagnostics(req, crypto.randomUUID(), response)
+      : response;
   }
-
-  const url = new URL(req.url);
-  const path = url.pathname;
 
   if (path === "/ipa/terminal/attach") {
     const decision = await authorizeTerminalUpgrade(req);

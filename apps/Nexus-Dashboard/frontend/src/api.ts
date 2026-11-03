@@ -14,7 +14,7 @@ import { normalizeCatalogEntry } from "./shell/catalog";
 
 export function platformApiOrigin(): string {
   // Same-origin by default: the dashboard server serves the platform facade
-  // (/api/v1/me, /api/v1/apps) from this very host, so relative URLs reach it
+  // (/ipa/v1/me, /ipa/v1/apps) from this very host, so relative URLs reach it
   // and carry the session cookie without CORS. Set VITE_NEXUS_API_URL only once
   // a dedicated api.<domain> host actually exists to point these calls at.
   return (
@@ -23,17 +23,30 @@ export function platformApiOrigin(): string {
   ).replace(/\/+$/, "");
 }
 
+const BROWSER_REQUEST_TIMEOUT_MS = 10_000;
+
 async function platformRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${platformApiOrigin()}${path}`;
+  const timeoutController = new AbortController();
+  const timeout = setTimeout(() => timeoutController.abort(), BROWSER_REQUEST_TIMEOUT_MS);
+  const signal = init?.signal
+    ? AbortSignal.any([init.signal, timeoutController.signal])
+    : timeoutController.signal;
   let res: Response;
   try {
     res = await fetch(url, {
       ...init,
       credentials: "include",
       headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+      signal,
     });
   } catch {
+    if (timeoutController.signal.aborted && !init?.signal?.aborted) {
+      throw new ApiError("timeout", "The server took too long to respond. Please try again.");
+    }
     throw new ApiError("network", "Could not reach the server. Check your connection and try again.");
+  } finally {
+    clearTimeout(timeout);
   }
   const body = await res.json().catch(() => ({}) as Record<string, unknown>);
   if (!res.ok) {
@@ -122,7 +135,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function me(): Promise<Me | null> {
   try {
-    const { user } = await platformRequest<{ user: Me }>("/api/v1/me");
+    const { user } = await platformRequest<{ user: Me }>("/ipa/v1/me");
     return user;
   } catch {
     // Not signed in is the common case here, not an error worth surfacing.
@@ -256,7 +269,7 @@ const SHELL_NATIVE_APPS: AppEntry[] = [
 ];
 
 export async function listApps(): Promise<AppEntry[]> {
-  const { apps } = await platformRequest<{ apps: WireAppEntry[] }>("/api/v1/apps");
+  const { apps } = await platformRequest<{ apps: WireAppEntry[] }>("/ipa/v1/apps");
   // The catalog helper is the single frontend normalization boundary. Older
   // Dashboard servers may omit every placement field, so components must not
   // inspect the wire response directly.
@@ -702,43 +715,43 @@ export type MailMessage = {
 export type SendOutcome = { recipient: string; status: string; reason: string | null };
 
 export function listMailFolders() {
-  return platformRequest<MailFolder[]>("/ipa/mail/folders");
+  return request<MailFolder[]>("/ipa/mail/folders");
 }
 
 export function listMailMessages(folderId: string) {
-  return platformRequest<MailSummary[]>(`/ipa/mail/folders/${encodeURIComponent(folderId)}/messages`);
+  return request<MailSummary[]>(`/ipa/mail/folders/${encodeURIComponent(folderId)}/messages`);
 }
 
 export function readMailMessage(id: string) {
-  return platformRequest<MailMessage>(`/ipa/mail/messages/${encodeURIComponent(id)}`);
+  return request<MailMessage>(`/ipa/mail/messages/${encodeURIComponent(id)}`);
 }
 
 export function markMailSeen(id: string, seen: boolean) {
-  return platformRequest<void>(`/ipa/mail/messages/${encodeURIComponent(id)}/seen`, {
+  return request<void>(`/ipa/mail/messages/${encodeURIComponent(id)}/seen`, {
     method: "POST",
     body: JSON.stringify({ seen }),
   });
 }
 
 export function moveMailMessage(id: string, folder: "inbox" | "trash" | "junk") {
-  return platformRequest<void>(`/ipa/mail/messages/${encodeURIComponent(id)}/folder`, {
+  return request<void>(`/ipa/mail/messages/${encodeURIComponent(id)}/folder`, {
     method: "POST",
     body: JSON.stringify({ folder }),
   });
 }
 
 export function threadMessages(threadId: string) {
-  return platformRequest<MailSummary[]>(`/ipa/mail/threads/${encodeURIComponent(threadId)}/messages`);
+  return request<MailSummary[]>(`/ipa/mail/threads/${encodeURIComponent(threadId)}/messages`);
 }
 
-/// The URL an attachment downloads from. Not fetched via platformRequest: the
-/// response is bytes, not JSON, and the browser handles the download itself.
+/// The URL an attachment downloads from. It remains same-origin so the
+/// Dashboard proxy can attach the caller identity; the browser handles bytes.
 export function attachmentUrl(messageId: string, index: number) {
-  return `${platformApiOrigin()}/ipa/mail/messages/${encodeURIComponent(messageId)}/attachments/${index}`;
+  return `/ipa/mail/messages/${encodeURIComponent(messageId)}/attachments/${index}`;
 }
 
 export function searchMail(q: string) {
-  return platformRequest<MailSummary[]>(`/ipa/mail/search?q=${encodeURIComponent(q)}`);
+  return request<MailSummary[]>(`/ipa/mail/search?q=${encodeURIComponent(q)}`);
 }
 
 export type OutgoingAttachment = {
@@ -758,7 +771,7 @@ export function sendMail(body: {
   references?: string[];
   attachments?: OutgoingAttachment[];
 }) {
-  return platformRequest<{ outcomes: SendOutcome[] }>("/ipa/mail/messages", {
+  return request<{ outcomes: SendOutcome[] }>("/ipa/mail/messages", {
     method: "POST",
     body: JSON.stringify(body),
   });

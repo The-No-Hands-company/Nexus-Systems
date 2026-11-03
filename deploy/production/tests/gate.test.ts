@@ -47,16 +47,16 @@ beforeEach(() => {
 describe("public Calendar links", () => {
   it("allows only exact Calendar public-share reads without a session", async () => {
     const token = "A".repeat(43);
-    expect((await gate(req(`https://calendar.tnhc.dev/api/v1/calendar/public/${token}`), APP)).allow).toBe(true);
+    expect((await gate(req(`https://calendar.tnhc.dev/ipa/v1/calendar/public/${token}`), APP)).allow).toBe(true);
     expect((await gate(req(`https://calendar.tnhc.dev/share/${token}`), APP)).allow).toBe(true);
 
     const denied = await Promise.all([
-      gate(req("https://calendar.tnhc.dev/api/v1/calendar/events"), APP),
-      gate(new Request(`https://calendar.tnhc.dev/api/v1/calendar/public/${token}`, { method: "POST" }), APP),
-      gate(req(`https://app.tnhc.dev/api/v1/calendar/public/${token}`), APP),
-      gate(req("https://calendar.tnhc.dev/api/v1/calendar/public/"), APP),
-      gate(req(`https://calendar.tnhc.dev/api/v1/calendar/public/${token}%2Fextra`), APP),
-      gate(req(`https://calendar.tnhc.dev/api/v1/calendar/public/${token}?preview=true`), APP),
+      gate(req("https://calendar.tnhc.dev/ipa/v1/calendar/events"), APP),
+      gate(new Request(`https://calendar.tnhc.dev/ipa/v1/calendar/public/${token}`, { method: "POST" }), APP),
+      gate(req(`https://app.tnhc.dev/ipa/v1/calendar/public/${token}`), APP),
+      gate(req("https://calendar.tnhc.dev/ipa/v1/calendar/public/"), APP),
+      gate(req(`https://calendar.tnhc.dev/ipa/v1/calendar/public/${token}%2Fextra`), APP),
+      gate(req(`https://calendar.tnhc.dev/ipa/v1/calendar/public/${token}?preview=true`), APP),
       gate(req("https://calendar.tnhc.dev/share/"), APP),
       gate(req(`https://calendar.tnhc.dev/share/${token}/extra`), APP),
       gate(req(`https://app.tnhc.dev/share/${token}`), APP),
@@ -182,7 +182,7 @@ describe("app hosts are default-deny", () => {
     "/admin/users/export",
     "/internal/metrics",
     "/webhooks/github",
-    "/api/v1/routes",
+    "/ipa/v1/routes",
     "/ipa/secrets",
     "/dashboard/settings",
   ])("requires a session for %s", async (path) => {
@@ -332,7 +332,7 @@ describe("signed-out requests", () => {
   // a script, the CLI) cannot follow a redirect to an HTML form, so it gets a
   // 401 it can act on (audit O-8).
   const ask = (headers: Record<string, string>, method = "GET") =>
-    gate(new Request("https://cloud.tnhc.dev/api/v1/tools", { method, headers }), { upstream: "http://127.0.0.1:9", requiresAuth: true, kind: "app" });
+    gate(new Request("https://cloud.tnhc.dev/ipa/v1/tools", { method, headers }), { upstream: "http://127.0.0.1:9", requiresAuth: true, kind: "app" });
 
   it("a browser page load is redirected to sign in", async () => {
     for (const headers of [{ "sec-fetch-mode": "navigate" }, { accept: "text/html,application/xhtml+xml" }]) {

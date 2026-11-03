@@ -112,25 +112,29 @@ describe("stable platform API", () => {
     }
   });
 
-  it("returns the versioned contract and OpenAPI description publicly", async () => {
+  it("returns the versioned contract and OpenAPI description for the private loopback server contract", async () => {
     const contract = (await (await fetch(`${base}/api/v1/contract`)).json()) as {
       service: { version: string };
       routes: Array<{ path: string }>;
     };
     expect(contract.service.version).toBe("1.0.0");
-    expect(contract.routes.some((route) => route.path === "/api/v1/apps")).toBe(true);
+    expect(contract.routes.some((route) => route.path === "/ipa/v1/apps")).toBe(true);
 
     const openapi = (await (await fetch(`${base}/api/v1/openapi.json`)).json()) as {
       openapi: string;
+      servers: Array<{ url: string }>;
       paths: Record<string, unknown>;
     };
     expect(openapi.openapi).toBe("3.1.0");
-    expect(openapi.paths).toHaveProperty("/api/v1/me");
-    expect(openapi.paths).toHaveProperty("/api/v1/apps");
-    expect(openapi.paths).toHaveProperty("/api/v1/mail/folders");
+    expect(openapi.paths).toHaveProperty("/ipa/v1/me");
+    expect(openapi.paths).toHaveProperty("/ipa/v1/apps");
+    expect(openapi.paths).toHaveProperty("/ipa/v1/mail/folders");
+    expect(Object.hasOwn(openapi.paths, "/api/v1/me")).toBe(false);
+    const composedMeUrl = `${(openapi.servers[0]?.url ?? "").replace(/\/$/, "")}/ipa/v1/me`;
+    expect(composedMeUrl.includes("/ipa/v1/ipa/v1/me")).toBe(false);
   });
 
-  it("delegates identity to Auth and preserves the caller credential", async () => {
+  it("delegates identity to Auth and preserves the caller credential on the private loopback route", async () => {
     const unauthenticated = await fetch(`${base}/api/v1/me`);
     expect(unauthenticated.status).toBe(401);
 
@@ -143,7 +147,7 @@ describe("stable platform API", () => {
     });
   });
 
-  it("returns the Cloud catalog without exposing the Cloud key", async () => {
+  it("returns the Cloud catalog without exposing the Cloud key on the private loopback route", async () => {
     const response = await fetch(`${base}/api/v1/apps`, {
       headers: { cookie: "nexus_session=valid" },
     });
@@ -172,7 +176,7 @@ describe("stable platform API", () => {
     });
   });
 
-  it("forwards the first released app through the API with an Auth-owned subject", async () => {
+  it("forwards the first released app through the API with an Auth-owned subject on the private loopback route", async () => {
     const response = await fetch(`${base}/api/v1/mail/folders`, {
       headers: { cookie: "nexus_session=valid" },
     });
