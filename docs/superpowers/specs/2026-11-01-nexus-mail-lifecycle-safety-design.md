@@ -98,6 +98,24 @@ key and generation tag, records them durably, and queues version-targeted
 deletion only after the quiescence interval. It never treats a successful
 delete of a nonexistent mutable key as proof that a later upload cannot occur.
 
+### Shared external-body gateway
+
+Mail owns the only object-store client used for message bodies. SMTP upload,
+Mail API and IMAP reads, and outbound delivery use a shared gateway rather than
+receiving static object-store credentials or mutable object keys. The gateway
+accepts a generation ID only after the store has authorized its lifecycle
+state, then obtains the opaque key, immutable version ID, and generation tag
+from durable storage. It returns bytes only for the exact recorded version.
+
+The gateway accepts an upload only for a live reservation and only through a
+short-lived reservation-scoped authority. It performs conditional creation,
+requires the storage-returned version ID and matching generation tag, then
+persists that evidence before message finalization can reference the body.
+Reader processes authorize the message first, then ask the gateway for the
+referenced generation; they never reconstruct a key or version from a client
+request. Gateway capability or read failures are transient for external
+bodies, while inline bodies remain available.
+
 Explicit abandonment transitions a live reservation to cleanup scheduling.
 Cleanup deletes each recorded/reconciled version ID for that generation. A
 generation is marked deleted only after every version-targeted deletion
@@ -156,6 +174,8 @@ Automated coverage must prove:
   matching immutable metadata;
 - abandoned, crashed, and expired uploads are reconciled before
   version-targeted cleanup, including an upload completing near expiry;
+- SMTP upload, Mail API/IMAP retrieval, and outbound delivery read the same
+  immutable recorded version through the Mail-owned gateway;
 - legacy external objects cannot enter an unsafe automatic-delete path;
 - a stopped old writer cannot create a Trash membership during migration;
 - bucket capability failure rejects only external-body delivery;
