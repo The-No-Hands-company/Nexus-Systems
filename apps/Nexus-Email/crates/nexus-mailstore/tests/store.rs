@@ -1496,6 +1496,137 @@ async fn external_body_keeps_the_reserved_object_key() {
 }
 
 #[tokio::test]
+async fn deduplicated_reservation_locks_message_before_generation() {
+    let s = store().await;
+    let thread = s.thread_for(None, &[], Some("dedup lock")).await.unwrap();
+    let from = Address::parse("sender@example.test").unwrap();
+    let raw = unique("dedup-lock").into_bytes();
+    let message = s
+        .store_message(
+            &raw,
+            thread,
+            &from,
+            Some("dedup lock"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            None,
+        )
+        .await
+        .unwrap();
+    let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    let mut tx = s.pool().begin().await.unwrap();
+    let (pid,): (i32,) = sqlx::query_as("SELECT pg_backend_pid()")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("SELECT id FROM messages WHERE id = $1 FOR UPDATE")
+        .bind(message)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let other = s.clone();
+    let retry_reservation = reservation.clone();
+    let task = tokio::spawn(async move {
+        other
+            .store_message(
+                &raw,
+                thread,
+                &from,
+                Some("dedup lock"),
+                None,
+                None,
+                &[],
+                Transport::Internal,
+                Some(&retry_reservation),
+            )
+            .await
+    });
+    wait_for_block_or_finish(&s, pid, &task).await;
+    let lock_result =
+        sqlx::query("SELECT id FROM object_generations WHERE id = $1 FOR UPDATE NOWAIT")
+            .bind(reservation.generation_id)
+            .execute(&mut *tx)
+            .await;
+    tx.rollback().await.unwrap();
+    let retry_result = task.await.unwrap();
+    assert!(
+        lock_result.is_ok(),
+        "deduplication waiting for a message must not hold its generation lock"
+    );
+    assert_eq!(retry_result.unwrap(), message);
+}
+
+#[tokio::test]
+async fn finalized_reservation_retry_locks_message_before_generation() {
+    let s = store().await;
+    let reservation = s.reserve_external_body(chrono::Utc::now()).await.unwrap();
+    let thread = s.thread_for(None, &[], Some("lock order")).await.unwrap();
+    let from = Address::parse("sender@example.test").unwrap();
+    let raw = format!(
+        "{}{}",
+        "x".repeat(INLINE_BODY_LIMIT + 1),
+        unique("lock-order")
+    )
+    .into_bytes();
+    let message = s
+        .store_message(
+            &raw,
+            thread,
+            &from,
+            Some("lock order"),
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            Some(&reservation),
+        )
+        .await
+        .unwrap();
+    let mut tx = s.pool().begin().await.unwrap();
+    let (pid,): (i32,) = sqlx::query_as("SELECT pg_backend_pid()")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("SELECT id FROM messages WHERE id = $1 FOR UPDATE")
+        .bind(message)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let other = s.clone();
+    let retry_reservation = reservation.clone();
+    let task = tokio::spawn(async move {
+        other
+            .store_message(
+                &raw,
+                thread,
+                &from,
+                Some("lock order"),
+                None,
+                None,
+                &[],
+                Transport::Internal,
+                Some(&retry_reservation),
+            )
+            .await
+    });
+    wait_for_block_or_finish(&s, pid, &task).await;
+    let lock_result =
+        sqlx::query("SELECT id FROM object_generations WHERE id = $1 FOR UPDATE NOWAIT")
+            .bind(reservation.generation_id)
+            .execute(&mut *tx)
+            .await;
+    tx.rollback().await.unwrap();
+    let retry_result = task.await.unwrap();
+    assert!(
+        lock_result.is_ok(),
+        "a retry waiting for a message must not hold its generation lock"
+    );
+    assert_eq!(retry_result.unwrap(), message);
+}
+
+#[tokio::test]
 async fn finalized_reservation_retry_returns_the_original_message_when_metadata_matches() {
     let s = store().await;
     let from = Address::parse("sender@example.test").unwrap();

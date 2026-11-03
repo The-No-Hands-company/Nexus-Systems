@@ -558,6 +558,12 @@ impl MailStore {
         let size_bytes = raw.len() as i64;
         let from_address = from.as_string();
         let now = Utc::now();
+        // Existing messages must be locked before any reservation generation.
+        let existing: Option<(Uuid,)> =
+            sqlx::query_as("SELECT id FROM messages WHERE content_hash = $1 FOR UPDATE")
+                .bind(&hash)
+                .fetch_optional(&mut **tx)
+                .await?;
         let mut reserved_key: Option<String> = None;
         let mut generation_id: Option<Uuid> = None;
         if let Some(reservation) = reservation {
@@ -591,13 +597,7 @@ impl MailStore {
             }
         }
 
-        if let Some((existing,)) = sqlx::query_as::<_, (Uuid,)>(
-            "SELECT id FROM messages WHERE content_hash = $1 FOR UPDATE",
-        )
-        .bind(&hash)
-        .fetch_optional(&mut **tx)
-        .await?
-        {
+        if let Some((existing,)) = existing {
             if let (Some(generation_id), Some(object_key)) =
                 (generation_id, reserved_key.as_deref())
             {
