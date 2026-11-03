@@ -31,6 +31,7 @@ async fn start(token: Option<&str>, daily_limit: u32) -> Api {
     let deliverer = Deliverer::new(store.clone(), Queue::new(pool.clone()), Router::new().with_local_domain(&domain));
     let state = Arc::new(AppState {
         store,
+        object_client: None,
         deliverer,
         primary_domain: domain.clone(),
         cloudflare_ingress_token: None,

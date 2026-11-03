@@ -1,7 +1,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use nexus_mailstore::{FolderKind, MailStore};
+use nexus_mailstore::object_client::ObjectBodyClient;
+use nexus_mailstore::{FolderKind, MailStore, MessageBodySource};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use uuid::Uuid;
@@ -29,6 +30,7 @@ pub struct ImapServer<A: Authenticator> {
     pub hostname: String,
     pub store: MailStore,
     pub auth: Arc<A>,
+    pub object_client: Option<Arc<dyn ObjectBodyClient>>,
 }
 
 /// The mailbox and folder a connection currently has open.
@@ -208,24 +210,33 @@ impl<A: Authenticator> ImapServer<A> {
                     ));
 
                     if want_body {
-                        match self.store.raw_by_uid(o.mailbox_id, m.uid).await {
-                            Ok(raw) => {
-                                // A literal: the client is told the byte count
-                                // and then reads exactly that many, which is the
-                                // only safe way to send a message that may
-                                // contain anything at all.
-                                parts.push(format!(
-                                    "BODY[] {{{}}}\r\n{}",
-                                    raw.len(),
-                                    String::from_utf8_lossy(&raw)
-                                ));
+                        let raw = match self.store.raw_by_uid(o.mailbox_id, m.uid).await {
+                            Ok(MessageBodySource::Inline(bytes)) => bytes,
+                            Ok(MessageBodySource::External(message_id)) => {
+                                match self.object_client.as_ref() {
+                                    Some(client) => match client.read_message(message_id).await {
+                                        Ok(bytes) => bytes,
+                                        Err(_) => return format!(
+                                            "{tag} NO [UNAVAILABLE] Message body temporarily unavailable\r\n"
+                                        ),
+                                    },
+                                    None => return format!(
+                                        "{tag} NO [UNAVAILABLE] Message body temporarily unavailable\r\n"
+                                    ),
+                                }
                             }
-                            Err(_) => {
-                                return format!(
-                                    "{tag} NO [UNAVAILABLE] Message body temporarily unavailable\r\n"
-                                )
-                            }
-                        }
+                            Err(_) => return format!(
+                                "{tag} NO [UNAVAILABLE] Message body temporarily unavailable\r\n"
+                            ),
+                        };
+                        // A literal: the client is told the byte count and then
+                        // reads exactly that many, the only safe way to send a
+                        // message that may contain anything at all.
+                        parts.push(format!(
+                            "BODY[] {{{}}}\r\n{}",
+                            raw.len(),
+                            String::from_utf8_lossy(&raw)
+                        ));
                     }
 
                     out.push_str(&format!("* {} FETCH ({})\r\n", seq + 1, parts.join(" ")));

@@ -16,6 +16,13 @@ pub const INLINE_BODY_LIMIT: usize = 256 * 1024;
 /// Maximum size that can be finalized as an external message body.
 pub const MAX_EXTERNAL_BODY_BYTES: usize = 26 * 1024 * 1024;
 
+/// Result of a `raw_by_uid` lookup: either the body is stored inline, or it
+/// lives in the object service and the message_id is needed to fetch it.
+pub enum MessageBodySource {
+    Inline(Vec<u8>),
+    External(Uuid),
+}
+
 /// A leased deletion of an object that held a message body or attachments.
 ///
 /// The object key and immutable version stay in the durable queue until the
@@ -1251,9 +1258,9 @@ impl MailStore {
     }
 
     /// Raw bytes of a message identified by its UID in a mailbox.
-    pub async fn raw_by_uid(&self, mailbox_id: Uuid, uid: i64) -> Result<Vec<u8>> {
-        let row: Option<(Option<Vec<u8>>,)> = sqlx::query_as(
-            "SELECT m.body_inline FROM mailbox_messages mm
+    pub async fn raw_by_uid(&self, mailbox_id: Uuid, uid: i64) -> Result<MessageBodySource> {
+        let row: Option<(Uuid, Option<Vec<u8>>)> = sqlx::query_as(
+            "SELECT mm.message_id, m.body_inline FROM mailbox_messages mm
              JOIN messages m ON m.id = mm.message_id
              WHERE mm.mailbox_id = $1 AND mm.uid = $2",
         )
@@ -1263,8 +1270,9 @@ impl MailStore {
         .await?;
 
         match row {
-            Some((Some(bytes),)) => Ok(bytes),
-            _ => Err(MailStoreError::NoSuchAddress(format!("uid {uid}"))),
+            Some((_, Some(bytes))) => Ok(MessageBodySource::Inline(bytes)),
+            Some((message_id, None)) => Ok(MessageBodySource::External(message_id)),
+            None => Err(MailStoreError::NoSuchAddress(format!("uid {uid}"))),
         }
     }
 

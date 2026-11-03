@@ -24,6 +24,7 @@ use nexus_mailmsg::MessageBuilder;
 use nexus_mailstore::{
     Address, FolderKind, MailStore, MailStoreError, MessageDisposition, MessageSummary,
 };
+use nexus_mailstore::object_client::ObjectBodyClient;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -32,6 +33,7 @@ pub mod system_mail;
 
 pub struct AppState {
     pub store: MailStore,
+    pub object_client: Option<Arc<dyn ObjectBodyClient>>,
     pub deliverer: Deliverer,
     /// The domain this node issues addresses in, used to build a sender
     /// address for a user who has one.
@@ -80,6 +82,25 @@ fn message_read_error(error: MailStoreError) -> ApiError {
             StatusCode::SERVICE_UNAVAILABLE,
             "message body temporarily unavailable".into(),
         ),
+    }
+}
+
+async fn authorized_raw_message(
+    state: &SharedState,
+    mailbox: Uuid,
+    message_id: Uuid,
+) -> Result<Vec<u8>, ApiError> {
+    match state.store.raw_message(mailbox, message_id).await {
+        Ok(raw) => Ok(raw),
+        Err(MailStoreError::ExternalBodyGatewayRequired) => {
+            let client = state.object_client.as_ref().ok_or_else(|| {
+                message_read_error(MailStoreError::ExternalBodyGatewayRequired)
+            })?;
+            client.read_message(message_id).await.map_err(|_| {
+                message_read_error(MailStoreError::ExternalBodyGatewayRequired)
+            })
+        }
+        Err(error) => Err(message_read_error(error)),
     }
 }
 
@@ -435,11 +456,7 @@ async fn read_message(
     let mailbox = mailbox_of(&state, &headers).await?;
     // The store scopes this by membership, so a message the caller does not
     // hold is not readable even with a valid id.
-    let raw = state
-        .store
-        .raw_message(mailbox, message_id)
-        .await
-        .map_err(message_read_error)?;
+    let raw = authorized_raw_message(&state, mailbox, message_id).await?;
     let (folder, disposition) = state
         .store
         .message_location(mailbox, message_id)
@@ -884,11 +901,7 @@ async fn download_attachment(
     Path((message_id, index)): Path<(Uuid, usize)>,
 ) -> Result<Response, ApiError> {
     let mailbox = mailbox_of(&state, &headers).await?;
-    let raw = state
-        .store
-        .raw_message(mailbox, message_id)
-        .await
-        .map_err(message_read_error)?;
+    let raw = authorized_raw_message(&state, mailbox, message_id).await?;
 
     let parsed = nexus_mailmsg::parse(&raw, nexus_mailmsg::Limits::default())
         .map_err(|e| server(&format!("parse: {e}")))?;

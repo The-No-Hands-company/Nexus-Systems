@@ -14,6 +14,7 @@ use nexus_mailfed::ingest::{self, IngestState};
 use nexus_mailfed::{NodeKey, PeerDirectory};
 use nexus_mailimap::ImapServer;
 use nexus_mailout::{DeliveryWorker, Egress, SmtpRelayConfig, WorkerConfig};
+use nexus_mailstore::object_client::{HttpObjectBodyClient, ObjectBodyClient};
 use nexus_mailsmtp::authenticator::AuthService;
 use nexus_mailsmtp::inbound::{AuthenticatingSink, PolicyMode};
 use nexus_mailsmtp::object_cleanup::run_object_deletion_pass;
@@ -192,10 +193,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::var("NEXUS_EMAIL_IMAP_BIND").unwrap_or_else(|_| "127.0.0.1:2143".into());
     let auth_url =
         std::env::var("NEXUS_AUTH_INTERNAL_URL").unwrap_or_else(|_| "http://127.0.0.1:4310".into());
+
+    // Read object service config early so IMAP and outbound can hold loopback clients.
+    let object_bind_early = std::env::var("NEXUS_EMAIL_OBJECT_SERVICE_BIND").ok();
+    let imap_token_early = std::env::var("NEXUS_EMAIL_OBJECT_SERVICE_IMAP_TOKEN").ok();
+    let outbound_token_early = std::env::var("NEXUS_EMAIL_OBJECT_SERVICE_OUTBOUND_TOKEN").ok();
+    fn loopback_client(bind: Option<&str>, token: Option<&str>) -> Option<Arc<dyn ObjectBodyClient>> {
+        let url = format!("http://{}", bind?);
+        HttpObjectBodyClient::new(&url, token?)
+            .ok()
+            .map(|c| Arc::new(c) as Arc<dyn ObjectBodyClient>)
+    }
+    let imap_object_client = loopback_client(object_bind_early.as_deref(), imap_token_early.as_deref());
+    let outbound_object_client = loopback_client(object_bind_early.as_deref(), outbound_token_early.as_deref());
+
     let imap = Arc::new(ImapServer {
         hostname: hostname.clone(),
         store: store.clone(),
         auth: Arc::new(AuthService::new(auth_url)),
+        object_client: imap_object_client,
     });
     let imap_listener = TcpListener::bind(&imap_bind).await?;
 
@@ -235,6 +251,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     )
     .with_transport(transport);
+    if let Some(client) = outbound_object_client {
+        worker = worker.with_object_client(client);
+    }
     if let Some(signer) = dkim.clone() {
         worker = worker.with_dkim(signer);
     }

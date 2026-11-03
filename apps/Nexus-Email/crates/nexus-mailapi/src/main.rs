@@ -3,6 +3,7 @@ use std::sync::Arc;
 use nexus_maildelivery::{Deliverer, Queue, Router as MailRouter};
 use nexus_mailapi::{router, AppState};
 use nexus_mailstore::MailStore;
+use nexus_mailstore::object_client::{HttpObjectBodyClient, ObjectBodyClient};
 use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
@@ -49,6 +50,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let state = Arc::new(AppState {
         store: store.clone(),
+        object_client: match (
+            std::env::var("NEXUS_EMAIL_OBJECT_SERVICE_URL").ok(),
+            std::env::var("NEXUS_EMAIL_OBJECT_SERVICE_API_TOKEN").ok(),
+        ) {
+            (Some(url), Some(secret)) => HttpObjectBodyClient::new(&url, &secret)
+                .ok()
+                .map(|client| Arc::new(client) as Arc<dyn ObjectBodyClient>),
+            _ => None,
+        },
         deliverer: Deliverer::new(store, queue, mail_router),
         primary_domain: domain.clone(),
         cloudflare_ingress_token: std::env::var("NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN")

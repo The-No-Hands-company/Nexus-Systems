@@ -4,6 +4,7 @@ use std::time::Duration;
 use hickory_resolver::TokioAsyncResolver;
 use nexus_mailauth::{sign, signed_message, DkimSigner, DEFAULT_SIGNED_HEADERS};
 use nexus_maildelivery::{FederatedHandoff, FederatedTransport, HandoffOutcome, Queue, QueuedDelivery};
+use nexus_mailstore::object_client::ObjectBodyClient;
 use nexus_mailstore::MailStore;
 
 use crate::client::{deliver, Attempt};
@@ -100,6 +101,7 @@ pub struct DeliveryWorker {
     config: WorkerConfig,
     transport: Option<Arc<dyn FederatedTransport>>,
     dkim: Option<Arc<DkimSigner>>,
+    object_client: Option<Arc<dyn ObjectBodyClient>>,
 }
 
 impl DeliveryWorker {
@@ -112,7 +114,13 @@ impl DeliveryWorker {
             config,
             transport: None,
             dkim: None,
+            object_client: None,
         }
+    }
+
+    pub fn with_object_client(mut self, client: Arc<dyn ObjectBodyClient>) -> Self {
+        self.object_client = Some(client);
+        self
     }
 
     /// The node-to-node channel, for federated mail and for peer egress.
@@ -320,7 +328,16 @@ impl DeliveryWorker {
     async fn raw_for(&self, message_id: uuid::Uuid) -> Result<Vec<u8>, String> {
         let row: (Option<Vec<u8>>,) =
             sqlx_fetch(self.store.pool(), message_id).await.map_err(|e| e.to_string())?;
-        row.0.ok_or_else(|| "message body is not inline".to_string())
+        match row.0 {
+            Some(body) => Ok(body),
+            None => match &self.object_client {
+                Some(client) => client
+                    .read_message(message_id)
+                    .await
+                    .map_err(|_| "object service temporarily unavailable".to_string()),
+                None => Err("message has external body and no object service client is configured".to_string()),
+            },
+        }
     }
 }
 

@@ -10,11 +10,10 @@
 //!   per-mailbox flags live in `mailbox_messages`, so delivering to five
 //!   recipients writes one message row and five membership rows.
 //!
-//! There is no network code in this crate.
-
 pub mod address;
 pub mod error;
 pub mod models;
+pub mod object_client;
 pub mod store;
 
 pub use address::Address;
@@ -24,6 +23,6 @@ pub use models::{
     OwnerKind, RecipientIntentState, RecordedExternalBody, Transport,
 };
 pub use store::{
-    content_hash, normalise_subject, ImapMessage, MailStore, MessageReferenceKind, MessageSummary,
-    INLINE_BODY_LIMIT, MAX_EXTERNAL_BODY_BYTES,
+    content_hash, normalise_subject, ImapMessage, MailStore, MessageBodySource,
+    MessageReferenceKind, MessageSummary, INLINE_BODY_LIMIT, MAX_EXTERNAL_BODY_BYTES,
 };

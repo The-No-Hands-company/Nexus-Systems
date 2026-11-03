@@ -74,6 +74,7 @@ async fn start(token: Option<&str>) -> Api {
     );
     let state = Arc::new(AppState {
         store: store.clone(),
+        object_client: None,
         deliverer,
         primary_domain: local.clone(),
         cloudflare_ingress_token: token.map(str::to_string),
@@ -122,6 +123,74 @@ async fn get(addr: std::net::SocketAddr, path: &str, headers: &[(&str, &str)]) -
     let mut out = Vec::new();
     s.read_to_end(&mut out).await.unwrap();
     String::from_utf8_lossy(&out).into_owned()
+}
+
+#[tokio::test]
+async fn authorized_api_read_uses_object_service_without_exposing_evidence() {
+    let api = start(None).await;
+    let subject = format!("usr-{}", Uuid::now_v7().simple());
+    let stranger = format!("usr-{}", Uuid::now_v7().simple());
+    let mailbox = api.store.create_identity_mailbox(&subject, "Owner").await.unwrap();
+    api.store.create_identity_mailbox(&stranger, "Other").await.unwrap();
+    let now = chrono::Utc::now();
+    let reservation = api.store.reserve_external_body(now).await.unwrap();
+    api.store.record_external_body_upload(
+        &reservation, "version-secret", &reservation.generation_id.to_string(), now,
+    ).await.unwrap();
+    let thread = api.store.thread_for(None, &[], None).await.unwrap();
+    let message = api.store.store_message(
+        &vec![b'x'; nexus_mailstore::INLINE_BODY_LIMIT + 1], thread,
+        &Address::parse("sender@example.test").unwrap(), None, None, None, &[],
+        Transport::Smtp, Some(&reservation),
+    ).await.unwrap();
+    let inbox = api.store.folder(mailbox.id, FolderKind::Inbox).await.unwrap();
+    api.store.deliver(mailbox.id, message, inbox).await.unwrap();
+
+    let service = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let service_addr = service.local_addr().unwrap();
+    let (sent, mut received) = tokio::sync::mpsc::unbounded_channel();
+    let service_task = tokio::spawn(async move {
+        while let Ok((mut stream, _)) = service.accept().await {
+            let mut request = vec![0; 4096];
+            let n = stream.read(&mut request).await.unwrap();
+            sent.send(String::from_utf8_lossy(&request[..n]).into_owned()).unwrap();
+            let body = b"From: sender@example.test\r\nSubject: test\r\n\r\nrecorded-v1";
+            let header = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
+            stream.write_all(header.as_bytes()).await.unwrap();
+            stream.write_all(body).await.unwrap();
+        }
+    });
+    let reserved = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = reserved.local_addr().unwrap();
+    drop(reserved);
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_nexus-mailapi"))
+        .env("NEXUS_EMAIL_DATABASE_URL", std::env::var("NEXUS_EMAIL_TEST_DATABASE_URL").unwrap())
+        .env("NEXUS_EMAIL_BIND", addr.to_string())
+        .env("NEXUS_EMAIL_OBJECT_SERVICE_URL", format!("http://{service_addr}"))
+        .env("NEXUS_EMAIL_OBJECT_SERVICE_API_TOKEN", "api-secret-canary")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn().unwrap();
+    for _ in 0..100 {
+        if TcpStream::connect(addr).await.is_ok() { break; }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let path = format!("/api/v1/messages/{message}");
+    let unauthorized = get(addr, &path, &[("X-Nexus-Subject", &stranger)]).await;
+    assert!(unauthorized.starts_with("HTTP/1.1 404"), "{unauthorized}");
+    assert!(received.try_recv().is_err(), "unauthorized read contacted service");
+    let response = get(addr, &path, &[("X-Nexus-Subject", &subject)]).await;
+    assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+    assert!(response.contains("recorded-v1"), "{response}");
+    for evidence in [&reservation.object_key, "version-secret", "api-secret-canary"] {
+        assert!(!response.contains(evidence));
+    }
+    let request = received.recv().await.unwrap();
+    assert!(request.starts_with(&format!("GET /internal/object/messages/{message} ")));
+    assert!(request.to_ascii_lowercase().contains("authorization: bearer api-secret-canary"));
+    let _ = child.kill().await;
+    service_task.abort();
 }
 
 async fn delete(addr: std::net::SocketAddr, path: &str, headers: &[(&str, &str)]) -> String {

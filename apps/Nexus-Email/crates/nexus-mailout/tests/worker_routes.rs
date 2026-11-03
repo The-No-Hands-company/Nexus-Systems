@@ -8,6 +8,8 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
+use nexus_mailstore::object_client::{ObjectBodyClient, ObjectBodyClientError};
+
 use nexus_maildelivery::{FederatedHandoff, FederatedTransport, HandoffOutcome, Queue, QueuedDelivery, Route};
 use nexus_mailauth::{public_key_record, verify_with_key, Canon, DkimSigner};
 use nexus_mailout::{DeliveryWorker, Egress, WorkerConfig};
@@ -570,6 +572,65 @@ async fn test_process_when_system_mail_is_deferred_should_keep_it_for_the_retry(
 
     assert!(message_exists(&store, message_id).await);
     assert_eq!(state_of(&store, &rcpt).await, ("pending".to_string(), 1));
+}
+
+/// Mock object client that returns a fixed body.
+struct FixedBodyClient(Vec<u8>);
+impl ObjectBodyClient for FixedBodyClient {
+    fn read_message(
+        &self,
+        _id: uuid::Uuid,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, ObjectBodyClientError>> + Send + '_>> {
+        let body = self.0.clone();
+        Box::pin(async move { Ok(body) })
+    }
+}
+
+#[tokio::test]
+async fn external_body_with_object_client_is_delivered_successfully() {
+    isolation::with_store(|store| async move {
+        let queue = Queue::new(store.pool().clone());
+        let rcpt = unique("peer.test");
+        let (item, original_raw) = queued(
+            &store,
+            &queue,
+            &rcpt,
+            Route::Federated { node: "peer.test".into() },
+        )
+        .await;
+        // Simulate an external body: clear body_inline and set object pointers.
+        let object_key = format!("obj-{}", Uuid::now_v7().simple());
+        let gen_id = Uuid::now_v7();
+        sqlx::query(
+            "UPDATE messages SET body_inline = NULL, body_object_key = $2,
+             body_object_generation_id = $3 WHERE id = $1",
+        )
+        .bind(item.message_id)
+        .bind(&object_key)
+        .bind(gen_id)
+        .execute(store.pool())
+        .await
+        .unwrap();
+
+        let fake = FakeTransport::answering(HandoffOutcome::Delivered);
+        let object_body = b"From: alice@origin.test\r\nSubject: hi\r\n\r\nexternal body\r\n".to_vec();
+        let worker = DeliveryWorker::new(store.clone(), queue, WorkerConfig::default())
+            .with_transport(fake.clone())
+            .with_object_client(Arc::new(FixedBodyClient(object_body.clone())));
+
+        worker.process(item).await;
+
+        assert_eq!(state_of(&store, &rcpt).await.0, "delivered");
+        let calls = fake.calls();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].2, object_body, "worker must deliver what the object client returned");
+        assert!(
+            !String::from_utf8_lossy(&calls[0].2).contains(&object_key),
+            "object storage key must not leak into the outbound message"
+        );
+        let _ = original_raw;
+    })
+    .await;
 }
 
 #[tokio::test]
