@@ -296,7 +296,6 @@ export function privateUpstreamPath(host: string, pathname: string): string | nu
     return `/api${pathname.slice("/ipa".length)}`;
   }
   if (host === `app.${DOMAIN}`) {
-    if (pathname === DASHBOARD_TERMINAL_PATH) return "/api/terminal/attach";
     if (pathname.startsWith("/ipa/v1/")) return `/api${pathname.slice("/ipa".length)}`;
   }
   return pathname;

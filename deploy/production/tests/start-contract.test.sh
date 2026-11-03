@@ -4,6 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PRODUCTION_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPOSITORY_ROOT="$(cd "$PRODUCTION_DIR/../.." && pwd)"
 
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/nexus-terminal-production-test.XXXXXX")"
 FIXTURE_ROOT="$TEST_ROOT/workspace"
@@ -92,6 +93,16 @@ assert_contains() {
     esac
 }
 
+assert_not_contains() {
+    local needle=$1
+    local haystack=$2
+    local message=$3
+    case "$haystack" in
+        *"$needle"*) fail "$message (found: $needle)" ;;
+        *) ;;
+    esac
+}
+
 assert_service_order() {
     local first=$1
     local second=$2
@@ -165,6 +176,19 @@ assert_contains $'\tNEXUS_API_INTERNAL_URL=http://127.0.0.1:3036' "$dashboard_ar
 assert_contains $'\tDASHBOARD_UPSTREAM=http://127.0.0.1:3132' "$proxy_args" "production proxy did not receive the fixed loopback Dashboard upstream"
 assert_contains $'\tAPI_UPSTREAM=http://127.0.0.1:3036' "$proxy_args" "production proxy did not receive the fixed loopback Nexus-API upstream"
 assert_contains 'http://127.0.0.1:3110/health' "$(<"$CURL_RECORD")" "production status did not health-check Nexus-Terminal"
+
+# These documents describe both the public gateway and private loopback
+# integration. Public API examples must advertise IPA, while private examples
+# may continue to use /api.
+public_contract_docs="$(
+    cat \
+        "$REPOSITORY_ROOT/ARCHITECTURE.md" \
+        "$REPOSITORY_ROOT/docs/ECOSYSTEM_CONNECTION_PLAN.md" \
+        "$REPOSITORY_ROOT/docs/LOCAL-DEV.md" \
+        "$REPOSITORY_ROOT/VERSION_MATRIX.md"
+)"
+assert_contains "/ipa/v1/" "$public_contract_docs" "Public route documentation must use IPA"
+assert_not_contains "https://api.tnhc.dev/api/" "$public_contract_docs" "Deprecated public API URL leaked into docs"
 
 # The real start_service refuses any service without an ownership identity, so
 # a service cmd_start launches but service_identity/service_port do not know

@@ -2,6 +2,13 @@
 
 Get the full Nexus Systems stack running in your browser locally in 3 steps.
 
+## Public and private API paths
+
+Production browser and external clients call
+`https://api.tnhc.dev/ipa/v1/...`; public `/api/...` requests return `404`.
+The `http://localhost:8787/api/v1/...` examples in this guide are private
+local-development service routes, not public gateway URLs.
+
 ## Recommended (Cloud Hub Starts Ecosystem)
 
 From the workspace root:

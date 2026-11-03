@@ -25,6 +25,13 @@ Each of these should support two operating patterns:
 
 Nexus-Cloud topology and app map now represent all current apps as embedded modules in Cloud orchestration terms.
 
+### Public API boundary
+
+Browser and external API clients use `https://api.tnhc.dev/ipa/v1/...` through
+the production gateway. Public `/api/...` requests are rejected with `404`.
+The `/api/v1/...` routes in this plan are private service-to-service routes,
+used only on loopback or protected internal networks.
+
 Nexus-AI is modeled as a shared runtime consumed by:
 
 - Nexus-Cloud

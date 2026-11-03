@@ -142,6 +142,13 @@ Port assignments are registered in `src/server.ts` per app and discoverable via 
 
 Nexus-Cloud (port 8787) is the single control plane for all service discovery:
 
+### Public API boundary
+
+External clients use the production gateway's `https://api.tnhc.dev/ipa/v1/...`
+contract. Public `/api/...` requests return `404`; they are not compatibility
+aliases. The `/api/v1/...` routes documented below are private loopback
+service-to-service routes and remain available only behind the production gate.
+
 ```
 App Startup Flow:
   1. App boots → reads NEXUS_CLOUD_URL from env

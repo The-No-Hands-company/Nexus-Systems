@@ -7,6 +7,10 @@ All entries describe released production behavior. Planned work belongs in
 
 ### Changed
 
+- **Breaking:** Public API routes now use `/ipa` (for example,
+  `https://api.tnhc.dev/ipa/v1/apps`). The former public `/api` contract was
+  removed and now returns `404`; private loopback service routes remain
+  `/api`.
 - Released Nexus Calendar, Nexus Draw, and Nexus Project in the dashboard
   catalog after their healthy runtime records were verified.
 - Advanced the Nexus Cloud catalog seed so these releases persist across

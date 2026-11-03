@@ -101,7 +101,7 @@ describe("privateUpstreamPath", () => {
     const { privateUpstreamPath } = await import("../proxy");
     expect(privateUpstreamPath("api.tnhc.dev", "/ipa/v1/apps")).toBe("/api/v1/apps");
     expect(privateUpstreamPath("app.tnhc.dev", "/ipa/v1/me")).toBe("/api/v1/me");
-    expect(privateUpstreamPath("app.tnhc.dev", "/ipa/terminal/attach")).toBe("/api/terminal/attach");
+    expect(privateUpstreamPath("app.tnhc.dev", "/ipa/terminal/attach")).toBe("/ipa/terminal/attach");
     expect(privateUpstreamPath("app.tnhc.dev", "/ipa/mail/folders")).toBe("/ipa/mail/folders");
     expect(privateUpstreamPath("api.tnhc.dev", "/api/v1/apps")).toBeNull();
   });
@@ -252,7 +252,7 @@ describe("Dashboard terminal WebSocket routing", () => {
         origin: "https://app.tnhc.dev",
       });
       expect(data?.requestUrl).toBe("http://app.tnhc.dev/ipa/terminal/attach?cols=91&rows=27");
-      expect(data?.upstreamPathname).toBe("/api/terminal/attach");
+      expect(data?.upstreamPathname).toBe("/ipa/terminal/attach");
     } finally {
       if (previous === undefined) Reflect.deleteProperty(process.env, "DASHBOARD_UPSTREAM");
       else process.env.DASHBOARD_UPSTREAM = previous;
