@@ -11,6 +11,7 @@ pub mod command;
 pub mod inbound;
 pub mod object_cleanup;
 pub mod object_gateway;
+pub mod object_service;
 pub mod policy;
 pub mod purge;
 pub mod server;

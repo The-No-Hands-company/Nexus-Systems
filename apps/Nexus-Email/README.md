@@ -122,6 +122,26 @@ the ISP filters it and the Cloudflare tunnel does not carry SMTP. Publishing an
 MX needs both a route in and the capability; until then the daemon serves local
 and federated mail.
 
+### Internal object service
+
+The SMTP daemon can serve external message bodies on a private HTTP listener.
+Set `NEXUS_EMAIL_OBJECT_SERVICE_API_TOKEN`,
+`NEXUS_EMAIL_OBJECT_SERVICE_IMAP_TOKEN`, and
+`NEXUS_EMAIL_OBJECT_SERVICE_OUTBOUND_TOKEN` to three distinct, nonempty
+secrets without whitespace. All three are required; incomplete or invalid
+configuration leaves the service disabled. `NEXUS_EMAIL_OBJECT_SERVICE_BIND`
+defaults to `127.0.0.1:2590` when the secrets are set and must be a loopback
+socket address. The existing S3 settings must also be present. Requests use
+`GET /internal/object/messages/<message-uuid>` and
+`Authorization: Bearer <service-secret>`; no query or request body is accepted.
+Callers must authorize access to the message before making this request: a
+service credential grants access to any recorded external message body.
+
+The listener is groundwork, not a production rollout: clients and the
+capability/migration-inventory startup fence are not yet implemented. Do not
+enable it in production until those follow-up tasks and the controlled Mail
+migration are complete.
+
 ## Administration: `nexus-mailctl`
 
 Mailboxes, addresses and peers are managed on the node, not over HTTP. Shell

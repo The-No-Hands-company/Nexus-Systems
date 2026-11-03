@@ -1,0 +1,625 @@
+use std::{
+    collections::HashMap,
+    io::{self, Write},
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    process::Stdio,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+use axum::{
+    extract::{ConnectInfo, Query},
+    http::StatusCode,
+    routing::get,
+    Extension, Router,
+};
+use nexus_mailsmtp::{
+    object_gateway::S3BodyGateway,
+    object_service::{self, ObjectServiceConfig},
+};
+use nexus_mailstore::{Address, MailStore, RecordedExternalBody, Transport};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncReadExt, BufReader},
+    net::TcpListener,
+    process::Command,
+    task::JoinHandle,
+};
+use tracing::instrument::WithSubscriber;
+use uuid::Uuid;
+
+#[path = "../../nexus-mailstore/tests/support/isolation.rs"]
+mod isolation;
+
+const API: &str = "api-test-secret";
+const IMAP: &str = "imap-test-secret";
+const OUTBOUND: &str = "outbound-test-secret";
+const VERSION: &str = "sensitive-version-canary";
+const BODY: &str = "sensitive-body-canary";
+
+fn config() -> ObjectServiceConfig {
+    ObjectServiceConfig {
+        bind: "127.0.0.1:0".parse().unwrap(),
+        api_token: API.to_string().into(),
+        imap_token: IMAP.to_string().into(),
+        outbound_token: OUTBOUND.to_string().into(),
+    }
+}
+
+async fn object_server() -> (Arc<S3BodyGateway>, JoinHandle<()>) {
+    let app = Router::new().route(
+        "/mail/*key",
+        get(|Query(query): Query<HashMap<String, String>>| async move {
+            if query.get("versionId").map(String::as_str) == Some(VERSION) {
+                (StatusCode::OK, "recorded-v1")
+            } else {
+                (StatusCode::OK, "wrong-version")
+            }
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let shared = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new("us-east-1"))
+        .credentials_provider(aws_credential_types::Credentials::new(
+            "test", "test", None, None, "test",
+        ))
+        .endpoint_url(format!("http://{address}"))
+        .load()
+        .await;
+    let s3 = aws_sdk_s3::config::Builder::from(&shared)
+        .force_path_style(true)
+        .build();
+    (
+        Arc::new(S3BodyGateway::new(
+            aws_sdk_s3::Client::from_conf(s3),
+            "mail".into(),
+        )),
+        task,
+    )
+}
+
+async fn recorded_message(store: &MailStore) -> (Uuid, String, String) {
+    let now = chrono::Utc::now();
+    let reservation = store.reserve_external_body(now).await.unwrap();
+    store
+        .record_external_body_upload(
+            &reservation,
+            VERSION,
+            &reservation.generation_id.to_string(),
+            now,
+        )
+        .await
+        .unwrap();
+    let sender = Address::parse("sender@example.test").unwrap();
+    let thread = store.thread_for(None, &[], None).await.unwrap();
+    let message = store
+        .store_message(
+            format!("{BODY}-{}", Uuid::new_v4()).as_bytes(),
+            thread,
+            &sender,
+            None,
+            None,
+            None,
+            &[],
+            Transport::Internal,
+            Some(&reservation),
+        )
+        .await
+        .unwrap();
+    (
+        message,
+        reservation.object_key,
+        reservation.generation_id.to_string(),
+    )
+}
+
+async fn serve(app: Router, supplied_peer: Option<SocketAddr>) -> (String, JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let task = match supplied_peer {
+        Some(peer) => tokio::spawn(async move {
+            axum::serve(listener, app.layer(Extension(ConnectInfo(peer))))
+                .await
+                .unwrap()
+        }),
+        None => tokio::spawn(async move {
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .unwrap()
+        }),
+    };
+    (format!("http://{address}"), task)
+}
+
+#[tokio::test]
+async fn authenticated_service_streams_only_the_message_recorded_version() {
+    isolation::with_store(|store| async move {
+        let (message, key, generation) = recorded_message(&store).await;
+        let (gateway, object_task) = object_server().await;
+        let (url, service_task) =
+            serve(object_service::router(store, gateway, config()), None).await;
+        let client = reqwest::Client::new();
+        for token in [API, IMAP, OUTBOUND] {
+            let response = client
+                .get(format!("{url}/internal/object/messages/{message}"))
+                .bearer_auth(token)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(
+                response.headers().get("content-type").unwrap(),
+                "application/octet-stream"
+            );
+            assert_eq!(response.bytes().await.unwrap(), "recorded-v1");
+        }
+        let missing = client
+            .get(format!("{url}/internal/object/messages/{}", Uuid::new_v4()))
+            .bearer_auth(API)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+        let error = missing.text().await.unwrap();
+        for secret in [&key, &generation, VERSION, BODY] {
+            assert!(!error.contains(secret));
+        }
+        service_task.abort();
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn service_rejects_bad_credentials_and_untrusted_inputs_without_evidence() {
+    isolation::with_store(|store| async move {
+        let (message, key, generation) = recorded_message(&store).await;
+        let (gateway, object_task) = object_server().await;
+        let app = object_service::router(store, gateway, config());
+        let (url, service_task) = serve(app.clone(), None).await;
+        let client = reqwest::Client::new();
+        let path = format!("{url}/internal/object/messages/{message}");
+        for auth in [None, Some("Bearer wrong"), Some("Basic api-test-secret")] {
+            let mut request = client.get(&path);
+            if let Some(auth) = auth {
+                request = request.header("authorization", auth);
+            }
+            let response = request.send().await.unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+            let error = response.text().await.unwrap();
+            for secret in [&key, &generation, VERSION, BODY, API] {
+                assert!(!error.contains(secret));
+            }
+        }
+        let response = client
+            .get(&path)
+            .header("authorization", format!("Bearer {API}"))
+            .header("authorization", format!("Bearer {IMAP}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        for request in [
+            client.get(format!("{path}?key={key}")).bearer_auth(API),
+            client.get(&path).bearer_auth(API).body(BODY),
+            client
+                .get(format!("{url}/internal/object/messages/{VERSION}"))
+                .bearer_auth(API),
+        ] {
+            let response = request.send().await.unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            let error = response.text().await.unwrap();
+            for secret in [&key, &generation, VERSION, BODY, API] {
+                assert!(!error.contains(secret));
+            }
+        }
+        let (remote_url, remote_task) =
+            serve(app.clone(), Some("192.0.2.1:1234".parse().unwrap())).await;
+        let response = client
+            .get(format!("{remote_url}/internal/object/messages/{message}"))
+            .bearer_auth(API)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let no_peer_url = format!("http://{}", listener.local_addr().unwrap());
+        let no_peer_task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let response = client
+            .get(format!("{no_peer_url}/internal/object/messages/{message}"))
+            .bearer_auth(API)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        service_task.abort();
+        remote_task.abort();
+        no_peer_task.abort();
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn listener_binds_only_after_validating_loopback_and_all_secrets() {
+    let listener = object_service::bind(&config()).await.unwrap();
+    assert!(listener.local_addr().unwrap().ip().is_loopback());
+    let mut invalid = config();
+    invalid.bind = "0.0.0.0:0".parse().unwrap();
+    assert!(object_service::bind(&invalid).await.is_err());
+    invalid.bind = "127.0.0.1:0".parse().unwrap();
+    invalid.outbound_token = String::new().into();
+    assert!(object_service::bind(&invalid).await.is_err());
+}
+
+#[derive(Clone)]
+struct Capture(Arc<Mutex<Vec<u8>>>);
+
+impl Write for Capture {
+    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(data);
+        Ok(data.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn gateway_never_logs_object_evidence_even_when_trace_is_enabled() {
+    let (gateway, object_task) = object_server().await;
+    let generation = Uuid::new_v4();
+    let record = RecordedExternalBody {
+        generation_id: generation,
+        object_key: "sensitive-key-canary".into(),
+        version_id: VERSION.into(),
+    };
+    let output = Capture(Arc::new(Mutex::new(Vec::new())));
+    let writer = output.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::TRACE)
+        .with_ansi(false)
+        .with_writer(move || writer.clone())
+        .finish();
+    async {
+        tracing::info!("capture active");
+        assert_eq!(gateway.read_version(&record).await.unwrap(), b"recorded-v1");
+    }
+    .with_subscriber(subscriber)
+    .await;
+    let output = String::from_utf8(output.0.lock().unwrap().clone()).unwrap();
+    assert!(output.contains("capture active"));
+    for (name, value) in [
+        ("key", record.object_key.as_str()),
+        ("version", VERSION),
+        ("generation", &generation.to_string()),
+        ("body", "recorded-v1"),
+    ] {
+        assert!(!output.contains(value), "{name} leaked in trace output");
+    }
+    object_task.abort();
+}
+
+#[tokio::test]
+async fn gateway_never_logs_object_deletion_evidence_on_storage_failure() {
+    let (gateway, object_task) = object_server().await;
+    let record = RecordedExternalBody {
+        generation_id: Uuid::new_v4(),
+        object_key: "sensitive-delete-key-canary".into(),
+        version_id: VERSION.into(),
+    };
+    let output = Capture(Arc::new(Mutex::new(Vec::new())));
+    let writer = output.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::TRACE)
+        .with_ansi(false)
+        .with_writer(move || writer.clone())
+        .finish();
+    async {
+        tracing::info!("capture active");
+        assert!(gateway.delete_version(&record).await.is_err());
+    }
+    .with_subscriber(subscriber)
+    .await;
+    let output = String::from_utf8(output.0.lock().unwrap().clone()).unwrap();
+    assert!(output.contains("capture active"));
+    assert!(
+        !output.contains(&record.object_key),
+        "key leaked in trace output"
+    );
+    assert!(!output.contains(VERSION), "version leaked in trace output");
+    object_task.abort();
+}
+
+struct NodeKeyFile(PathBuf);
+
+impl Drop for NodeKeyFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+fn daemon_command(
+    db_url: &str,
+    key_path: &Path,
+    object_address: SocketAddr,
+    service_bind: &str,
+    mx_bind: &str,
+) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_nexus-mailsmtpd"));
+    command
+        .env_clear()
+        .env("TMPDIR", std::env::current_dir().unwrap())
+        .env("NEXUS_EMAIL_DATABASE_URL", db_url)
+        .env("NEXUS_EMAIL_NODE_KEY_PATH", key_path)
+        .env("NEXUS_EMAIL_MX_BIND", mx_bind)
+        .env("NEXUS_EMAIL_SUBMISSION_BIND", "127.0.0.1:0")
+        .env("NEXUS_EMAIL_IMAP_BIND", "127.0.0.1:0")
+        .env("NEXUS_EMAIL_FEDERATION_BIND", "127.0.0.1:0")
+        .env("NEXUS_EMAIL_EGRESS", "direct")
+        .env("NEXUS_EMAIL_OBJECT_SERVICE_BIND", service_bind)
+        .env("NEXUS_EMAIL_OBJECT_SERVICE_API_TOKEN", API)
+        .env("NEXUS_EMAIL_OBJECT_SERVICE_IMAP_TOKEN", IMAP)
+        .env("NEXUS_EMAIL_OBJECT_SERVICE_OUTBOUND_TOKEN", OUTBOUND)
+        .env("S3_ENDPOINT", format!("http://{object_address}"))
+        .env("S3_ACCESS_KEY", "test")
+        .env("S3_SECRET_KEY", "test")
+        .env("S3_BUCKET", "mail")
+        .env("RUST_LOG", "trace")
+        .kill_on_drop(true);
+    command
+}
+
+async fn wait_for_listener(address: SocketAddr, daemon: &mut tokio::process::Child) {
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            if tokio::net::TcpStream::connect(address).await.is_ok() {
+                break;
+            }
+            assert!(
+                daemon.try_wait().unwrap().is_none(),
+                "daemon exited before startup"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("listener did not start");
+}
+
+#[tokio::test]
+async fn daemon_hosts_service_without_leaking_evidence_in_trace_logs() {
+    isolation::with_store(|store| async move {
+        let (message, key, generation) = recorded_message(&store).await;
+        let schema: String = sqlx::query_scalar("SELECT current_schema()")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        let mut db_url =
+            reqwest::Url::parse(&std::env::var("NEXUS_EMAIL_TEST_DATABASE_URL").unwrap()).unwrap();
+        db_url
+            .query_pairs_mut()
+            .append_pair("options", &format!("-csearch_path={schema}"));
+        let object_app = Router::new().route(
+            "/mail/*key",
+            get(|Query(query): Query<HashMap<String, String>>| async move {
+                if query.get("versionId").map(String::as_str) == Some(VERSION) {
+                    (StatusCode::OK, BODY)
+                } else {
+                    (StatusCode::NOT_FOUND, "")
+                }
+            }),
+        );
+        let object_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let object_address = object_listener.local_addr().unwrap();
+        let object_task =
+            tokio::spawn(async move { axum::serve(object_listener, object_app).await.unwrap() });
+
+        let reserved = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let service_address = reserved.local_addr().unwrap();
+        drop(reserved);
+        let node_key = NodeKeyFile(PathBuf::from(format!(".test-node-key-{}", Uuid::new_v4())));
+        let mut daemon = daemon_command(
+            db_url.as_str(),
+            &node_key.0,
+            object_address,
+            &service_address.to_string(),
+            "127.0.0.1:0",
+        )
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+        let mut stdout = daemon.stdout.take().unwrap();
+        let mut stderr = daemon.stderr.take().unwrap();
+        let logs = tokio::spawn(async move {
+            let (mut out, mut err) = (Vec::new(), Vec::new());
+            let (out_result, err_result) =
+                tokio::join!(stdout.read_to_end(&mut out), stderr.read_to_end(&mut err));
+            out_result.unwrap();
+            err_result.unwrap();
+            out.extend(err);
+            String::from_utf8_lossy(&out).into_owned()
+        });
+        wait_for_listener(service_address, &mut daemon).await;
+        let client = reqwest::Client::new();
+        let response = client
+            .get(format!(
+                "http://{service_address}/internal/object/messages/{message}"
+            ))
+            .bearer_auth(API)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.bytes().await.unwrap(), BODY);
+        let response = client
+            .get(format!(
+                "http://{service_address}/internal/object/messages/{message}"
+            ))
+            .query(&[("key", &key), ("generation", &generation)])
+            .bearer_auth(API)
+            .body(BODY)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        daemon.kill().await.unwrap();
+        daemon.wait().await.unwrap();
+        let logs = logs.await.unwrap();
+        assert!(logs.contains("nexus-mailsmtpd listening"));
+        for (name, value) in [
+            ("key", key.as_str()),
+            ("generation", generation.as_str()),
+            ("version", VERSION),
+            ("body", BODY),
+            ("API token", API),
+            ("IMAP token", IMAP),
+            ("outbound token", OUTBOUND),
+        ] {
+            assert!(!logs.contains(value), "{name} leaked in daemon logs");
+        }
+        object_task.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn daemon_leaves_object_service_disabled_when_configuration_is_unsafe() {
+    isolation::with_store(|store| async move {
+        let schema: String = sqlx::query_scalar("SELECT current_schema()")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        let mut db_url =
+            reqwest::Url::parse(&std::env::var("NEXUS_EMAIL_TEST_DATABASE_URL").unwrap()).unwrap();
+        db_url
+            .query_pairs_mut()
+            .append_pair("options", &format!("-csearch_path={schema}"));
+        for case in ["missing-secret", "non-loopback", "missing-storage"] {
+            let reserve_service = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let service_address = reserve_service.local_addr().unwrap();
+            let reserve_mx = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let mx_address = reserve_mx.local_addr().unwrap();
+            drop((reserve_service, reserve_mx));
+            let bind = if case == "non-loopback" {
+                format!("0.0.0.0:{}", service_address.port())
+            } else {
+                service_address.to_string()
+            };
+            let node_key = NodeKeyFile(PathBuf::from(format!(".test-node-key-{}", Uuid::new_v4())));
+            let mut command = daemon_command(
+                db_url.as_str(),
+                &node_key.0,
+                "127.0.0.1:1".parse().unwrap(),
+                &bind,
+                &mx_address.to_string(),
+            );
+            match case {
+                "missing-secret" => {
+                    command.env_remove("NEXUS_EMAIL_OBJECT_SERVICE_IMAP_TOKEN");
+                }
+                "missing-storage" => {
+                    command.env_remove("S3_SECRET_KEY");
+                }
+                _ => {}
+            }
+            let mut daemon = command
+                .env("RUST_LOG", "info")
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap();
+            wait_for_listener(mx_address, &mut daemon).await;
+            let mut lines = BufReader::new(daemon.stdout.take().unwrap()).lines();
+            let ready = tokio::time::timeout(Duration::from_secs(30), async {
+                while let Some(line) = lines.next_line().await.unwrap() {
+                    if line.contains("nexus-mailsmtpd listening") {
+                        return true;
+                    }
+                }
+                false
+            })
+            .await
+            .unwrap();
+            assert!(ready, "daemon exited before completing startup");
+            assert!(
+                tokio::net::TcpStream::connect(service_address)
+                    .await
+                    .is_err(),
+                "{case} unexpectedly enabled the object service"
+            );
+            daemon.kill().await.unwrap();
+            daemon.wait().await.unwrap();
+        }
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn storage_and_database_failures_return_unavailable_without_evidence() {
+    isolation::with_store(|store| async move {
+        let (message, key, generation) = recorded_message(&store).await;
+        let (gateway, object_task) = object_server().await;
+        let (url, service_task) = serve(
+            object_service::router(store.clone(), gateway, config()),
+            None,
+        )
+        .await;
+        object_task.abort();
+        let client = reqwest::Client::new();
+        let path = format!("{url}/internal/object/messages/{message}");
+        let response = client.get(&path).bearer_auth(API).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let error = response.text().await.unwrap();
+        for secret in [&key, &generation, VERSION, BODY, API] {
+            assert!(!error.contains(secret));
+        }
+        store.pool().close().await;
+        let response = client.get(&path).bearer_auth(API).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert!(response.text().await.unwrap().is_empty());
+        service_task.abort();
+    })
+    .await;
+}
+
+#[test]
+fn service_configuration_fails_closed_for_partial_invalid_or_nonlocal_settings() {
+    assert!(ObjectServiceConfig::from_settings(None, None, None, None)
+        .unwrap()
+        .is_none());
+    for (bind, api, imap, outbound) in [
+        (Some("127.0.0.1:3000"), Some(API), None, Some(OUTBOUND)),
+        (Some("0.0.0.0:3000"), Some(API), Some(IMAP), Some(OUTBOUND)),
+        (Some("[::]:3000"), Some(API), Some(IMAP), Some(OUTBOUND)),
+        (Some("127.0.0.1:3000"), Some(API), Some(API), Some(OUTBOUND)),
+        (Some("127.0.0.1:3000"), Some(API), Some(""), Some(OUTBOUND)),
+        (
+            Some("127.0.0.1:3000"),
+            Some(API),
+            Some("contains space"),
+            Some(OUTBOUND),
+        ),
+    ] {
+        assert!(ObjectServiceConfig::from_settings(bind, api, imap, outbound).is_err());
+    }
+    let valid = ObjectServiceConfig::from_settings(
+        Some("[::1]:3000"),
+        Some(API),
+        Some(IMAP),
+        Some(OUTBOUND),
+    )
+    .unwrap()
+    .unwrap();
+    let debug = format!("{valid:?}");
+    for secret in [API, IMAP, OUTBOUND] {
+        assert!(!debug.contains(secret));
+    }
+}

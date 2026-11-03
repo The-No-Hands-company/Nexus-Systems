@@ -18,6 +18,7 @@ use nexus_mailsmtp::authenticator::AuthService;
 use nexus_mailsmtp::inbound::{AuthenticatingSink, PolicyMode};
 use nexus_mailsmtp::object_cleanup::run_object_deletion_pass;
 use nexus_mailsmtp::object_gateway::S3BodyGateway;
+use nexus_mailsmtp::object_service::{self, ObjectServiceConfig};
 use nexus_mailsmtp::policy::MailboxPolicy;
 use nexus_mailsmtp::purge::run_bounded_purge_pass;
 use nexus_mailsmtp::{Limits, Role, SmtpServer};
@@ -274,6 +275,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         _ => None,
     };
+    let object_bind = std::env::var("NEXUS_EMAIL_OBJECT_SERVICE_BIND").ok();
+    let api_token = std::env::var("NEXUS_EMAIL_OBJECT_SERVICE_API_TOKEN").ok();
+    let imap_token = std::env::var("NEXUS_EMAIL_OBJECT_SERVICE_IMAP_TOKEN").ok();
+    let outbound_token = std::env::var("NEXUS_EMAIL_OBJECT_SERVICE_OUTBOUND_TOKEN").ok();
+    let object_config = ObjectServiceConfig::from_settings(
+        object_bind.as_deref(),
+        api_token.as_deref(),
+        imap_token.as_deref(),
+        outbound_token.as_deref(),
+    );
+    let object_service = match (object_config, object_store.as_ref()) {
+        (Ok(Some(config)), Some(gateway)) => {
+            let listener = object_service::bind(&config).await?;
+            let app = object_service::router(store.clone(), Arc::clone(gateway), config);
+            Some((listener, app))
+        }
+        (Err(_), _) => {
+            tracing::warn!("object service disabled: invalid configuration");
+            None
+        }
+        (Ok(Some(_)), None) => {
+            tracing::warn!("object service disabled: storage unavailable");
+            None
+        }
+        (Ok(None), _) => None,
+    };
     tracing::info!(%mx_bind, %submission_bind, %imap_bind, %hostname, ?mode, "nexus-mailsmtpd listening");
     tracing::info!(
         %federation_bind,
@@ -369,9 +396,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let gateway = Arc::clone(&gateway);
                     move |body| {
                         let gateway = Arc::clone(&gateway);
-                        async move {
-                            gateway.delete_version(&body).await.map_err(|_| ())
-                        }
+                        async move { gateway.delete_version(&body).await.map_err(|_| ()) }
                     }
                 },
             )
@@ -387,11 +412,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    let serve_objects = async move {
+        match object_service {
+            Some((listener, app)) => {
+                axum::serve(
+                    listener,
+                    app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+                )
+                .await
+            }
+            None => std::future::pending::<std::io::Result<()>>().await,
+        }
+    };
+
     tokio::select! {
         r = mx.serve(mx_listener) => r?,
         r = submission.serve(sub_listener) => r?,
         r = imap.serve(imap_listener) => r?,
         r = axum::serve(federation_listener, federation) => r?,
+        r = serve_objects => r?,
         _ = worker.run() => {},
         _ = prune => {},
         _ = purge => {},
