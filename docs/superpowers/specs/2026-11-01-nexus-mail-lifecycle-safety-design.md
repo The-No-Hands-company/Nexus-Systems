@@ -116,6 +116,23 @@ referenced generation; they never reconstruct a key or version from a client
 request. Gateway capability or read failures are transient for external
 bodies, while inline bodies remain available.
 
+### Loopback object service
+
+Because Mail API, IMAP, and outbound delivery are separate processes, SMTP
+hosts a loopback-only object service around the gateway. Every caller
+authenticates with a per-service secret; it submits a message ID and its
+already-authorized service identity, never an object key, generation, or
+version. The service verifies the caller's permitted access, resolves the
+message's recorded immutable version, and streams bytes without returning
+object metadata. It rejects non-loopback connections and invalid credentials.
+
+The service and all clients fail closed: unavailable external storage produces
+an HTTP `503`, IMAP `NO [UNAVAILABLE]`, or an outbound deferred attempt,
+respectively. None may log or return body bytes, object keys, version IDs, or
+generation IDs. SMTP verifies the object-store capability and completed
+migration/inventory marker before enabling the service or accepting an
+external-body upload; inline bodies remain independent of that capability.
+
 Explicit abandonment transitions a live reservation to cleanup scheduling.
 Cleanup deletes each recorded/reconciled version ID for that generation. A
 generation is marked deleted only after every version-targeted deletion
@@ -176,6 +193,8 @@ Automated coverage must prove:
   version-targeted cleanup, including an upload completing near expiry;
 - SMTP upload, Mail API/IMAP retrieval, and outbound delivery read the same
   immutable recorded version through the Mail-owned gateway;
+- loopback object-service authentication rejects non-local or unauthorized
+  callers and exposes no object metadata;
 - legacy external objects cannot enter an unsafe automatic-delete path;
 - a stopped old writer cannot create a Trash membership during migration;
 - bucket capability failure rejects only external-body delivery;
