@@ -36,3 +36,9 @@
 # The signed-in home, for anyone who types the obvious thing.
 /app        https://app.tnhc.dev/  302
 /dashboard  https://app.tnhc.dev/  302
+
+# Node operator information — public page, no sign-in needed.
+/node-operators   https://api.tnhc.dev/node-operators  302
+/node-operator    https://api.tnhc.dev/node-operators  302
+/nodes            https://api.tnhc.dev/node-operators  302
+/join-network     https://api.tnhc.dev/node-operators  302

@@ -20,6 +20,7 @@ import AppFrame from "./shell/AppFrame";
 import CalendarView from "./pages/calendar/CalendarView";
 import ReportIssue from "./pages/ReportIssue";
 import TerminalAccess, { type UserState } from "./pages/terminal/TerminalAccess";
+import NodeOperators from "./pages/NodeOperators";
 
 /**
  * The app list has three states, not two: while it is loading, "not found"
@@ -306,6 +307,14 @@ export default function App() {
             duplicating that inside Overlay would mean two copies of the same
             three states. */}
         <Route path="/apps" element={<ShellView state={appsState} user={user}><Grid /></ShellView>} />
+        <Route
+          path="/node-operators"
+          element={
+            <ShellView state={appsState} user={user}>
+              <NodeOperators />
+            </ShellView>
+          }
+        />
         <Route
           path="/report"
           element={

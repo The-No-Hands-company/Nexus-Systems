@@ -34,6 +34,7 @@ import { router as abuseRouter } from "./abuse";
 import emailVerifyRouter from "./emailVerify";
 import cloudRouter from "./cloud";
 import dockerDeployRouter from "./dockerDeploy";
+import nodeOperatorsRouter from "./nodeOperators";
 
 const router: IRouter = Router();
 
@@ -76,5 +77,6 @@ router.use(nlplRouter);
 router.use(cloudRouter);
 router.use("/abuse", abuseRouter);
 router.use(emailVerifyRouter);
+router.use(nodeOperatorsRouter);
 
 export default router;
