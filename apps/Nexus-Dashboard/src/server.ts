@@ -528,9 +528,17 @@ export async function handleRequest(
   // same catalog projection the /ipa/apps console route uses.
   if (req.method === "GET" && path === "/ipa/v1/me") return fetchMe(req);
   if (req.method === "GET" && path === "/ipa/v1/apps") return fetchApps(req);
-  // Backward-compat aliases for bundles built before the /ipa/v1 migration
+  // Backward-compat aliases for bundles built before the /ipa/v1 migration.
+  // These bridge old API paths to the same handlers the new bundle uses, so
+  // clients with stale cached bundles keep working during the transition window.
   if (req.method === "GET" && path === "/api/v1/me") return fetchMe(req);
   if (req.method === "GET" && path === "/api/v1/apps") return fetchApps(req);
+  // /api/v1/auth/* → rewrite to /ipa/v1/auth/* and proxy to auth. Auth enforces
+  // its own access control (session cookie required, role checked per endpoint),
+  // so bridging here is safe — we're only handling the routing, not the authz.
+  if (path.startsWith("/api/v1/auth/")) {
+    return proxyToAuth(req, path.replace(/^\/api\/v1\/auth\//, "/ipa/v1/auth/"));
+  }
 
   // GET-only, and only for names on CLOUD_ALLOWLIST — anything else (a
   // mutating method, or a name not in the table) falls through to the
