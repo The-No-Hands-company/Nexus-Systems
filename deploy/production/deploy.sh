@@ -374,7 +374,7 @@ start_nexus_api_service() {
 
 start_dashboard_service() {
     if [ ! -f "$ROOT/apps/Nexus-Dashboard/frontend/dist/index.html" ]; then
-        warn "dashboard UI not built — run: (cd apps/Nexus-Dashboard/frontend && VITE_NEXUS_API_URL=https://api.$DOMAIN npm install && npm run build)"
+        warn "dashboard UI not built — run: (cd apps/Nexus-Dashboard/frontend && npm install && bunx vite build)"
         return 1
     fi
     if [ ! -d "$ROOT/apps/Nexus-Dashboard/src" ]; then
@@ -851,7 +851,7 @@ cmd_start() {
     # built, so a checkout that has not run `npm run build` still brings up
     # everything else.
     if [ ! -f "$ROOT/apps/Nexus-Dashboard/frontend/dist/index.html" ]; then
-        warn "dashboard UI not built — run: (cd apps/Nexus-Dashboard/frontend && VITE_NEXUS_API_URL=https://api.$DOMAIN npm install && npm run build)"
+        warn "dashboard UI not built — run: (cd apps/Nexus-Dashboard/frontend && npm install && bunx vite build)"
     elif [ ! -d "$ROOT/apps/Nexus-Dashboard/src" ]; then
         warn "apps/Nexus-Dashboard/src missing — skipping dashboard"
     else
