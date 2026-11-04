@@ -349,18 +349,22 @@ async function terminalReachable(): Promise<boolean> {
  * role} from this, so the whole user object must pass through untouched.
  */
 async function fetchMe(req: Request): Promise<Response> {
+  const t0 = Date.now();
   try {
     const cookieHeader = req.headers.get("cookie") ?? "";
+    const hasCookie = cookieHeader.length > 0;
     const res = await fetch(`${authInternalUrl()}/api/v1/auth/me`, {
       headers: { cookie: cookieHeader, accept: "application/json" },
       signal: AbortSignal.timeout(3000),
     });
     const body = await res.text();
+    console.log(`[nexus-dashboard] /ipa/v1/me → auth ${res.status} in ${Date.now() - t0}ms (hasCookie=${hasCookie})`);
     return new Response(body, {
       status: res.status,
       headers: { "content-type": "application/json" },
     });
-  } catch {
+  } catch (err) {
+    console.error(`[nexus-dashboard] /ipa/v1/me → auth unreachable after ${Date.now() - t0}ms:`, err);
     return Response.json({ error: "auth_unreachable" }, { status: 502 });
   }
 }
@@ -490,6 +494,8 @@ export async function handleRequest(
   const url = new URL(req.url);
   const path = url.pathname;
 
+  console.log(`[nexus-dashboard] ${req.method} ${path}`);
+
   // Apply rate limiting to all API routes
   const rateLimitResult = checkRateLimit(req, { maxTokens: 100, refillRatePerSecond: 20 });
   if (!rateLimitResult.allowed) {
@@ -522,6 +528,9 @@ export async function handleRequest(
   // same catalog projection the /ipa/apps console route uses.
   if (req.method === "GET" && path === "/ipa/v1/me") return fetchMe(req);
   if (req.method === "GET" && path === "/ipa/v1/apps") return fetchApps(req);
+  // Backward-compat aliases for bundles built before the /ipa/v1 migration
+  if (req.method === "GET" && path === "/api/v1/me") return fetchMe(req);
+  if (req.method === "GET" && path === "/api/v1/apps") return fetchApps(req);
 
   // GET-only, and only for names on CLOUD_ALLOWLIST — anything else (a
   // mutating method, or a name not in the table) falls through to the
