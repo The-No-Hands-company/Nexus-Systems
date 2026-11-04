@@ -616,6 +616,14 @@ export async function handleRequest(
     return Response.json({ error: "not_found" }, { status: 404 });
   }
 
+  // Same guard for /api/ paths. The compat routes above handle the specific
+  // legacy paths we bridge; every other /api/ call gets a proper JSON 404
+  // rather than the HTML shell, so old bundles fail fast instead of returning
+  // {} from a failed JSON parse and crashing React with undefined array state.
+  if (path.startsWith("/api/")) {
+    return Response.json({ error: "not_found" }, { status: 404 });
+  }
+
   // A real asset if we have one, otherwise the SPA shell so client-side routes
   // survive a hard reload.
   if (path !== "/") {
