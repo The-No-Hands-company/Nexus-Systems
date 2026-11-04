@@ -91,7 +91,7 @@
 
 	# The nexus-web SPA.
 	handle {
-		root * {$NEXUS_WEB_ROOT:/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/apps/Nexus/packages/nexus-web/dist}
+		root * {$NEXUS_WEB_ROOT:/run/media/zajferx/Data1/dev/The-No-hands-Company/projects/Nexus-Systems/apps/Nexus/packages/nexus-web/dist}
 		try_files {path} {path}/ /index.html
 		file_server
 		@hashed path_regexp hashed \.[0-9a-zA-Z_-]{8,}\.(js|css|woff2?)$
