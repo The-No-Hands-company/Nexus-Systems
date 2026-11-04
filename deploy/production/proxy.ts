@@ -72,6 +72,7 @@ let routeCache: { timestamp: number; routes: Record<string, RouteTarget> } = {
 // Fallback static configuration (used when Nexus-Cloud is unavailable)
 const FALLBACK_CLOUD_UPSTREAM = process.env.CLOUD_UPSTREAM || "http://127.0.0.1:8787";
 const FALLBACK_CHAT_UPSTREAM = process.env.CHAT_UPSTREAM || "http://127.0.0.1:8095";
+const FALLBACK_HOSTING_UPSTREAM = process.env.HOSTING_UPSTREAM || "http://127.0.0.1:8788";
 // auth.<DOMAIN> is the sign-in host. Every app redirects an unauthenticated
 // browser to https://auth.<DOMAIN>/login?redirect=..., so this is the one that
 // has to resolve or single sign-on has nowhere to happen.
@@ -288,7 +289,15 @@ export interface WsProxyData {
 }
 
 export function privateUpstreamPath(host: string, pathname: string): string | null {
-  if (pathname.startsWith("/api/")) return null;
+  // /api/ is the INTERNAL prefix for the dashboard (app.*) and the Nexus API
+  // host. Callers reach those services via /ipa/ and the proxy rewrites here.
+  // All other services (Hosting, Auth's own endpoints, etc.) use /api/ natively
+  // and must be allowed through — do NOT apply this block globally.
+  const isIpaHost =
+    host === API_HOST ||
+    host === `www.${API_HOST}` ||
+    host === `app.${DOMAIN}`;
+  if (isIpaHost && pathname.startsWith("/api/")) return null;
   if ((host === API_HOST || host === `www.${API_HOST}`) && pathname.startsWith("/ipa/")) {
     return `/api/${pathname.slice("/ipa/".length)}`;
   }
@@ -715,6 +724,12 @@ async function handleRequestInner(
     if (!upstreamUrl && FALLBACK_ENABLED) {
       if (host === `cloud.${DOMAIN}` || host === `www.cloud.${DOMAIN}`) {
         upstreamUrl = FALLBACK_CLOUD_UPSTREAM;
+      } else if (host === `hosting.${DOMAIN}` || host === `www.hosting.${DOMAIN}`) {
+        // The Nexus-Hosting dashboard: the app at 8788, not the site-proxy at
+        // 8090. Without this fallback, hosting.tnhc.dev falls through to the
+        // wildcard and the site-proxy returns "No site found for hosting.tnhc.dev".
+        upstreamUrl = FALLBACK_HOSTING_UPSTREAM;
+        fixedKind = "app";
       } else if (host === `chat.${DOMAIN}` || host === `www.chat.${DOMAIN}`) {
         upstreamUrl = FALLBACK_CHAT_UPSTREAM;
       } else if (host === `auth.${DOMAIN}` || host === `www.auth.${DOMAIN}`) {

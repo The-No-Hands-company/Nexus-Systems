@@ -265,7 +265,12 @@ export async function resolveIdentity(cookie: string | null, audience: string): 
  *  - If a service ever genuinely needs a public endpoint, it can be added to
  *    this set explicitly rather than by forgetting to set a flag.
  */
-const PUBLIC_HOSTS = new Set([AUTH_HOST, API_HOST]);
+// hosting.<domain> manages its own OIDC session (client_id=nexus-hosting, its
+// own user DB). The OIDC flow paths (/api/login, /api/callback), the public
+// site directory (/api/sites), and health probes must reach it unauthenticated.
+// The hosting app enforces auth on routes that need it.
+const HOSTING_HOST = process.env.NEXUS_HOSTING_HOST || `hosting.${DOMAIN}`;
+const PUBLIC_HOSTS = new Set([AUTH_HOST, API_HOST, HOSTING_HOST]);
 
 /** Paths exempt from the auth gate on ANY host (deploy.sh probes these). */
 const PUBLIC_PATHS = new Set(["/health", "/health/live", "/health/ready"]);
