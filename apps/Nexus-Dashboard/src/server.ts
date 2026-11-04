@@ -350,8 +350,9 @@ async function terminalReachable(): Promise<boolean> {
  */
 async function fetchMe(req: Request): Promise<Response> {
   try {
+    const cookieHeader = req.headers.get("cookie") ?? "";
     const res = await fetch(`${authInternalUrl()}/api/v1/auth/me`, {
-      headers: { cookie: req.headers.get("cookie") ?? "", accept: "application/json" },
+      headers: { cookie: cookieHeader, accept: "application/json" },
       signal: AbortSignal.timeout(3000),
     });
     const body = await res.text();
@@ -519,8 +520,8 @@ export async function handleRequest(
   // these are the two calls it makes cross-"facade": who am I, and what apps do
   // I have. /me forwards the session cookie to Auth verbatim; /apps reuses the
   // same catalog projection the /ipa/apps console route uses.
-  if (req.method === "GET" && path === "/api/v1/me") return fetchMe(req);
-  if (req.method === "GET" && path === "/api/v1/apps") return fetchApps(req);
+  if (req.method === "GET" && path === "/ipa/v1/me") return fetchMe(req);
+  if (req.method === "GET" && path === "/ipa/v1/apps") return fetchApps(req);
 
   // GET-only, and only for names on CLOUD_ALLOWLIST — anything else (a
   // mutating method, or a name not in the table) falls through to the

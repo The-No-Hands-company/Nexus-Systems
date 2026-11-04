@@ -357,12 +357,15 @@ export async function gate(
   }
 
   // Try every candidate: one stale cookie must not shadow a valid one.
+  const candidates = readCookies(req, SESSION_COOKIE);
   let identityToken: string | null = null;
-  for (const candidate of readCookies(req, SESSION_COOKIE)) {
+  for (const candidate of candidates) {
     identityToken = await resolveIdentity(candidate, host);
     if (identityToken) break;
   }
-  if (!identityToken) return { allow: false, response: signedOutResponse(req) };
+  if (!identityToken) {
+    return { allow: false, response: signedOutResponse(req) };
+  }
 
   return { allow: true, identityToken };
 }
