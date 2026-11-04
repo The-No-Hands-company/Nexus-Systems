@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { buildAuthPageUrl } from "../authPages";
+import { Navigate } from "react-router-dom";
+import { buildAuthPageUrl, AUTH_ORIGIN } from "../authPages";
 import MaintenanceControls from "../components/MaintenanceControls";
 import { PageHeader } from "../../../../../packages/nexus-design/src/components/ui/page-header";
 import { Badge } from "../../../../../packages/nexus-design/src/components/ui/badge";
@@ -144,7 +145,13 @@ export default function Admin() {
     return <section className="mx-auto max-w-3xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
   }
 
-  if (!isAdmin(user)) return null;
+  if (user === null) {
+    const loginUrl = `${AUTH_ORIGIN}/login?redirect_uri=${encodeURIComponent(window.location.href)}`;
+    window.location.replace(loginUrl);
+    return null;
+  }
+
+  if (!isAdmin(user)) return <Navigate to="/" replace />;
 
   return (
     <section className="mx-auto max-w-3xl">

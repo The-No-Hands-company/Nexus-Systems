@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "cd ../../../packages/nexus-design && bun run build && cd - && vite",
-    "build": "cd ../../../packages/nexus-design && bun run build && cd - && tsc -b && vite build",
-    "preview": "vite preview",
-    "check": "tsc --noEmit",
+    "dev": "cd ../../../packages/nexus-design && bun run build && cd - && bunx vite",
+    "build": "cd ../../../packages/nexus-design && bun run build && cd - && bunx tsc -b && bunx vite build",
+    "preview": "bunx vite preview",
+    "check": "bunx tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
