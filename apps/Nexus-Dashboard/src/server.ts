@@ -611,7 +611,15 @@ export async function handleRequest(
   // survive a hard reload.
   if (path !== "/") {
     const asset = Bun.file(join(WEB_ROOT, path));
-    if (await asset.exists()) return new Response(asset);
+    if (await asset.exists()) {
+      // Vite puts all content-hashed assets under /assets/ with filenames like
+      // index-qPsoetaC.js. The hash changes with every build, so a cached copy
+      // is always the right one — safe to cache for a year.
+      const isHashed = path.startsWith("/assets/") && /\.(js|css|woff2?)$/.test(path);
+      const headers: Record<string, string> = {};
+      if (isHashed) headers["cache-control"] = "public, max-age=31536000, immutable";
+      return new Response(asset, { headers });
+    }
   }
 
   const shell = Bun.file(join(WEB_ROOT, "index.html"));
@@ -619,6 +627,12 @@ export async function handleRequest(
     return new Response(shell, {
       headers: {
         "content-type": "text/html; charset=utf-8",
+        // Never cache the HTML shell. It references content-hashed assets by
+        // filename; a stale shell pointing at an old hash serves an outdated
+        // bundle that browsers keep forever (immutable). no-store ensures every
+        // navigation fetches a fresh shell, while the hashed assets themselves
+        // stay cached across deploys.
+        "cache-control": "no-store, must-revalidate",
         // The shell is the authenticated front door — launcher, account, admin.
         // Unlike the apps it frames, nothing frames the shell, so it permits
         // nobody: 'self' only, never the apps' origins.
