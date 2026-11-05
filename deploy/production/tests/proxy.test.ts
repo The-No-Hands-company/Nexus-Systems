@@ -445,6 +445,16 @@ describe("app / site classification", () => {
     const res = await handleRequest(new Request("http://auth.tnhc.dev/login"));
     expect(res.status).not.toBe(302);
   });
+
+  it("routes app.tnhc.dev to the dashboard fallback even when Cloud is unavailable", async () => {
+    const { handleRequest, __setRoutesForTest } = await import("../proxy");
+    __setRoutesForTest({}); // empty table — simulates Cloud being unreachable
+    // 502 is expected (dashboard not running in tests); the important thing is
+    // the proxy reached an upstream rather than returning 302 or 404.
+    const res = await handleRequest(new Request("http://app.tnhc.dev/"));
+    expect(res.status).not.toBe(302);
+    expect(res.status).not.toBe(404);
+  });
 });
 
 describe("CORS belongs to the application", () => {

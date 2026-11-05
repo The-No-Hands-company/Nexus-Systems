@@ -78,6 +78,7 @@ const FALLBACK_HOSTING_UPSTREAM = process.env.HOSTING_UPSTREAM || "http://127.0.
 // has to resolve or single sign-on has nowhere to happen.
 const FALLBACK_AUTH_UPSTREAM = process.env.AUTH_UPSTREAM || "http://127.0.0.1:4310";
 const FALLBACK_API_UPSTREAM = process.env.API_UPSTREAM || "http://127.0.0.1:3036";
+const FALLBACK_DASHBOARD_UPSTREAM = process.env.DASHBOARD_UPSTREAM || "http://127.0.0.1:3132";
 // Paths Nexus-Auth serves itself; everything else on auth.<DOMAIN> belongs to
 // the Supabase gateway. /request, /claim and /join are the ways in for someone
 // without an account, and /recover the way back in after a lost password
@@ -729,6 +730,13 @@ async function handleRequestInner(
         // 8090. Without this fallback, hosting.tnhc.dev falls through to the
         // wildcard and the site-proxy returns "No site found for hosting.tnhc.dev".
         upstreamUrl = FALLBACK_HOSTING_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `app.${DOMAIN}` || host === `www.app.${DOMAIN}`) {
+        // The ecosystem shell (Nexus-Dashboard, port 3132). Without this fallback,
+        // app.tnhc.dev falls through to the wildcard and the site-proxy returns
+        // "No site found for app.tnhc.dev". The shell is intentionally public
+        // (unauthenticated browsers reach the sign-in and request-access pages).
+        upstreamUrl = FALLBACK_DASHBOARD_UPSTREAM;
         fixedKind = "app";
       } else if (host === `chat.${DOMAIN}` || host === `www.chat.${DOMAIN}`) {
         upstreamUrl = FALLBACK_CHAT_UPSTREAM;
