@@ -1017,7 +1017,7 @@ export async function handleRequest(request: Request): Promise<Response> {
       );
     }
 
-    // ── Logout ──
+    // ── Logout (POST — API callers) ──
     if (request.method === "POST" && path === "/api/v1/auth/logout") {
       if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
 
@@ -1032,6 +1032,36 @@ export async function handleRequest(request: Request): Promise<Response> {
         { success: true },
         { headers: { "set-cookie": clearedSessionCookie() } },
       );
+    }
+
+    // ── OIDC End-Session (GET — browser redirect from OIDC clients) ──
+    // Handles the RP-Initiated Logout flow: clear the ecosystem session if
+    // present, then redirect to post_logout_redirect_uri (validated to be
+    // a safe https URL) or the auth root.
+    if (request.method === "GET" && path === "/api/v1/auth/logout") {
+      const redirectRaw = url.searchParams.get("post_logout_redirect_uri") || "";
+      let redirectTarget = "/";
+      try {
+        const parsed = new URL(redirectRaw);
+        if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+          redirectTarget = parsed.href;
+        }
+      } catch {
+        // malformed or missing — fall back to root
+      }
+
+      if (auth?.session) {
+        revokeSession(auth.session.id);
+        audit({ event: "logout", userId: auth.userId, deviceId: auth.session.deviceId });
+      }
+
+      return new Response(null, {
+        status: 302,
+        headers: {
+          location: redirectTarget,
+          "set-cookie": clearedSessionCookie(),
+        },
+      });
     }
 
     // ── Me ──
