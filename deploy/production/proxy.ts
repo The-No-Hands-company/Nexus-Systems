@@ -73,6 +73,9 @@ let routeCache: { timestamp: number; routes: Record<string, RouteTarget> } = {
 const FALLBACK_CLOUD_UPSTREAM = process.env.CLOUD_UPSTREAM || "http://127.0.0.1:8787";
 const FALLBACK_CHAT_UPSTREAM = process.env.CHAT_UPSTREAM || "http://127.0.0.1:8095";
 const FALLBACK_HOSTING_UPSTREAM = process.env.HOSTING_UPSTREAM || "http://127.0.0.1:8788";
+const FALLBACK_DRAW_UPSTREAM = process.env.DRAW_UPSTREAM || "http://127.0.0.1:8091";
+const FALLBACK_CALENDAR_UPSTREAM = process.env.CALENDAR_UPSTREAM || "http://127.0.0.1:8092";
+const FALLBACK_PROJECT_UPSTREAM = process.env.PROJECT_UPSTREAM || "http://127.0.0.1:8093";
 // auth.<DOMAIN> is the sign-in host. Every app redirects an unauthenticated
 // browser to https://auth.<DOMAIN>/login?redirect=..., so this is the one that
 // has to resolve or single sign-on has nowhere to happen.
@@ -740,6 +743,15 @@ async function handleRequestInner(
         fixedKind = "app";
       } else if (host === `chat.${DOMAIN}` || host === `www.chat.${DOMAIN}`) {
         upstreamUrl = FALLBACK_CHAT_UPSTREAM;
+      } else if (host === `draw.${DOMAIN}` || host === `www.draw.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_DRAW_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `calendar.${DOMAIN}` || host === `www.calendar.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_CALENDAR_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `project.${DOMAIN}` || host === `www.project.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_PROJECT_UPSTREAM;
+        fixedKind = "app";
       } else if (host === `auth.${DOMAIN}` || host === `www.auth.${DOMAIN}`) {
         upstreamUrl = FALLBACK_AUTH_UPSTREAM;
       } else if (host === DOMAIN || host === `www.${DOMAIN}`) {
