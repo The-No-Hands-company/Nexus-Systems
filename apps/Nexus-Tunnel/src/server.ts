@@ -1,4 +1,10 @@
 import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index";
+import { PhantomApp } from "../../../packages/phantom-sdk/src/integration";
+
+const phantomApp = new PhantomApp("nexus-tunnel");
+phantomApp.start().catch((err: unknown) => {
+  console.error("[nexus-tunnel] Phantom startup failed:", err instanceof Error ? err.message : err);
+});
 import { buildSystemsApiRegistrationPayload } from "./contracts";
 import {
   startNexusTunnelCloudRegistrationHeartbeat,
@@ -175,6 +181,7 @@ const server = Bun.serve({
           status: "ok",
           service: "nexus-tunnel",
           timestamp: new Date().toISOString(),
+          phantom: phantomApp.status(),
         });
       }
 

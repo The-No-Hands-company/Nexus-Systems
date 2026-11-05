@@ -34,6 +34,12 @@ import {
 import { recordMetric, getMetrics, getMetricsForHost, getTrafficSummary } from "./traffic-metrics";
 import type { EdgeThreatSeverity, AnomalyType, EdgeResponseAction, EdgeIngressTarget, EdgeTrustState } from "./types";
 import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index";
+import { PhantomApp } from "../../../packages/phantom-sdk/src/integration";
+
+const phantomApp = new PhantomApp("nexus-edge");
+phantomApp.start().catch((err: unknown) => {
+  console.error("[nexus-edge] Phantom startup failed:", err instanceof Error ? err.message : err);
+});
 
 const VALID_SEVERITIES: EdgeThreatSeverity[] = ["low", "medium", "high", "critical"];
 const VALID_ANOMALY_TYPES: AnomalyType[] = ["behavioral", "performance", "security", "resource", "governance"];
@@ -149,7 +155,7 @@ const server = Bun.serve({
       const startTime = Date.now();
 
       if (request.method === "GET" && path === "/health") {
-        return jsonResponse({ status: "ok", service: "nexus-edge", timestamp: new Date().toISOString() });
+        return jsonResponse({ status: "ok", service: "nexus-edge", timestamp: new Date().toISOString(), phantom: phantomApp.status() });
       }
 
       if (request.method === "GET" && path === "/api/v1/edge/readiness") {

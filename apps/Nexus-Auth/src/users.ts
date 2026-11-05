@@ -1,4 +1,10 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+
+/** Deterministic Phantom DID for a user, derived from their stable user ID. */
+function generatePhantomDid(userId: string): string {
+  const hash = createHash("sha256").update("phantom:user:" + userId).digest("hex").slice(0, 32);
+  return `did:phantom:user:${hash}`;
+}
 import type { User, IdentityRole, Permission, AccountStatus } from "./types";
 import { mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, dirname, resolve, join, fileURLToPath } from "./types";
 
@@ -97,8 +103,9 @@ export function createUser(input: {
   }
 
   const now = new Date().toISOString();
+  const userId = generateUserId();
   const user: User = {
-    id: generateUserId(),
+    id: userId,
     username: input.username.trim().toLowerCase(),
     email: input.email.trim().toLowerCase(),
     role: input.role || "user",
@@ -107,7 +114,7 @@ export function createUser(input: {
     status: "active",
     createdAt: now,
     updatedAt: now,
-    phantom_did: input.phantom_did ?? undefined,
+    phantom_did: input.phantom_did ?? generatePhantomDid(userId),
   };
 
   users.set(user.id, user);

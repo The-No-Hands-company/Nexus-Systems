@@ -73,6 +73,12 @@ import { getCatalogPreferences, saveCatalogPreferences } from "./preferences";
 import type { AccountStatus, LoginResult, Permission } from "./types";
 import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index";
 import { verifyDidSignature } from "../../../packages/phantom-utils/src/verify";
+import { PhantomApp } from "../../../packages/phantom-sdk/src/integration";
+
+const phantomApp = new PhantomApp("nexus-auth");
+phantomApp.start().catch((err: unknown) => {
+  console.error("[nexus-auth] Phantom startup failed:", err instanceof Error ? err.message : err);
+});
 
 function jsonResponse(payload: unknown, init?: ResponseInit): Response {
   // Merge, do not replace. This previously spread `init` and then overwrote
@@ -498,7 +504,7 @@ export async function handleRequest(request: Request): Promise<Response> {
     const auth = requireAuth(request);
 
     if (request.method === "GET" && path === "/health") {
-      return jsonResponse({ status: "ok", service: "nexus-auth", timestamp: new Date().toISOString() });
+      return jsonResponse({ status: "ok", service: "nexus-auth", timestamp: new Date().toISOString(), phantom: phantomApp.status() });
     }
 
     if (request.method === "GET" && path === "/api/v1/auth/contract") {

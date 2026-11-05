@@ -1,4 +1,10 @@
 import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index";
+import { PhantomApp } from "../../../packages/phantom-sdk/src/integration";
+
+const phantomApp = new PhantomApp("nexus-guardian");
+phantomApp.start().catch((err: unknown) => {
+  console.error("[nexus-guardian] Phantom startup failed:", err instanceof Error ? err.message : err);
+});
 import { buildSystemsApiRegistrationPayload } from "./contracts";
 import { startNexusGuardianCloudRegistrationHeartbeat } from "./cloud";
 import {
@@ -224,6 +230,7 @@ const server = Bun.serve({
           status: "ok",
           service: "nexus-guardian",
           timestamp: new Date().toISOString(),
+          phantom: phantomApp.status(),
         });
       }
 
