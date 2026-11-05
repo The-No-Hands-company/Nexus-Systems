@@ -42,7 +42,7 @@
 
 	# The nexus-draw SPA
 	handle {
-		root * {$NEXUS_DRAW_WEB_ROOT:/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/apps/Nexus-Draw/frontend/dist}
+		root * {$NEXUS_DRAW_WEB_ROOT:/run/media/zajferx/Data1/dev/The-No-hands-Company/projects/Nexus-Systems/apps/Nexus-Draw/frontend/dist}
 		try_files {path} {path}/ /index.html
 		file_server
 		@hashed path_regexp hashed \.[0-9a-zA-Z_-]{8,}\.(js|css|woff2?)$

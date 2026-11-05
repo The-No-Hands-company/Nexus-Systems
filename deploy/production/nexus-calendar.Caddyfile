@@ -30,7 +30,7 @@
 	# Vite emits one hashed artifact set. Dashboard proxies these bytes below
 	# /calendar, while this origin serves the identical files at /assets.
 	handle /assets/* {
-		root * {$NEXUS_CALENDAR_WEB_ROOT:/opt/nexus-systems/apps/Nexus-Calendar/frontend/dist}
+		root * {$NEXUS_CALENDAR_WEB_ROOT:/run/media/zajferx/Data1/dev/The-No-hands-Company/projects/Nexus-Systems/apps/Nexus-Calendar/frontend/dist}
 		header Cache-Control "public, max-age=31536000, immutable"
 		file_server
 	}
@@ -38,7 +38,7 @@
 	# A public share link has an intentionally isolated document response. The
 	# page reads its token only from the URL and never sends it as a Referer.
 	handle /share/* {
-		root * {$NEXUS_CALENDAR_WEB_ROOT:/opt/nexus-systems/apps/Nexus-Calendar/frontend/dist}
+		root * {$NEXUS_CALENDAR_WEB_ROOT:/run/media/zajferx/Data1/dev/The-No-hands-Company/projects/Nexus-Systems/apps/Nexus-Calendar/frontend/dist}
 		header Cache-Control "no-cache, no-store, must-revalidate"
 		header Referrer-Policy "no-referrer"
 		try_files {path} /index.html
@@ -48,7 +48,7 @@
 	# Direct-origin SPA fallback. Dashboard has its own narrow /calendar proxy;
 	# this rule therefore cannot reinterpret arbitrary Dashboard paths.
 	handle {
-		root * {$NEXUS_CALENDAR_WEB_ROOT:/opt/nexus-systems/apps/Nexus-Calendar/frontend/dist}
+		root * {$NEXUS_CALENDAR_WEB_ROOT:/run/media/zajferx/Data1/dev/The-No-hands-Company/projects/Nexus-Systems/apps/Nexus-Calendar/frontend/dist}
 		header Cache-Control "no-cache, no-store, must-revalidate"
 		try_files {path} /index.html
 		file_server

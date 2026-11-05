@@ -45,6 +45,11 @@ services:
   app:
     ports: !override
       - "127.0.0.1:8788:8080"
+    extra_hosts:
+      # host.docker.internal does not exist on Linux by default. This maps it to
+      # the host machine's gateway IP so the heartbeat client can reach
+      # Nexus-Cloud (port 8787) without hard-coding an address.
+      - "host.docker.internal:host-gateway"
     environment:
       # Who may frame this app: the ecosystem shell, which mounts it at
       # app.tnhc.dev/hosting.
@@ -55,6 +60,12 @@ services:
       # app.hosting.tnhc.dev, which is nothing. The shell's origin is a
       # deployment fact and belongs in the deployment file.
       SHELL_ORIGINS: https://app.tnhc.dev
+      # Nexus Cloud integration: register as a launcher app and send heartbeats.
+      # Cloud runs on the host at port 8787; host.docker.internal is mapped above.
+      # No NEXUS_CLOUD_API_KEY needed: Cloud accepts unauthenticated registrations
+      # when no API key is configured on its end.
+      NEXUS_CLOUD_URL: http://host.docker.internal:8787
+      PUBLIC_URL: https://hosting.tnhc.dev
 
   # The site-serving Rust proxy. NOT hosting.tnhc.dev — this answers by Host
   # header for domains of sites people deploy, and returns nothing for anything
