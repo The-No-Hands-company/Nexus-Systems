@@ -301,6 +301,7 @@ start_cloud_service() {
         NEXUS_TUNNEL_ID="${NEXUS_TUNNEL_ID:-a3fc7587-49de-4792-b532-882775db6457}" \
         SERVER_PUBLIC_IP="${SERVER_PUBLIC_IP:-}" \
         PORT=8787 CORS_ORIGIN="*" NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_BIND_HOST=0.0.0.0 \
         NEXUS_STORAGE_S3_ENDPOINT=http://localhost:9000 \
         NEXUS_STORAGE_S3_REGION=us-east-1 \
         NEXUS_STORAGE_S3_BUCKET_PREFIX=nexus \

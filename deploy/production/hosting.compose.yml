@@ -61,10 +61,16 @@ services:
       # deployment fact and belongs in the deployment file.
       SHELL_ORIGINS: https://app.tnhc.dev
       # Nexus Cloud integration: register as a launcher app and send heartbeats.
-      # Cloud runs on the host at port 8787; host.docker.internal is mapped above.
-      # No NEXUS_CLOUD_API_KEY needed: Cloud accepts unauthenticated registrations
-      # when no API key is configured on its end.
+      # Cloud is started with NEXUS_BIND_HOST=0.0.0.0 so it listens on the
+      # Docker bridge interfaces. host.docker.internal maps to the bridge
+      # gateway via extra_hosts above; Cloud answers on that address.
+      #
+      # NEXUS_CLOUD_API_KEY is sourced from the shell at deploy time (deploy.sh
+      # exports it after reading apps/Nexus-Cloud/.env). Docker Compose
+      # interpolates ${VAR:-} from the host environment, so the container
+      # receives the key without it being written into this file.
       NEXUS_CLOUD_URL: http://host.docker.internal:8787
+      NEXUS_CLOUD_API_KEY: ${NEXUS_CLOUD_API_KEY:-}
       PUBLIC_URL: https://hosting.tnhc.dev
 
   # The site-serving Rust proxy. NOT hosting.tnhc.dev — this answers by Host
