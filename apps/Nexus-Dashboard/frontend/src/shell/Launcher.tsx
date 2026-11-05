@@ -1,6 +1,7 @@
 import type { AppEntry } from "../api";
 import { isLauncherApp } from "./catalog";
 import AppLaunchLink from "../components/AppLaunchLink";
+import { appMeta } from "../components/appMeta";
 
 /**
  * The app list in the sidebar.
@@ -22,18 +23,28 @@ export default function Launcher({
 }) {
   return (
     <nav aria-label="App launcher" className="p-2">
-      <ul className="space-y-1">
-        {apps.filter(isLauncherApp).map((app) => (
-          <li key={app.id}>
+      <ul className="space-y-0.5">
+        {apps.filter(isLauncherApp).map((app) => {
+          const { Icon, color } = appMeta(app.id);
+          return (
+            <li key={app.id}>
               <AppLaunchLink
                 app={app}
                 aria-current={app.id === activeId ? "page" : undefined}
-                className="block rounded-md px-3 py-2 text-sm hover:bg-zinc-800 aria-[current=page]:bg-zinc-800"
+                className="flex items-center gap-2.5 rounded-md px-2 py-2 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 aria-[current=page]:bg-zinc-800 aria-[current=page]:text-zinc-100 transition-colors"
               >
+                <span
+                  className="flex shrink-0 items-center justify-center rounded-md"
+                  style={{ width: 24, height: 24, background: `color-mix(in srgb, ${color} 20%, transparent)`, color }}
+                  aria-hidden
+                >
+                  <Icon size={14} weight="duotone" />
+                </span>
                 {app.name}
               </AppLaunchLink>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
     </nav>
   );

@@ -2,6 +2,7 @@ import { Pill } from "../../../../../packages/nexus-design/src/components/ui/pil
 import type { AppEntry } from "../api";
 import { shelfLabel } from "./catalogLabels";
 import AppLaunchLink from "./AppLaunchLink";
+import { appMeta } from "./appMeta";
 
 function status(app: AppEntry): { label: string; tone: "neutral" | "warning" | "danger" } {
   if (app.health !== "healthy") return { label: "Offline", tone: "neutral" };
@@ -12,20 +13,41 @@ function status(app: AppEntry): { label: string; tone: "neutral" | "warning" | "
   return { label: app.maturity === "stable" ? "Available" : app.maturity ?? "Available", tone: "neutral" };
 }
 
+function AppIcon({ id, color, size = 36 }: { id: string; color: string; size?: number }) {
+  const { Icon } = appMeta(id);
+  return (
+    <span
+      className="flex shrink-0 items-center justify-center rounded-lg"
+      style={{
+        width: size,
+        height: size,
+        background: `color-mix(in srgb, ${color} 18%, transparent)`,
+        color,
+      }}
+      aria-hidden
+    >
+      <Icon size={size * 0.55} weight="duotone" />
+    </span>
+  );
+}
+
 export default function AppCard({ app, compact = false, showShelf = false }: { app: AppEntry; compact?: boolean; showShelf?: boolean }) {
   const canLaunch = app.health === "healthy" && app.visibility !== "restricted" && (app.reviewStatus ?? "approved") === "approved";
   const state = status(app);
+  const { color } = appMeta(app.id);
+
   const content = (
-    <>
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="min-w-0">
+    <div className="flex items-start gap-3">
+      <AppIcon id={app.id} color={color} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
           <h3 className="truncate font-medium text-zinc-100">{app.name}</h3>
-          {!compact && app.description && <p className="mt-1 line-clamp-2 text-sm text-zinc-400">{app.description}</p>}
+          <Pill tone={state.tone}>{state.label}</Pill>
         </div>
-        <Pill tone={state.tone}>{state.label}</Pill>
+        {!compact && app.description && <p className="mt-1 line-clamp-2 text-sm text-zinc-400">{app.description}</p>}
+        {showShelf && <p className="mt-1.5 text-xs text-zinc-500">{shelfLabel(app.primaryShelf ?? "explore")}</p>}
       </div>
-      {showShelf && <p className="mt-2 text-xs text-zinc-500">{shelfLabel(app.primaryShelf ?? "explore")}</p>}
-    </>
+    </div>
   );
 
   if (canLaunch) {
