@@ -27,6 +27,8 @@ export default function MailCompose() {
   // can be linked to, rather than living in router state that vanishes.
   const [params] = useSearchParams();
   const [to, setTo] = useState(params.get("to") ?? "");
+  const [cc, setCc] = useState("");
+  const [bcc, setBcc] = useState("");
   const [subject, setSubject] = useState(params.get("subject") ?? "");
   const [text, setText] = useState(params.get("quote") ?? "");
   const inReplyTo = params.get("inReplyTo") ?? undefined;
@@ -46,8 +48,12 @@ export default function MailCompose() {
     setSending(true);
     setError(null);
     try {
+      const ccRecipients = cc.split(",").map((s) => s.trim()).filter(Boolean);
+      const bccRecipients = bcc.split(",").map((s) => s.trim()).filter(Boolean);
       const res = await sendMail({
         to: recipients,
+        ...(ccRecipients.length ? { cc: ccRecipients } : {}),
+        ...(bccRecipients.length ? { bcc: bccRecipients } : {}),
         subject,
         text,
         in_reply_to: inReplyTo,
@@ -79,6 +85,26 @@ export default function MailCompose() {
             value={to}
             onChange={(e) => setTo(e.target.value)}
             placeholder="someone@tnhc.dev, other@example.com"
+            className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600"
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-xs uppercase tracking-wide text-zinc-500">CC</span>
+          <input
+            value={cc}
+            onChange={(e) => setCc(e.target.value)}
+            placeholder="cc@example.com"
+            className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600"
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-xs uppercase tracking-wide text-zinc-500">BCC</span>
+          <input
+            value={bcc}
+            onChange={(e) => setBcc(e.target.value)}
+            placeholder="bcc@example.com"
             className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600"
           />
         </label>

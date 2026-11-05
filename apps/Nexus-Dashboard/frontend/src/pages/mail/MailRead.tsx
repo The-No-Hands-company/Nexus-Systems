@@ -90,12 +90,18 @@ export default function MailRead() {
   }
 
   const m = state.message;
-  const move = async (folder: "inbox" | "trash" | "junk") => {
+  const move = async (folder: "inbox" | "trash" | "junk" | "archive") => {
     try {
       setBusyAction("move");
       setMoveError(null);
       setStatus(null);
       await moveMailMessage(m.id, folder);
+      if (folder === "archive") {
+        setStatus("Message archived.");
+        setState({ kind: "missing" });
+        setSiblings([]);
+        return;
+      }
       const message = await readMailMessage(m.id);
       setState({ kind: "ready", message });
       setStatus(
@@ -106,6 +112,19 @@ export default function MailRead() {
             : "Message moved to Inbox.",
       );
       setConfirmDelete(false);
+    } catch (e) {
+      setMoveError(e instanceof Error ? e.message : "unknown");
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const markUnread = async () => {
+    try {
+      setBusyAction("move");
+      setMoveError(null);
+      await markMailSeen(m.id, false);
+      setStatus("Marked as unread.");
     } catch (e) {
       setMoveError(e instanceof Error ? e.message : "unknown");
     } finally {
@@ -132,7 +151,14 @@ export default function MailRead() {
 
   const isInbox = m.folder_kind === "inbox";
   const isTrash = m.folder_kind === "trash";
+  const isArchive = m.folder_kind === "archive";
   const isJunk = m.folder_kind === "custom" && m.folder_name === "Junk";
+  const forwardParams = new URLSearchParams({
+    subject: m.subject?.toLowerCase().startsWith("fwd:")
+      ? m.subject
+      : `Fwd: ${m.subject ?? ""}`.trim(),
+    quote: `\n\n-------- Forwarded Message --------\nFrom: ${m.from}\nDate: ${m.date ?? ""}\n\n${m.text}`,
+  });
   return (
     <section className="mx-auto max-w-3xl space-y-4 px-4 py-6 sm:p-8">
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -155,6 +181,22 @@ export default function MailRead() {
         >
           Reply
         </Link>
+        <Link
+          to={`/mail/compose?${forwardParams.toString()}`}
+          className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900"
+        >
+          Forward
+        </Link>
+        {(isInbox || isJunk) && (
+          <button
+            type="button"
+            disabled={busyAction !== null}
+            onClick={() => void move("archive")}
+            className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900"
+          >
+            Archive
+          </button>
+        )}
         {(isInbox || isJunk) && (
           <button
             type="button"
@@ -165,7 +207,7 @@ export default function MailRead() {
             Move to Trash
           </button>
         )}
-        {isTrash && (
+        {(isTrash || isArchive) && (
           <button
             type="button"
             disabled={busyAction !== null}
@@ -183,6 +225,16 @@ export default function MailRead() {
             className="rounded border border-red-700 px-3 py-1.5 text-sm text-red-200 hover:bg-red-950/40"
           >
             Delete permanently
+          </button>
+        )}
+        {(isInbox || isArchive) && (
+          <button
+            type="button"
+            disabled={busyAction !== null}
+            onClick={() => void markUnread()}
+            className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900"
+          >
+            Mark as unread
           </button>
         )}
         {isInbox && (

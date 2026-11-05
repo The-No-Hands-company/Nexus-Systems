@@ -734,7 +734,7 @@ export function markMailSeen(id: string, seen: boolean) {
   });
 }
 
-export function moveMailMessage(id: string, folder: "inbox" | "trash" | "junk") {
+export function moveMailMessage(id: string, folder: "inbox" | "trash" | "junk" | "archive") {
   return request<void>(`/ipa/mail/messages/${encodeURIComponent(id)}/folder`, {
     method: "POST",
     body: JSON.stringify({ folder }),
@@ -784,6 +784,7 @@ export type OutgoingAttachment = {
 export function sendMail(body: {
   to: string[];
   cc?: string[];
+  bcc?: string[];
   subject: string;
   text: string;
   in_reply_to?: string;

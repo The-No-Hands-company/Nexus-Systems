@@ -120,6 +120,7 @@ export default function MailList() {
   const currentFolder = state.folders.find((f) => f.id === targetFolderId);
   const viewingTrash = !query && currentFolder?.kind === "trash";
   const canMoveToTrash = !query && (currentFolder?.kind === "inbox" || currentFolder?.name === "Junk");
+  const canArchive = !query && (currentFolder?.kind === "inbox" || currentFolder?.kind === "sent");
 
   const moveToTrash = async (id: string) => {
     try {
@@ -174,6 +175,24 @@ export default function MailList() {
       setMoveError(e instanceof Error ? e.message : "unknown");
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const archiveMessage = async (id: string) => {
+    try {
+      setMovingId(id);
+      setMoveError(null);
+      setStatus(null);
+      await moveMailMessage(id, "archive");
+      setState((current) => current.kind === "ready"
+        ? { ...current, messages: current.messages.filter((message) => message.id !== id) }
+        : current);
+      setStatus("Message archived.");
+      restoreFocus();
+    } catch (e) {
+      setMoveError(e instanceof Error ? e.message : "unknown");
+    } finally {
+      setMovingId(null);
     }
   };
 
@@ -334,6 +353,18 @@ export default function MailList() {
                 </span>
               </Link>
               <div className="flex flex-wrap items-center gap-2 px-2 pb-2 sm:px-0 sm:pb-0 sm:pr-2">
+                {canArchive && (
+                  <button
+                    type="button"
+                    disabled={movingId === m.id}
+                    onClick={() => void archiveMessage(m.id)}
+                    aria-label={`Archive ${m.subject || "(no subject)"}`}
+                    data-mail-action="archive"
+                    className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-900 disabled:cursor-wait disabled:opacity-50"
+                  >
+                    Archive
+                  </button>
+                )}
                 {canMoveToTrash && (
                   <button
                     type="button"
