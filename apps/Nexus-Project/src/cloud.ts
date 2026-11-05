@@ -1,7 +1,7 @@
 import { buildSystemsApiRegistrationPayload } from "./contracts";
 
 function cloudBaseUrl(): string {
-  return (process.env.NEXUS_CLOUD_URL || "http://localhost:8787").trim().replace(/\/$/, "");
+  return (process.env.NEXUS_CLOUD_INTERNAL_URL || process.env.NEXUS_CLOUD_URL || "http://127.0.0.1:8787").trim().replace(/\/$/, "");
 }
 
 function cloudHeaders(): Record<string, string> {
