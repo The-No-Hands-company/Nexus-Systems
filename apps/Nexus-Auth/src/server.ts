@@ -76,9 +76,12 @@ import { verifyDidSignature } from "../../../packages/phantom-utils/src/verify";
 import { PhantomApp } from "../../../packages/phantom-sdk/src/integration";
 
 const phantomApp = new PhantomApp("nexus-auth");
-phantomApp.start().catch((err: unknown) => {
-  console.error("[nexus-auth] Phantom startup failed:", err instanceof Error ? err.message : err);
-});
+const CLOUD_URL = process.env.NEXUS_CLOUD_URL ?? "http://localhost:8787";
+phantomApp.start()
+  .then(() => phantomApp.registerWithCloud(CLOUD_URL))
+  .catch((err: unknown) => {
+    console.error("[nexus-auth] Phantom startup failed:", err instanceof Error ? err.message : err);
+  });
 
 function jsonResponse(payload: unknown, init?: ResponseInit): Response {
   // Merge, do not replace. This previously spread `init` and then overwrote

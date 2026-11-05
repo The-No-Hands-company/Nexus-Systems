@@ -7,11 +7,14 @@ import type {
   SearchDocument,
 } from "./types";
 
-function jsonHeaders(apiKey?: string): Record<string, string> {
+type PhantomSigner = (body: string) => Promise<Record<string, string>>;
+
+function jsonHeaders(apiKey?: string, extra?: Record<string, string>): Record<string, string> {
   return {
     "content-type": "application/json",
     accept: "application/json",
     ...(apiKey ? { "x-api-key": apiKey } : {}),
+    ...(extra ?? {}),
   };
 }
 
@@ -19,9 +22,20 @@ export class NexusClient {
   private config: NexusServiceConfig;
   private heartbeatTimer: ReturnType<typeof setInterval> | undefined;
   private monitorTimer: ReturnType<typeof setInterval> | undefined;
+  private phantomSigner: PhantomSigner | undefined;
 
   constructor(config: NexusServiceConfig) {
     this.config = config;
+  }
+
+  /** Attach a Phantom signing function so outbound calls carry X-Phantom-* headers. */
+  setPhantomSigner(signer: PhantomSigner): void {
+    this.phantomSigner = signer;
+  }
+
+  private async phantomHeaders(body: string): Promise<Record<string, string>> {
+    if (!this.phantomSigner) return {};
+    try { return await this.phantomSigner(body); } catch { return {}; }
   }
 
   // ── Cloud Integration ──
@@ -46,10 +60,11 @@ export class NexusClient {
   async registerWithCloud(): Promise<boolean> {
     if (!this.config.enableCloudIntegration) return false;
     try {
+      const body = JSON.stringify(this.buildRegistrationPayload());
       const r = await fetch(`${this.config.cloudUrl}/api/v1/tools`, {
         method: "POST",
-        headers: jsonHeaders(this.config.cloudApiKey),
-        body: JSON.stringify(this.buildRegistrationPayload()),
+        headers: jsonHeaders(this.config.cloudApiKey, await this.phantomHeaders(body)),
+        body,
       });
       return r.ok;
     } catch (e) {
@@ -63,10 +78,11 @@ export class NexusClient {
     let ok = false;
     let reason = "";
     try {
+      const hbBody = JSON.stringify({ health: "healthy", upstreamUrl: this.config.baseUrl });
       const r = await fetch(`${this.config.cloudUrl}/api/v1/tools/${encodeURIComponent(this.config.id)}/heartbeat`, {
         method: "POST",
-        headers: jsonHeaders(this.config.cloudApiKey),
-        body: JSON.stringify({ health: "healthy", upstreamUrl: this.config.baseUrl }),
+        headers: jsonHeaders(this.config.cloudApiKey, await this.phantomHeaders(hbBody)),
+        body: hbBody,
       });
       ok = r.ok;
       reason = `HTTP ${r.status}`;

@@ -37,9 +37,11 @@ import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index
 import { PhantomApp } from "../../../packages/phantom-sdk/src/integration";
 
 const phantomApp = new PhantomApp("nexus-edge");
-phantomApp.start().catch((err: unknown) => {
-  console.error("[nexus-edge] Phantom startup failed:", err instanceof Error ? err.message : err);
-});
+phantomApp.start()
+  .then(() => phantomApp.registerWithCloud(process.env.NEXUS_CLOUD_URL ?? "http://localhost:8787"))
+  .catch((err: unknown) => {
+    console.error("[nexus-edge] Phantom startup failed:", err instanceof Error ? err.message : err);
+  });
 
 const VALID_SEVERITIES: EdgeThreatSeverity[] = ["low", "medium", "high", "critical"];
 const VALID_ANOMALY_TYPES: AnomalyType[] = ["behavioral", "performance", "security", "resource", "governance"];

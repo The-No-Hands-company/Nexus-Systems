@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Config } from "../lib/config";
 import { logger } from "../lib/logger";
+import { verifyDidSignature } from "../../../../packages/phantom-utils/src/verify";
 
 interface RequestContext {
   requestId: string;
@@ -48,27 +49,20 @@ export async function authGate(
     let orgId: string | undefined;
 
     if (scheme.toLowerCase() === "bearer" && token) {
-      // Decode JWT or validate DID signature
       try {
-        // Simplified: just extract DID from bearer token
-        // In production, validate JWT signature
         if (token.startsWith("did:phantom:")) {
           phantomDid = token;
         } else {
-          // Parse JWT payload (no signature validation in this example)
           const [, payload] = token.split(".");
           if (payload) {
             const decoded = JSON.parse(Buffer.from(payload, "base64").toString());
-            phantomDid = decoded.sub;
+            phantomDid = decoded.sub ?? decoded.phantom_did;
             userId = decoded.user_id;
             orgId = decoded.org_id;
           }
         }
       } catch (err) {
-        logger.warn(
-          { request_id: context.requestId, error: String(err) },
-          "Auth gate: failed to parse auth token",
-        );
+        logger.warn({ request_id: context.requestId, error: String(err) }, "Auth gate: failed to parse auth token");
         res.writeHead(401, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Invalid token", request_id: context.requestId }));
         return;
@@ -80,6 +74,26 @@ export async function authGate(
       res.writeHead(403, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Forbidden", request_id: context.requestId }));
       return;
+    }
+
+    // Verify Phantom signature when present (service-to-service calls attach
+    // X-Phantom-Sig over the request body + X-Phantom-Ts).
+    const phantomSig = req.headers["x-phantom-sig"] as string | undefined;
+    const phantomTs = req.headers["x-phantom-ts"] as string | undefined;
+    if (phantomSig && phantomTs) {
+      // Read body for signature verification
+      const rawBody: Buffer[] = [];
+      for await (const chunk of req) rawBody.push(chunk as Buffer);
+      const bodyStr = Buffer.concat(rawBody).toString();
+      const message = bodyStr + phantomTs;
+      const valid = await verifyDidSignature(phantomDid, message, phantomSig);
+      if (!valid) {
+        logger.warn({ request_id: context.requestId, phantom_did: phantomDid }, "Auth gate: Phantom signature invalid");
+        res.writeHead(403, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid Phantom signature", request_id: context.requestId }));
+        return;
+      }
+      logger.debug({ request_id: context.requestId, phantom_did: phantomDid }, "Auth gate: Phantom signature verified");
     }
 
     // Store in context

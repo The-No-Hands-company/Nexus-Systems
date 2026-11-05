@@ -2,9 +2,12 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { PhantomApp } from "../../../packages/phantom-sdk/src/integration";
 
 const phantomApp = new PhantomApp("nexus-router");
-phantomApp.start().catch((err: unknown) => {
-  console.error("[nexus-router] Phantom startup failed:", err instanceof Error ? err.message : err);
-});
+const CLOUD_URL = process.env.NEXUS_CLOUD_URL ?? "http://localhost:8787";
+phantomApp.start()
+  .then(() => phantomApp.registerWithCloud(CLOUD_URL))
+  .catch((err: unknown) => {
+    console.error("[nexus-router] Phantom startup failed:", err instanceof Error ? err.message : err);
+  });
 import type { Config } from "./lib/config";
 import { logger } from "./lib/logger";
 import { aiProviderRouter } from "./middleware/ai-provider-router";

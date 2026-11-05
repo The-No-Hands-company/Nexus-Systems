@@ -2,9 +2,11 @@ import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index
 import { PhantomApp } from "../../../packages/phantom-sdk/src/integration";
 
 const phantomApp = new PhantomApp("nexus-guardian");
-phantomApp.start().catch((err: unknown) => {
-  console.error("[nexus-guardian] Phantom startup failed:", err instanceof Error ? err.message : err);
-});
+phantomApp.start()
+  .then(() => phantomApp.registerWithCloud(process.env.NEXUS_CLOUD_URL ?? "http://localhost:8787"))
+  .catch((err: unknown) => {
+    console.error("[nexus-guardian] Phantom startup failed:", err instanceof Error ? err.message : err);
+  });
 import { buildSystemsApiRegistrationPayload } from "./contracts";
 import { startNexusGuardianCloudRegistrationHeartbeat } from "./cloud";
 import {
