@@ -165,3 +165,103 @@ describe("routes Cloud marks as a member's app", () => {
     }
   });
 });
+
+describe("deploy.<domain>", () => {
+  const originalGate = process.env.GATE_SKIP_AUTH;
+
+  it("redirects /<name> to a member's app, and only to one", async () => {
+    const { handleRequest, buildRouteMap, __setRoutesForTest } = await import("../proxy");
+    const control = listen(() => new Response("control plane"));
+    process.env.DEPLOY_UPSTREAM = `http://127.0.0.1:${control.port}`;
+    try {
+      __setRoutesForTest(
+        buildRouteMap([
+          { domain: "mine.tnhc.dev", upstream: "http://127.0.0.1:20001", userDeployed: true },
+          { domain: "draw.tnhc.dev", upstream: "http://127.0.0.1:8091" },
+        ]),
+      );
+      const hit = await handleRequest(new Request("http://deploy.tnhc.dev/mine"));
+      expect(hit.status).toBe(302);
+      expect(hit.headers.get("location")).toBe("https://mine.tnhc.dev/");
+      const slash = await handleRequest(new Request("http://deploy.tnhc.dev/mine/"));
+      expect(slash.headers.get("location")).toBe("https://mine.tnhc.dev/");
+
+      // An ecosystem app is not a member's app: no redirect, the control plane answers.
+      const eco = await handleRequest(new Request("http://deploy.tnhc.dev/draw"));
+      expect(eco.status).toBe(200);
+      expect(await eco.text()).toBe("control plane");
+      // A name nothing routes, a deeper path, and a POST all reach the control plane.
+      for (const [path, method] of [["/unknown", "GET"], ["/mine/extra", "GET"], ["/mine", "POST"]] as const) {
+        const res = await handleRequest(new Request(`http://deploy.tnhc.dev${path}`, { method, ...(method === "POST" ? { body: "x" } : {}) }));
+        expect(res.status, `${method} ${path}`).toBe(200);
+      }
+    } finally {
+      delete process.env.DEPLOY_UPSTREAM;
+      control.stop(true);
+    }
+  });
+
+  it("does not redirect on any other host", async () => {
+    const { handleRequest, buildRouteMap, __setRoutesForTest } = await import("../proxy");
+    const site = listen(() => new Response("a site"));
+    process.env.HOSTING_SITE_UPSTREAM = `http://127.0.0.1:${site.port}`;
+    try {
+      __setRoutesForTest(buildRouteMap([{ domain: "mine.tnhc.dev", upstream: "http://127.0.0.1:20001", userDeployed: true }]));
+      const res = await handleRequest(new Request("http://elsewhere.tnhc.dev/mine"));
+      expect(res.status).toBe(200);
+    } finally {
+      delete process.env.HOSTING_SITE_UPSTREAM;
+      site.stop(true);
+    }
+  });
+
+  it("reaches the control plane without an ecosystem session, and with the visitor's cookie", async () => {
+    let seen: Seen = {};
+    const control = listen((req) => {
+      seen = { cookie: req.headers.get("cookie"), webhook: req.headers.get("x-hub-signature-256") };
+    });
+    process.env.DEPLOY_UPSTREAM = `http://127.0.0.1:${control.port}`;
+    delete process.env.GATE_SKIP_AUTH;
+    try {
+      const { handleRequest, __setRoutesForTest } = await import("../proxy");
+      __setRoutesForTest({});
+      const res = await handleRequest(
+        new Request("http://deploy.tnhc.dev/api/webhooks/github/abc", {
+          method: "POST",
+          headers: { "x-hub-signature-256": "sha256=deadbeef", cookie: "nexus_session=me" },
+          body: "{}",
+        }),
+      );
+      expect(res.status).toBe(200);
+      // Deploy authenticates the session itself, so it needs the cookie; GitHub's
+      // signature must arrive untouched.
+      expect(seen.cookie).toBe("nexus_session=me");
+      expect(seen.webhook).toBe("sha256=deadbeef");
+    } finally {
+      if (originalGate !== undefined) process.env.GATE_SKIP_AUTH = originalGate;
+      else process.env.GATE_SKIP_AUTH = "true";
+      delete process.env.DEPLOY_UPSTREAM;
+      control.stop(true);
+    }
+  });
+
+  it("is an application host: a same-site mutation from a member's app is refused", async () => {
+    const control = listen(() => new Response("should not be reached"));
+    process.env.DEPLOY_UPSTREAM = `http://127.0.0.1:${control.port}`;
+    try {
+      const { handleRequest, __setRoutesForTest } = await import("../proxy");
+      __setRoutesForTest({});
+      const res = await handleRequest(
+        new Request("http://deploy.tnhc.dev/api/projects", {
+          method: "POST",
+          headers: { "sec-fetch-site": "same-site", "content-type": "application/json" },
+          body: "{}",
+        }),
+      );
+      expect(res.status).toBe(403);
+    } finally {
+      delete process.env.DEPLOY_UPSTREAM;
+      control.stop(true);
+    }
+  });
+});

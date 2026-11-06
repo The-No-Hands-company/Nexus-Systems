@@ -88,6 +88,14 @@ const FALLBACK_HOSTING_UPSTREAM = process.env.HOSTING_UPSTREAM || "http://127.0.
 const FALLBACK_DRAW_UPSTREAM = process.env.DRAW_UPSTREAM || "http://127.0.0.1:8091";
 const FALLBACK_CALENDAR_UPSTREAM = process.env.CALENDAR_UPSTREAM || "http://127.0.0.1:8092";
 const FALLBACK_PROJECT_UPSTREAM = process.env.PROJECT_UPSTREAM || "http://127.0.0.1:8093";
+// deploy.<DOMAIN> is Nexus Deploy's control plane: its dashboard, its API and the
+// push-to-deploy webhook. The apps it runs are NOT here; they are reached on
+// their own hostnames through Cloud's routes.
+export const DEPLOY_HOST = process.env.NEXUS_DEPLOY_HOST || `deploy.${DOMAIN}`;
+// Read at request time so tests can point it elsewhere.
+function deployUpstream(): string { return process.env.DEPLOY_UPSTREAM || "http://127.0.0.1:8096"; }
+// A path that could be an app name: one lowercase DNS-style label.
+const SHORT_LINK_PATH = /^\/([a-z][a-z0-9-]{1,38}[a-z0-9])\/?$/;
 // auth.<DOMAIN> is the sign-in host. Every app redirects an unauthenticated
 // browser to https://auth.<DOMAIN>/login?redirect=..., so this is the one that
 // has to resolve or single sign-on has nowhere to happen.
@@ -691,7 +699,21 @@ async function handleRequestInner(
     }
 
     const routes = dashboardTerminalRequest || apiRequest ? {} : await getRoutes();
-    
+    // Short link: deploy.<DOMAIN>/<name> sends the visitor to a member's app.
+    // Only a name Cloud currently routes as a member's app redirects; any other
+    // path, including every dashboard path, goes on to the control plane. Names
+    // that collide with a dashboard path are reserved at creation, so an app can
+    // never shadow one.
+    if (host === DEPLOY_HOST && (req.method === "GET" || req.method === "HEAD")) {
+      const name = SHORT_LINK_PATH.exec(url.pathname)?.[1];
+      if (name && routes[`${name}.${DOMAIN}`]?.userDeployed === true) {
+        return new Response(null, {
+          status: 302,
+          headers: { location: `https://${name}.${DOMAIN}/`, "cache-control": "no-store" },
+        });
+      }
+    }
+
     // Find matching route
     let upstreamUrl: string | null = null;
     // Only a route Cloud explicitly marked can gate. Every fallback below
@@ -771,6 +793,9 @@ async function handleRequestInner(
         fixedKind = "app";
       } else if (host === `project.${DOMAIN}` || host === `www.project.${DOMAIN}`) {
         upstreamUrl = FALLBACK_PROJECT_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === DEPLOY_HOST) {
+        upstreamUrl = deployUpstream();
         fixedKind = "app";
       } else if (host === `auth.${DOMAIN}` || host === `www.auth.${DOMAIN}`) {
         upstreamUrl = FALLBACK_AUTH_UPSTREAM;

@@ -270,7 +270,12 @@ export async function resolveIdentity(cookie: string | null, audience: string): 
 // site directory (/api/sites), and health probes must reach it unauthenticated.
 // The hosting app enforces auth on routes that need it.
 const HOSTING_HOST = process.env.NEXUS_HOSTING_HOST || `hosting.${DOMAIN}`;
-const PUBLIC_HOSTS = new Set([AUTH_HOST, API_HOST, HOSTING_HOST]);
+// deploy.<domain> likewise authenticates itself: its API checks the session with
+// Auth, its pages send a browser to sign in, and GitHub's push webhook has no
+// session at all and proves itself with a signed body. The proxy still treats it
+// as an application host (kind "app"), so the same-site mutation block applies.
+const DEPLOY_HOST = process.env.NEXUS_DEPLOY_HOST || `deploy.${DOMAIN}`;
+const PUBLIC_HOSTS = new Set([AUTH_HOST, API_HOST, HOSTING_HOST, DEPLOY_HOST]);
 
 /** Paths exempt from the auth gate on ANY host (deploy.sh probes these). */
 const PUBLIC_PATHS = new Set(["/health", "/health/live", "/health/ready"]);
