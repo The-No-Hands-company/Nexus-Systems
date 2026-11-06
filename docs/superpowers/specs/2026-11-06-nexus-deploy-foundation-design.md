@@ -120,7 +120,7 @@ A project has exactly one source: `{ type: "git", repo, branch }` or `{ type: "i
 
 - **Git:** any `http(s)` Git URL (or `owner/repo` shorthand for GitHub). Webhook-triggered or manual. The built image is tagged `nexus/{project}:{deploymentId8}`. **Private repositories** use an optional per-project read-only token: encrypted at rest, supplied to `git` through an askpass helper in the process environment, never in the clone URL, on a command line, in logs or in any API response; logs redact it.
 - **Image:** any OCI registry reference (`[registry/]repository[:tag]` or `@sha256:` digest), validated (no whitespace or shell metacharacters; never run through a shell). The sandbox pulls with a 10-minute timeout and the **resolved digest** is recorded on the deployment, so rollback restores the exact bytes even if a tag moves. A redeploy re-pulls the tag. Public registries only; private-registry credentials are out of scope.
-- Built and pulled images carry the label `nexus.managed=true`, which the hourly prune uses (extended from `nexus/*` names).
+- The hourly prune removes images by reference, not by label. The sandbox daemon is dedicated to Deploy, so every image in it is Deploy's; the prune keeps the images that a running, rollback or recent release still references.
 - Images may run as root *inside* the container; the rootless daemon makes that an unprivileged user on the host.
 
 ### 7.4 Blue/green release
