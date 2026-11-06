@@ -19,6 +19,18 @@ const rangeFor = (year: number, month: number) => ({
   to: `${year}-${String(month + 1).padStart(2, "0")}-${String(new Date(Date.UTC(year, month + 1, 0)).getUTCDate()).padStart(2, "0")}`,
 });
 
+// Same contract as Draw's embed.ts: the shell frames apps with ?embed=1.
+const isEmbedded = () =>
+  typeof window !== "undefined" && new URLSearchParams(window.location.search).get("embed") === "1";
+
+// Standalone (calendar.<domain>), "/" is this app's own root, so a Nexus home
+// link has to point at the dashboard host. Inside the shell "/" is the dashboard.
+function dashboardHref(shellContext: boolean): string {
+  if (shellContext || typeof window === "undefined") return "/";
+  const labels = window.location.hostname.split(".");
+  return labels.length >= 3 ? `${window.location.protocol}//app.${labels.slice(1).join(".")}` : "/";
+}
+
 const readableDay = (value: string) =>
   new Date(`${value}T12:00:00Z`).toLocaleDateString(undefined, {
     weekday: "long", month: "long", day: "numeric", timeZone: "UTC",
@@ -115,26 +127,39 @@ export default function CalendarApp({
       )
     : [];
 
+  const goToToday = () => {
+    setYear(today.getUTCFullYear());
+    setMonth(today.getUTCMonth());
+    setSelectedDay(todayText);
+    setSelectedEvent(null);
+    setEditingEvent(null);
+    setEditorOpen(false);
+    setSharingOpen(false);
+  };
+
+  const embedded = isEmbedded();
+
+  // 44px targets: the old px-2 py-1 arrows were about 28px tall.
+  const navButton =
+    "flex min-h-11 min-w-11 items-center justify-center rounded text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors";
+
   const navSlot = (
     <>
-      <button
-        type="button"
-        aria-label="Previous month"
-        onClick={() => changeMonth(-1)}
-        className="rounded px-2 py-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
-      >
+      <button type="button" aria-label="Previous month" onClick={() => changeMonth(-1)} className={navButton}>
         ←
       </button>
-      <span aria-live="polite" className="text-center text-sm text-zinc-200 min-w-0 sm:min-w-32">
+      <span aria-live="polite" className="min-w-0 flex-1 truncate text-center text-sm font-medium text-zinc-200 sm:flex-none sm:min-w-36">
         {MONTHS[month]} {year}
       </span>
+      <button type="button" aria-label="Next month" onClick={() => changeMonth(1)} className={navButton}>
+        →
+      </button>
       <button
         type="button"
-        aria-label="Next month"
-        onClick={() => changeMonth(1)}
-        className="rounded px-2 py-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
+        onClick={goToToday}
+        className="min-h-11 rounded border border-zinc-700 px-3 text-sm text-zinc-300 hover:border-zinc-500 hover:text-zinc-100 transition-colors"
       >
-        →
+        Today
       </button>
       <button
         type="button"
@@ -147,16 +172,23 @@ export default function CalendarApp({
           setEditingEvent(null);
           setEditorOpen(true);
         }}
-        className="whitespace-nowrap rounded bg-accent px-3 py-1.5 text-sm font-semibold text-zinc-900 hover:opacity-90 transition-opacity"
+        className="min-h-11 whitespace-nowrap rounded bg-accent px-3 text-sm font-semibold text-zinc-900 hover:opacity-90 transition-opacity"
       >
-        + New
+        +<span className="hidden sm:inline"> New</span>
       </button>
     </>
   );
 
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-900 text-zinc-200">
-      <AppHeader homeHref="/" appName="Calendar" utilitySlot={navSlot} />
+    <div className="flex h-dvh flex-col bg-zinc-900 text-zinc-200">
+      <AppHeader homeHref={dashboardHref(runtime.shellContext)} appName="Calendar" embedded={embedded} />
+      <div
+        role="toolbar"
+        aria-label="Calendar controls"
+        className="flex shrink-0 items-center gap-1 border-b border-white/10 px-2 py-1 sm:px-4"
+      >
+        {navSlot}
+      </div>
 
       <main className="flex min-h-0 flex-1 flex-col md:flex-row overflow-hidden">
         {/* Calendar grid */}
@@ -213,7 +245,7 @@ export default function CalendarApp({
         {selectedDay && !loading && !error && (
           <aside
             aria-label="Selected day"
-            className="max-h-[40vh] overflow-y-auto border-t border-zinc-700 bg-zinc-900 p-4 md:max-h-none md:w-96 md:border-l md:border-t-0 md:overflow-y-auto"
+            className="max-h-[45dvh] overflow-y-auto border-t border-zinc-700 bg-zinc-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:max-h-none md:w-96 md:border-l md:border-t-0 md:overflow-y-auto"
           >
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold text-zinc-100">{readableDay(selectedDay)}</h2>

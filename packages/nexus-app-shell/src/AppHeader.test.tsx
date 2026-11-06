@@ -30,4 +30,20 @@ describe("AppHeader", () => {
     expect(html).toContain('<a href="https://nexus.example/"');
     expect(html).not.toContain("data-discover");
   });
+
+  it("drops the Nexus wordmark when framed by the shell, but keeps the app name and slots", () => {
+    const html = renderToStaticMarkup(
+      <AppHeader
+        homeHref="/"
+        appName="Calendar"
+        embedded
+        utilitySlot={<button type="button">Notifications</button>}
+      />,
+    );
+
+    expect(html).toContain('role="banner"');
+    expect(html).not.toContain('aria-label="Nexus home"');
+    expect(html).toContain("Calendar");
+    expect(html).toContain("Notifications");
+  });
 });
