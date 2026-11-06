@@ -66,9 +66,10 @@ every app renders `void`. A theme switcher is unbuilt (see §8).
 - **Family: Figtree** in every app (the token now says so; it used to name Satoshi, which
   was never loaded). Weights 400 / 500 / 600 / 700. Load it with the Google Fonts link the
   apps use, or self-host via `@fontsource-variable/figtree` where a CSP forbids it (Hosting).
-- **Mono: Fira Code, then the system monospace.** Only Hosting loads Fira Code; other
-  apps fall back to the system face, which is intended — don't add a mono font download to
-  an app that doesn't show code.
+- **Mono: JetBrains Mono, then the system monospace** — the brand's face for code
+  (`handbook/brand.md`, live at tnhc.dev/brand). No app loads JetBrains Mono yet, so they
+  fall back to the system face; don't add a font download to an app that doesn't show code.
+  Hosting currently ships Fira Code instead (see §8).
 - Line height: tight 1.2 · normal 1.45 · relaxed 1.7.
 - Sizes come from the density scale (below), exposed as `--nexus-typography-size-*`.
 
@@ -256,7 +257,10 @@ These came out of testing on a phone; each fixes something that was broken.
    neutral so they stay below the lime primary. Stat tiles that used lime and purple icons
    now both use lime; each still has its own icon and label.
 4. **The vendor drift test isn't in any gate.** See §3B.
-5. **Chat desktop and mobile clients** are on the older teal/purple direction (see
+5. **Hosting still bundles Fira Code,** not the brand's JetBrains Mono. Swapping it needs the
+   `@fontsource-variable/jetbrains-mono` package added to Hosting and its lockfile
+   regenerated, which was not attempted here.
+6. **Chat desktop and mobile clients** are on the older teal/purple direction (see
    `apps/Nexus/DESIGN.md`, which now says so) and need their own migration.
 
 ---
