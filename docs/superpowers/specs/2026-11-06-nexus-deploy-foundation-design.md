@@ -13,6 +13,20 @@ An invited member signs in at `https://deploy.tnhc.dev`, connects a repository, 
 
 **This node is the reference implementation.** It must demonstrate delivery and function end to end. Once it does, every other node can do the same from its own configuration. The proof is the conformance check in §8: `verify` passing on this node is the acceptance gate for this sub-project, and the same command is the gate for any other node.
 
+## 1a. The cost rule
+
+Nexus Systems is a free, non-profit alternative to paid services, run by someone who is not trying to profit from it. **The only recurring cost allowed is the domain (`tnhc.dev`, about 12.20 USD per year via Cloudflare).** Every component must work at zero further cost, for every node operator. A feature that would need a paid service is replaced by a free design or deferred; it is never gated behind payment.
+
+| Dependency | Cost | Note |
+|---|---|---|
+| Cloudflare DNS, Tunnel, free Universal SSL | free | The free certificate covers one wildcard level only, which is why apps are `<app>.tnhc.dev` and not `<app>.deploy.tnhc.dev`. Advanced Certificate Manager (paid) is deliberately not used. |
+| Docker Engine, rootless mode, `git` | free, open source | |
+| Nixpacks-class builder | free, open source | |
+| GitHub webhooks and public clones | free | Private clones use the owner's own read-only token (§5.8). |
+| Docker Hub / GHCR image pulls | free | Docker Hub rate-limits anonymous pulls per IP. If several members pull often, an open-source pull-through cache can be added later. Not needed for this slice. |
+| Compute, storage, bandwidth | the node operator's own hardware and connection | No billing anywhere in the product. |
+| Custom domains (later) | free tier, then limits | Cloudflare for SaaS custom hostnames is free only up to a quota; custom domains are out of scope here and must be designed around that when they come. |
+
 ## 2. Decisions
 
 | # | Decision | Why |
@@ -77,7 +91,7 @@ On host `deploy.tnhc.dev`, a single-segment path that is not a dashboard route a
 ### 5.8 Deploy sources
 A project has exactly one source: `{ type: "git", repo, branch }` or `{ type: "image", image }`. Everything downstream — ownership, slug, caps, route, health gate, rollback — is identical for both.
 
-- **Git:** as today (webhook-triggered or manual deploy); the built image is tagged `nexus/{project}:{deploymentId8}`.
+- **Git:** as today (webhook-triggered or manual deploy); the built image is tagged `nexus/{project}:{deploymentId8}`. **Private repositories** are supported with an optional per-project, read-only access token (for example a GitHub fine-grained token). It is encrypted at rest with the existing AES-GCM store, handed to `git` through an askpass helper in the process environment, and never placed in the clone URL, on a command line, in build logs or in any API response; logs redact it. Without a token only public repositories clone.
 - **Image:** the control plane validates the reference (`[registry/]repository[:tag]` or `@sha256:` digest; no whitespace or shell metacharacters; never executed through a shell). The sandbox pulls it with a 10-minute timeout, and the **resolved digest** is recorded on the deployment, so rollback restores the exact bytes even if a mutable tag moves. There is no webhook; a redeploy re-pulls the tag. Only public registries are supported (private-registry credentials are out of scope).
 - Pulled and built images carry the label `nexus.managed=true` so the existing hourly prune covers both. The prune is extended from `nexus/*` names to that label.
 - An image runs with the same hardening and caps as a built app. It may run as root *inside* the container; the rootless daemon makes that an unprivileged user on the host. The project's listening port is configured as today.
@@ -116,7 +130,11 @@ Limits are shown in the dashboard. They are not tiers.
 8. an **image-source** canary (a locally loaded image, no registry or internet needed) goes live, is routed, and passes checks 2–4 as well;
 9. cleanup removes the containers, routes and slugs.
 
-Output is a human summary plus JSON; exit code non-zero on any failure. A passing run on this node is the acceptance criterion for this sub-project.
+Output is a human summary plus JSON; exit code non-zero on any failure.
+
+**Real-application acceptance (in addition to the canary).** The canary proves the platform; this proves it is useful. On this node, deploy **Nexus-AI** (`The-No-Hands-company/Nexus-AI`: a Dockerfile, one container, port 8000, SQLite by default, Redis optional) twice, once as a Git source built from its Dockerfile and once as an Image source from its published `ghcr.io` image. For each: it goes live, answers HTTP at its public `<slug>.tnhc.dev` URL, data written to the project volume survives a redeploy, and it runs without Redis. This mirrors what the operator previously had to use Railway for (hosting the backend behind the Nexus AI mobile app).
+
+A passing `verify` plus both Nexus-AI deployments on this node is the acceptance criterion for this sub-project.
 
 ## 9. Bring-up on this node
 
@@ -144,7 +162,7 @@ The router contract (§5.4) is ingress-agnostic: any proxy that can read the rou
 
 ## 11. Testing
 
-- Unit: member authorization and ownership (a member cannot read or modify another's project, env or logs); name registry (reserved, duplicate, Hosting collision, fail-closed); safeguards (concurrency, hourly limit, timeout); config scan for hardcoded domains; image-reference validation (accepts tags and digests; rejects whitespace, shell metacharacters, empty and over-long references); source model (exactly one source per project); rollback restores the recorded digest.
+- Unit: member authorization and ownership (a member cannot read or modify another's project, env or logs); name registry (reserved, duplicate, Hosting collision, fail-closed); safeguards (concurrency, hourly limit, timeout); config scan for hardcoded domains; image-reference validation (accepts tags and digests; rejects whitespace, shell metacharacters, empty and over-long references); source model (exactly one source per project); rollback restores the recorded digest; private-repo token handling (never in a URL, argument, log or API response).
 - Proxy (`deploy/production/tests`): `app` route kind, precedence, cookie/authorization stripping, `Domain` cookie drop, short-link redirect, reserved paths, stale-table behaviour.
 - End to end: `verify` (§8), run on this node.
 - Existing tests (`build-context`, `health-gate`, `context-resolution`, `repo-and-dockerfile`) keep passing.
@@ -158,10 +176,15 @@ The router contract (§5.4) is ingress-agnostic: any proxy that can read the rou
 5. Hosting exposes (or can expose) an internal endpoint to check a name.
 6. Which Nixpacks-class builder is available and maintained at implementation time.
 7. Why Deploy is not currently running although `dist/index.js` exists.
+8. Cloudflare's current free-plan terms for the kind of traffic apps will carry (APIs and mobile backends are fine; large media or file transfer through the tunnel may not be). The cost rule depends on this.
+9. Whether the `ghcr.io` Nexus-AI image is public, and that Nexus-AI starts correctly with SQLite and no Redis.
+10. That the private-repository token never appears in process listings, logs or API output (tested, not assumed).
 
 ## 13. Out of scope (later sub-projects)
 
 Multi-service projects, managed databases and volumes, templates, private networking between services, env-variable references, custom domains, preview deploys, cron, teams, the CLI, the GitHub App integration (repo picker and automatic webhook install), private-registry credentials, multi-node scheduling and federation, SQLite migration, gVisor, a separate apps domain, and a single-hostname path mode for nodes without wildcard DNS.
+
+Managed databases deserve an early follow-up: most real backends, including a future Nexus-AI configuration with Redis, want one. They are not required for the acceptance scenarios above, which is why they are not in this slice.
 
 ---
 
