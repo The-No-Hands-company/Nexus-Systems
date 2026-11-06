@@ -63,8 +63,12 @@ every app renders `void`. A theme switcher is unbuilt (see §8).
 
 ### Typography
 
-- **Family: Figtree** in every app. Weights 400 / 500 / 600 / 700.
-- Mono: see §8 — the token and the apps disagree.
+- **Family: Figtree** in every app (the token now says so; it used to name Satoshi, which
+  was never loaded). Weights 400 / 500 / 600 / 700. Load it with the Google Fonts link the
+  apps use, or self-host via `@fontsource-variable/figtree` where a CSP forbids it (Hosting).
+- **Mono: Fira Code, then the system monospace.** Only Hosting loads Fira Code; other
+  apps fall back to the system face, which is intended — don't add a mono font download to
+  an app that doesn't show code.
 - Line height: tight 1.2 · normal 1.45 · relaxed 1.7.
 - Sizes come from the density scale (below), exposed as `--nexus-typography-size-*`.
 
@@ -228,7 +232,7 @@ These came out of testing on a phone; each fixes something that was broken.
 | Dashboard (+ Mail, Cloud views) | monorepo import | Reference implementation; only app using density |
 | Calendar | monorepo import | |
 | Project | monorepo import | |
-| Draw | monorepo import | Does not declare Figtree (falls back to Tailwind's default sans) |
+| Draw | monorepo import | Had no Figtree and no accent mapping, so its 21 `accent` classes (incl. every focus outline) rendered nothing; fixed 2026-11-06 |
 | Chat web (`apps/Nexus/packages/nexus-web`) | vendored | Was on a stale teal palette; refreshed. Has its own density setting |
 | Hosting | vendored | Was on its own navy/purple palette; moved to tokens. See gaps below |
 | Cloud | — | No UI (frontend retired) |
@@ -238,21 +242,22 @@ These came out of testing on a phone; each fixes something that was broken.
 
 ## 8. Known gaps and open decisions
 
-1. **Font token vs. reality.** `nexus.tokens.json` names *Satoshi* (never loaded anywhere)
-   and *JetBrains Mono*; every app actually uses *Figtree*, and Hosting uses *Fira Code*.
-   Pick one and fix the token source or the apps.
-2. **Theme switching is unbuilt.** Four themes are generated and contrast-checked, but no UI
-   sets `data-nexus-theme`.
-3. **Categorical colours have no palette.** Hosting colour-codes HTTP methods, federation
+1. **Theme switching is unbuilt.** Four themes are generated and contrast-checked, but no UI
+   sets `data-nexus-theme`. Apps are separate documents on separate origins (and several are
+   iframed), so a switcher needs a propagation mechanism — a shared cookie on the parent
+   domain, or the shell passing the choice to framed apps — before any UI is worth building.
+2. **Categorical colours have no palette.** Hosting colour-codes HTTP methods, federation
    event types and site types with purple, violet, orange and yellow, which the system
    doesn't define. They were left alone (remapping them to a state colour would merge
    distinct categories). They need a small defined categorical set.
-4. **Hosting's former purple "secondary" now equals the accent.** Anything that must be
+3. **Hosting's former purple "secondary" now equals the accent.** Anything that must be
    told apart from the primary names a state colour explicitly (the dashboard chart's second
-   series uses `state-info`). Check Hosting screens where primary and secondary sat side by
-   side.
-5. **The vendor drift test isn't in any gate.** See §3B.
-6. **Draw lacks Figtree.** Small, but it is one of the visible differences between apps.
+   series uses `state-info`), and the shared `Button`/`Badge` `secondary` variants are
+   neutral so they stay below the lime primary. Stat tiles that used lime and purple icons
+   now both use lime; each still has its own icon and label.
+4. **The vendor drift test isn't in any gate.** See §3B.
+5. **Chat desktop and mobile clients** are on the older teal/purple direction (see
+   `apps/Nexus/DESIGN.md`, which now says so) and need their own migration.
 
 ---
 

@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&display=swap");
 @import "tailwindcss";
 /* Draw needs the raw --nexus-color-* custom properties (defined here, in
    nexus-tokens.css) to alias into the zinc scale below. nexus-theme.css only
@@ -19,4 +20,22 @@
   --color-zinc-400: var(--nexus-color-text-secondary);
   --color-zinc-300: var(--nexus-color-text-secondary);
   --color-zinc-200: var(--nexus-color-text-primary);
+  --color-zinc-100: var(--nexus-color-text-primary);
+
+  /* The accent and state colours. Draw's components already use `text-accent`,
+     `outline-accent`, `ring-accent` and `bg-accent` (21 places, including every
+     focus outline), but this file never defined them, so Tailwind generated no
+     CSS for any of them and those styles silently did nothing. */
+  --color-accent: var(--nexus-color-accent-primary);
+  --color-accent-hover: var(--nexus-color-accent-hover);
+  --color-accent-active: var(--nexus-color-accent-active);
+  --color-accent-foreground: var(--nexus-color-text-inverse);
+  --color-state-success: var(--nexus-color-state-success);
+  --color-state-warning: var(--nexus-color-state-warning);
+  --color-state-danger: var(--nexus-color-state-danger);
+  --color-state-info: var(--nexus-color-state-info);
+}
+
+body {
+  font-family: 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }

@@ -137,7 +137,7 @@ describe("generated CSS", () => {
     // fontFamily/weight/lineHeight still live in the base file, but the
     // assertion runs against themedPairs to match the pipeline's actual input.
     const css = renderThemeCss(themedPairs);
-    expect(css).toContain("--font-base: Satoshi, -apple-system, BlinkMacSystemFont, sans-serif;");
+    expect(css).toContain("--font-base: Figtree, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;");
     expect(css).toContain("--font-weight-regular: 400;");
     expect(css).toContain("--leading-tight: 1.2;");
   });
