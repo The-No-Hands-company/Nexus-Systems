@@ -29,6 +29,12 @@ interface NexusCloudRoute {
    * missing or misspelled field can never lock an app's users out.
    */
   requiresAuth?: boolean;
+  /**
+   * True for an app a member deployed through Nexus Deploy. Cloud sets it only
+   * for registrations that arrive with the user-apps credential, so an app can
+   * neither choose nor clear it. Read with strict equality, like requiresAuth.
+   */
+  userDeployed?: boolean;
   /** Present when an operator has this part in maintenance; the proxy serves
    *  the maintenance page instead of proxying. */
   maintenance?: { part: string; reason?: string; startedAt: string; expectedEndAt?: string };
@@ -58,6 +64,12 @@ export interface RouteTarget {
    * addressing.
    */
   kind: "app" | "site";
+  /**
+   * A member's app: public like a site, and isolated like one (no cookies or
+   * credentials forwarded, parent-domain cookies dropped), and additionally
+   * given no visitor tag, so the owner's code learns nothing about who called.
+   */
+  userDeployed?: boolean;
   /** Operator-set maintenance window for this part, if any. When present the
    *  proxy serves the maintenance page in place of the upstream. */
   maintenance?: { part: string; reason?: string; startedAt: string; expectedEndAt?: string };
@@ -154,14 +166,18 @@ export function buildRouteMap(routes: NexusCloudRoute[]): Record<string, RouteTa
       // unconditionally yields "http://http://host:port", whose URL hostname
       // parses as "http".
       const domain = route.domain.toLowerCase().replace(/^www\./, "");
+      // Strict equality, as for requiresAuth: only a real boolean true isolates.
+      const userDeployed = route.userDeployed === true;
       map[domain] = {
         upstream: normalizeUpstream(route.upstream),
         // Strict equality, not truthiness: only a real boolean true gates a
         // host, so a stray string or a typo cannot silently lock people out.
-        requiresAuth: route.requiresAuth === true,
-        // Anything Cloud has a route row for is a registered application. Sites
-        // never appear here — they are reached through the wildcard fallback.
-        kind: "app",
+        // A member's app is never gated: like a site, it is public by design.
+        requiresAuth: !userDeployed && route.requiresAuth === true,
+        // Anything Cloud has a route row for is a registered application, except
+        // a member's app, which is a public site that happens to be routed by Cloud.
+        kind: userDeployed ? "site" : "app",
+        ...(userDeployed ? { userDeployed: true } : {}),
         ...(route.maintenance ? { maintenance: route.maintenance } : {}),
       };
     }
@@ -284,6 +300,8 @@ export interface WsProxyData {
   upstreamPathname?: string;
   /** Forgetful per-visitor tag (never an address) for the upstream. */
   clientTag: string;
+  /** A member's app gets no tag at all: its owner's code learns nothing about the visitor. */
+  omitClientTag?: boolean;
   /**
    * Browser credentials for one tightly-scoped hop only. Presence means the
    * request was the exact app.<DOMAIN> terminal attach route and upstreamUrl
@@ -685,6 +703,7 @@ async function handleRequestInner(
     // rather than assumed, so the route table stays the thing that decides and
     // the value cannot quietly become decorative.
     let matchedKind: RouteTarget["kind"] | null = null;
+    let matchedUserApp = false;
 
     // Cloud keys its routing table by full hostname, and buildRouteMap
     // lowercases and strips a leading "www." from both sides, so a single
@@ -700,6 +719,7 @@ async function handleRequestInner(
         upstreamUrl = matched.upstream;
         requiresAuth = matched.requiresAuth;
         matchedKind = matched.kind;
+        matchedUserApp = matched.userDeployed === true;
       }
     }
 
@@ -787,7 +807,8 @@ async function handleRequestInner(
     let kind: RouteTarget["kind"] = fixedKind ?? matchedKind ?? "app";
     // Content deployed by a user, as opposed to storage or Supabase, which are
     // also ungated but authenticate requests themselves. See isolateUserSite*.
-    let isUserSite = false;
+    // A member's app gets the same isolation as a Hosting site.
+    let isUserSite = matchedUserApp;
     if (!upstreamUrl) {
       upstreamUrl = hostingSiteUpstream();
       kind = "site";
@@ -852,6 +873,7 @@ async function handleRequestInner(
         requestUrl: req.url,
         upstreamPathname: translatedPath,
         clientTag: tagFromRequestHeaders(req.headers),
+        ...(matchedUserApp ? { omitClientTag: true } : {}),
       };
       if (dashboardTerminalRequest) {
         const dashboardTerminalHeaders: NonNullable<WsProxyData["dashboardTerminalHeaders"]> = {};
@@ -892,7 +914,7 @@ async function handleRequestInner(
         tag = tagFromRequestHeaders(req.headers);
         stripAddressHeaders(forwardHeaders);
         forwardHeaders.delete(CLIENT_TAG_HEADER);
-        forwardHeaders.set(CLIENT_TAG_HEADER, tag);
+        if (!matchedUserApp) forwardHeaders.set(CLIENT_TAG_HEADER, tag);
       } catch {
         return new Response("Request refused", { status: 500 });
       }
@@ -1077,7 +1099,7 @@ export function startProxy() {
 
         const headers: Record<string, string> = {};
         if (identityToken) headers["x-nexus-identity"] = identityToken;
-        headers[CLIENT_TAG_HEADER] = ws.data.clientTag;
+        if (!ws.data.omitClientTag) headers[CLIENT_TAG_HEADER] = ws.data.clientTag;
         if (dashboardTerminalHeaders?.cookie !== undefined) {
           headers.cookie = dashboardTerminalHeaders.cookie;
         }
