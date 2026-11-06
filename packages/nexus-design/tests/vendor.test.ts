@@ -12,7 +12,7 @@ describe("vendored token copies", () => {
   test("names at least the two standalone repos", () => {
     const dests = vendorTargets().map((t) => t.repo);
     expect(dests).toContain("apps/Nexus");
-    expect(dests).toContain("apps/Nexus-Cloud");
+    expect(dests).toContain("apps/Nexus-Hosting");
   });
 
   for (const target of vendorTargets()) {
