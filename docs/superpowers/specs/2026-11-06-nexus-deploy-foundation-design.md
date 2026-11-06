@@ -96,13 +96,13 @@ Seven units, each with one purpose.
 ### 6.1 Cloud is the routing authority
 Deploy publishes each live app to Nexus Cloud's registry, as Draw and Calendar already register: id `deploy-<slug>`, `publicUrl https://<slug>.tnhc.dev`, `upstreamUrl http://127.0.0.1:<hostPort>`, health from Deploy's own probe, heartbeating while alive. The proxy resolves hosts from Cloud's routes exactly as it does for every other app. If Deploy stops, heartbeats stop and Cloud marks the route offline.
 
-**User-app isolation flag.** Routes created for deployed apps carry a flag that makes the proxy apply user-site isolation (no `Cookie`/`Authorization` forwarded, `Domain` cookies dropped, address headers and client tag stripped). The flag is set by Cloud for registrations that arrive through Deploy's credential; an app cannot choose or clear it, mirroring how `requiresAuth` is operator-set only. The exact Cloud change is a planning task.
+**User-app isolation flag.** Routes created for deployed apps carry a flag that makes the proxy apply user-site isolation (no `Cookie`/`Authorization` forwarded, `Domain` cookies dropped, address headers and client tag stripped). The flag (`userDeployed`) is set by Cloud only through its `/api/v1/user-apps/:slug` surface, which is guarded by its own credential (`NEXUS_CLOUD_USER_APPS_KEY`), not by the node API key that every ecosystem service holds. The flag is carried over from the previous record and never read from a payload, exactly like `requiresAuth`, and the generic registration refuses the `deploy-` id prefix, so an app can neither choose nor clear it. Cloud accepts only `http://127.0.0.1:<port>` upstreams inside `NEXUS_CLOUD_USER_APPS_PORTS` (default `20000-29999`), so a leaked credential cannot aim a public hostname at Auth, Cloud or a database.
 
 ### 6.2 Precedence
 `ecosystem fixed names` → `Cloud routes (including user-deployed apps)` → `Hosting sites (existing fallthrough)`. Deploy apps therefore never shadow an ecosystem host, and unknown hosts still reach Hosting.
 
 ### 6.3 Name registry
-A slug matches `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`. It is refused if reserved (every ecosystem host, plus dashboard paths such as `api`, `assets`, `health`, `internal`), already registered in Cloud, or already used by a Hosting site. The Hosting check calls Hosting's internal API and **fails closed**. A slug is released when its project is deleted.
+A slug matches `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`. It is refused if reserved (every ecosystem host, plus dashboard paths such as `api`, `assets`, `health`, `internal`), already registered in Cloud, or already used by a Hosting site. The Hosting check asks Hosting's site-proxy by `Host` header (Hosting has no availability endpoint): its own "No site found" 404 means the name is free, anything else means a site is there, and an unreachable Hosting or a 5xx **fails closed**. Known limitation: the site-proxy returns the same 404 when its own database errors, so a Hosting database outage can make a taken name look free; because Cloud routes take precedence over Hosting (§6.2), the failure mode is a member's app shadowing a Hosting site, never exposing its content. An explicit Hosting endpoint is the follow-up that removes it. A slug is released when its project is deleted.
 
 ### 6.4 Short link
 On host `deploy.tnhc.dev`, a single-segment path that is not a dashboard route and matches a live slug returns `302` to `https://<slug>.tnhc.dev/`. Otherwise the request goes to the control plane, which renders a not-found page.
@@ -135,7 +135,7 @@ A project has exactly one source: `{ type: "git", repo, branch }` or `{ type: "i
 
 ### 8.1 Isolation
 - **Sessions.** For user-deployed routes the proxy removes `Cookie` and `Authorization` from requests and drops `Set-Cookie` with a `Domain`. The 2026-10-15 fix for the same-site finding (O-1) already blocks `Sec-Fetch-Site: same-site` mutations to ecosystem app routes and deliberately does not apply to user-deployed sites; deployed apps keep that status.
-- **Residual risk (accepted, as for Hosting sites today).** An app's browser-side JavaScript can plant a `.tnhc.dev` cookie. Invite-only access bounds who can do it; the real fix is a separate apps domain, a config change (§11). **To verify:** that the Auth session cookie is `HttpOnly`.
+- **Residual risk (accepted, as for Hosting sites today).** An app's browser-side JavaScript can plant a `.tnhc.dev` cookie. Invite-only access bounds who can do it; the real fix is a separate apps domain, a config change (§11). The Auth session cookie is `HttpOnly` (verified in `apps/Nexus-Auth/src/server.ts`), so an app's JavaScript cannot read the session.
 - **Sandbox boundary.** Builds and runtime happen only in the rootless daemon. Containers must not reach host loopback services (Auth, Cloud, Postgres, Redis); `verify` tests this. Containers can reach the operator's LAN, a documented limitation of this slice.
 - **Secrets.** Env vars stay encrypted at rest and are never returned to another member. Webhook HMAC is unchanged.
 - **Fail closed.** Sandbox daemon down → deploys fail with a clear status and the host daemon is never used. Hosting unreachable → name creation refused.
@@ -210,10 +210,10 @@ Output is a human summary plus JSON, with a non-zero exit on any failure. A pass
 
 ## 14. Verification tasks (resolve while planning, not assumptions)
 
-1. Auth session cookie is `HttpOnly`.
+1. ~~Auth session cookie is `HttpOnly`.~~ Verified (Plan 2).
 2. The rootless daemon blocks container access to host loopback on this node, and runs correctly under SELinux enforcing on Fedora.
 3. Cloudflare's current free-plan terms for the traffic apps will carry (the cost rule depends on it); and that `deploy.tnhc.dev` plus the wildcard reach the proxy end to end.
-4. How Cloud should model the user-app flag, and whether Hosting exposes (or can expose) an internal name-check endpoint.
+4. ~~How Cloud should model the user-app flag, and whether Hosting exposes an internal name-check endpoint.~~ Resolved (Plan 2): a dedicated credential and surface for the flag; Hosting is asked through its site-proxy.
 5. Which Nixpacks-class builder is available and maintained at implementation time.
 6. Why Deploy is not running although `dist/index.js` exists.
 7. Fixed-size storage image: filesystem choice and mount approach that works on this Fedora node.
