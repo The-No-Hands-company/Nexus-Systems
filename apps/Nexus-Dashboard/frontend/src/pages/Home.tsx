@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { me, listApps, type Me, type AppEntry } from "../api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { session, listApps, type SessionState, type AppEntry } from "../api";
 import Shell from "../shell/Shell";
 import NotificationBell from "../shell/NotificationBell";
 import { Pill } from "../../../../../packages/nexus-design/src/components/ui/pill";
@@ -31,63 +31,120 @@ const AUTH_LOGIN_URL =
  * running system should look, with the app directory itself moved into the
  * drawer where it belongs.
  */
+type AppsLoad = { status: "loading" } | { status: "ready"; apps: AppEntry[] } | { status: "failed" };
+
 export default function Home() {
-  const [user, setUser] = useState<Me | null | undefined>(undefined);
-  const [apps, setApps] = useState<AppEntry[]>([]);
+  const [auth, setAuth] = useState<SessionState | undefined>(undefined);
+  const [appsLoad, setAppsLoad] = useState<AppsLoad>({ status: "loading" });
+  const mounted = useRef(true);
 
   useEffect(() => {
-    let cancelled = false;
-    void me().then((u) => { if (!cancelled) setUser(u); });
-    return () => { cancelled = true; };
+    mounted.current = true;
+    return () => { mounted.current = false; };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    // Best effort, same as SignedOut below: the health strip degrading to
-    // empty is not a reason to keep the rest of the dashboard from rendering.
+  const loadSession = useCallback(() => {
+    setAuth(undefined);
+    void session().then((s) => { if (mounted.current) setAuth(s); });
+  }, []);
+
+  // A failed list is its own state, not an empty one. It used to collapse to
+  // [], which rendered "0 apps available" until a manual refresh.
+  const loadApps = useCallback(() => {
+    setAppsLoad({ status: "loading" });
     void listApps()
-      .then((a) => { if (!cancelled) setApps(a); })
-      .catch(() => { if (!cancelled) setApps([]); });
-    return () => { cancelled = true; };
+      .then((apps) => { if (mounted.current) setAppsLoad({ status: "ready", apps }); })
+      .catch(() => { if (mounted.current) setAppsLoad({ status: "failed" }); });
   }, []);
 
-  if (user === undefined) {
+  useEffect(() => {
+    loadSession();
+    loadApps();
+  }, [loadSession, loadApps]);
+
+  // A phone that slept, changed networks or came back from another app has
+  // usually just lost a request. Try again when it is back rather than leaving
+  // the failure on screen until someone thinks to refresh.
+  const authStatus = auth?.status;
+  const appsStatus = appsLoad.status;
+  useEffect(() => {
+    function recheck() {
+      if (document.visibilityState === "hidden") return;
+      if (authStatus === "unreachable") loadSession();
+      if (appsStatus === "failed") loadApps();
+    }
+    document.addEventListener("visibilitychange", recheck);
+    window.addEventListener("online", recheck);
+    return () => {
+      document.removeEventListener("visibilitychange", recheck);
+      window.removeEventListener("online", recheck);
+    };
+  }, [authStatus, appsStatus, loadSession, loadApps]);
+
+  if (auth === undefined) {
     return <section className="mx-auto max-w-4xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
+  }
+
+  // Could not reach the server: say so. Treating this as signed out sent people
+  // who were signed in to the sign-in page. Sign in stays one tap away, so the
+  // page is never a dead end if the session really has lapsed.
+  if (auth.status === "unreachable") {
+    return <Unreachable onRetry={loadSession} />;
   }
 
   // Chrome only when signed in. Wrapping the signed-out page would advertise a
   // launcher to someone with no session and nothing to launch. user goes too —
   // without it the home header had no identity chip and no Operator link, so
   // the founder landed here and /admin might as well not have existed.
-  if (user) {
-    const launcherApps = apps.filter(isLauncherApp);
+  if (auth.status === "signed-in") {
+    const user = auth.user;
+    const launcherApps = appsLoad.status === "ready" ? appsLoad.apps.filter(isLauncherApp) : [];
     const shelves = groupAppsByShelf(launcherApps);
 
     return (
       <Shell apps={launcherApps} user={user} utility={<NotificationBell />}>
         <div className="flex flex-col">
-          <div className="border-b border-zinc-700 bg-zinc-800/30 px-6 py-4">
+          <div className="border-b border-zinc-700 bg-zinc-800/30 px-4 py-4 sm:px-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h1 className="text-xl font-semibold">
                   Welcome, {user.username || user.email.split("@")[0]}
                 </h1>
-                <p className="mt-0.5 text-sm text-zinc-400">
-                  {launcherApps.length} app{launcherApps.length !== 1 ? "s" : ""} available
-                </p>
+                {appsLoad.status === "ready" && (
+                  <p className="mt-0.5 text-sm text-zinc-400">
+                    {launcherApps.length} app{launcherApps.length !== 1 ? "s" : ""} available
+                  </p>
+                )}
               </div>
             </div>
           </div>
 
-          <div className="flex flex-col gap-6 p-6">
+          <div className="flex flex-col gap-6 p-4 sm:p-6">
             {/* Curated entry points keep the dashboard useful without turning
                 it into a flat wall of every registered service. The full
                 directory remains one click away at /apps. */}
-            <section aria-label="Curated app shelves" className="space-y-8">
-              {(["everyday", "work", "create"] as const).map((shelf) => (
-                <AppShelf key={shelf} shelf={shelf} apps={shelves[shelf]} limit={3} />
-              ))}
-            </section>
+            {appsLoad.status === "loading" && (
+              <p role="status" className="text-sm text-zinc-500">Loading your apps…</p>
+            )}
+            {appsLoad.status === "failed" && (
+              <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-700 bg-zinc-800/40 p-4">
+                <p className="text-sm text-zinc-300">Could not load your apps. This is usually the connection.</p>
+                <button
+                  type="button"
+                  onClick={loadApps}
+                  className="min-h-11 rounded-md border border-zinc-700 px-4 text-sm hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+            {appsLoad.status === "ready" && (
+              <section aria-label="Curated app shelves" className="space-y-8">
+                {(["everyday", "work", "create"] as const).map((shelf) => (
+                  <AppShelf key={shelf} shelf={shelf} apps={shelves[shelf]} limit={3} />
+                ))}
+              </section>
+            )}
 
             {/* Widgets: today's schedule, unread mail, pinned apps, activity */}
             <div className="grid gap-4 md:grid-cols-2">
@@ -102,6 +159,37 @@ export default function Home() {
   }
 
   return <SignedOut />;
+}
+
+function Unreachable({ onRetry }: { onRetry: () => void }) {
+  return (
+    <main
+      id="main-content"
+      role="main"
+      className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-4 bg-zinc-900 px-4 text-center text-zinc-100"
+    >
+      <h1 className="text-xl font-semibold">Can't reach Nexus right now</h1>
+      <p className="text-sm text-zinc-400">
+        Your connection may have dropped, or the server is busy. Try again; if it keeps
+        happening, sign in again.
+      </p>
+      <div className="flex flex-wrap justify-center gap-3">
+        <button
+          type="button"
+          onClick={onRetry}
+          className="min-h-11 rounded-md bg-accent px-6 font-medium text-accent-foreground hover:bg-accent-hover active:bg-accent-active focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          Retry
+        </button>
+        <a
+          href={`${AUTH_LOGIN_URL}?redirect_uri=${encodeURIComponent(window.location.origin)}`}
+          className="flex min-h-11 items-center rounded-md border border-zinc-700 px-6 hover:bg-zinc-800"
+        >
+          Sign in
+        </a>
+      </div>
+    </main>
+  );
 }
 
 /**

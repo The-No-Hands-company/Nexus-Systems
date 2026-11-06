@@ -54,7 +54,7 @@ async function platformRequest<T>(path: string, init?: RequestInit): Promise<T> 
       typeof (body as { error?: unknown }).error === "string"
         ? (body as { error: string }).error
         : `http_${res.status}`;
-    throw new ApiError(reason, reason);
+    throw new ApiError(reason, reason, res.status);
   }
   return body as T;
 }
@@ -103,9 +103,33 @@ export type Me = { id: string; username: string; email: string; role: string };
 
 /** Carries the server's machine-readable reason so pages can explain it. */
 export class ApiError extends Error {
-  constructor(public readonly reason: string, message?: string) {
+  /** `status` is the HTTP status when the server answered; absent for timeouts and network drops. */
+  constructor(public readonly reason: string, message?: string, public readonly status?: number) {
     super(message ?? reason);
     this.name = "ApiError";
+  }
+}
+
+const NETWORK_RETRY_DELAYS_MS = [400, 1200];
+
+/**
+ * Retries a request that failed because the connection dropped, not because the
+ * server said no. Phones lose the connection for a moment on every wifi/cell
+ * handover and when the tab wakes from the background, and a single dropped
+ * request used to surface as a signed-out or empty dashboard.
+ *
+ * Timeouts are deliberately not retried: that already cost the caller the full
+ * timeout, and doing it twice only makes the wait longer.
+ */
+export async function retryOnNetworkDrop<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await run();
+    } catch (err) {
+      const delay = NETWORK_RETRY_DELAYS_MS[attempt];
+      if (!(err instanceof ApiError) || err.reason !== "network" || delay === undefined) throw err;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
   }
 }
 
@@ -128,19 +152,35 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const reason = typeof (body as { error?: unknown }).error === "string"
       ? (body as { error: string }).error
       : `http_${res.status}`;
-    throw new ApiError(reason, reason);
+    throw new ApiError(reason, reason, res.status);
   }
   return body as T;
 }
 
-export async function me(): Promise<Me | null> {
+/**
+ * Three outcomes, because "the server says you are not signed in" and "we could
+ * not reach the server" are different facts. Collapsing them sent signed-in
+ * people to the sign-in page whenever a request timed out on a weak connection.
+ */
+export type SessionState =
+  | { status: "signed-in"; user: Me }
+  | { status: "signed-out" }
+  | { status: "unreachable" };
+
+export async function session(): Promise<SessionState> {
   try {
-    const { user } = await platformRequest<{ user: Me }>("/ipa/v1/me");
-    return user;
-  } catch {
-    // Not signed in is the common case here, not an error worth surfacing.
-    return null;
+    const { user } = await retryOnNetworkDrop(() => platformRequest<{ user: Me }>("/ipa/v1/me"));
+    return user ? { status: "signed-in", user } : { status: "signed-out" };
+  } catch (err) {
+    return err instanceof ApiError && err.status === 401
+      ? { status: "signed-out" }
+      : { status: "unreachable" };
   }
+}
+
+export async function me(): Promise<Me | null> {
+  const state = await session();
+  return state.status === "signed-in" ? state.user : null;
 }
 
 /**
@@ -269,7 +309,7 @@ const SHELL_NATIVE_APPS: AppEntry[] = [
 ];
 
 export async function listApps(): Promise<AppEntry[]> {
-  const { apps } = await platformRequest<{ apps: WireAppEntry[] }>("/ipa/v1/apps");
+  const { apps } = await retryOnNetworkDrop(() => platformRequest<{ apps: WireAppEntry[] }>("/ipa/v1/apps"));
   // The catalog helper is the single frontend normalization boundary. Older
   // Dashboard servers may omit every placement field, so components must not
   // inspect the wire response directly.

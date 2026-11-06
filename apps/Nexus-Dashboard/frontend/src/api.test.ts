@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, listApps, me, moveMailMessage, platformApiOrigin } from "./api";
+import { ApiError, listApps, me, moveMailMessage, platformApiOrigin, session } from "./api";
 
 const mockFetch = vi.fn<typeof fetch>();
 
@@ -50,6 +50,46 @@ describe("me()", () => {
   it("returns null when the network is unreachable", async () => {
     mockFetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     expect(await me()).toBeNull();
+  });
+});
+
+describe("session()", () => {
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  const aliceResponse = () =>
+    json({ user: { id: "u1", username: "alice", email: "a@b.com", role: "member" } });
+
+  it("is signed-in when the server returns the user", async () => {
+    mockFetch.mockResolvedValueOnce(aliceResponse());
+    expect(await session()).toMatchObject({ status: "signed-in", user: { username: "alice" } });
+  });
+
+  it("is signed-out only when the server answers 401", async () => {
+    mockFetch.mockResolvedValueOnce(json({ error: "unauthenticated" }, 401));
+    expect(await session()).toEqual({ status: "signed-out" });
+  });
+
+  it("is unreachable, not signed-out, when the server errors", async () => {
+    mockFetch.mockResolvedValueOnce(json({ error: "bad_gateway" }, 502));
+    expect(await session()).toEqual({ status: "unreachable" });
+  });
+
+  it("retries a dropped connection and recovers", async () => {
+    vi.useFakeTimers();
+    mockFetch.mockRejectedValueOnce(new TypeError("Failed to fetch")).mockResolvedValueOnce(aliceResponse());
+    const pending = session();
+    await vi.advanceTimersByTimeAsync(400);
+    expect(await pending).toMatchObject({ status: "signed-in" });
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports unreachable after the retries are spent", async () => {
+    vi.useFakeTimers();
+    mockFetch.mockRejectedValue(new TypeError("Failed to fetch"));
+    const pending = session();
+    await vi.advanceTimersByTimeAsync(400 + 1200);
+    expect(await pending).toEqual({ status: "unreachable" });
+    expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 });
 

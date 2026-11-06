@@ -32,7 +32,7 @@ export default function App() {
 
   return (
     <ApiContext.Provider value={api}>
-      <div className="flex flex-col h-screen bg-zinc-900 text-zinc-200">
+      <div className="flex flex-col h-dvh bg-zinc-900 text-zinc-200">
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded focus:bg-zinc-800 focus:px-4 focus:py-2 focus:text-zinc-100 focus:ring-2 focus:ring-accent focus:outline-none"

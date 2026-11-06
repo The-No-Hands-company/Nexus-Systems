@@ -85,7 +85,9 @@ describe("Grid", () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("offline"); }));
 
     render(<MemoryRouter><Grid /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText(/could not load|try again|failed/i)).toBeTruthy());
+    // A dropped connection is retried twice (400ms + 1200ms) before it is
+    // reported, so the failure takes ~1.6s to appear rather than being instant.
+    await waitFor(() => expect(screen.getByText(/could not load|try again|failed/i)).toBeTruthy(), { timeout: 4000 });
   });
 
   it("reads the grid from the same-origin endpoint", async () => {

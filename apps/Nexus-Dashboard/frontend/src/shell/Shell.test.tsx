@@ -76,6 +76,14 @@ describe("Shell", () => {
     expect(screen.getByRole("link", { name: /nexus home/i }).getAttribute("href")).toBe("/");
     expect(screen.getByRole("link", { name: /report a problem/i }).getAttribute("href")).toBe("/report");
   });
+
+  it("puts Home in the shell navigation, which is the bottom bar on a phone", () => {
+    // The wordmark is a small target in a corner; on a phone the only
+    // thumb-reachable way back from inside an app is this bar.
+    renderInRouter(<Shell apps={[]}>x</Shell>);
+    const nav = screen.getByRole("navigation", { name: "Shell" });
+    expect(within(nav).getByRole("link", { name: "Home" }).getAttribute("href")).toBe("/");
+  });
 });
 
 describe("Shell operator link", () => {

@@ -9,6 +9,10 @@ import type { AppEntry } from "../api";
 import { useRecentApps } from "./useRecentApps";
 import { isLauncherApp } from "./catalog";
 
+// 44px minimum touch target (WCAG 2.5.8) — the old 18px icon + 10px label rows were smaller.
+const railItem =
+  "flex min-h-11 min-w-11 flex-col items-center justify-center gap-1 rounded-md px-2 py-1 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-[current=page]:text-accent";
+
 /**
  * The frame every app renders inside.
  *
@@ -88,7 +92,7 @@ export default function Shell({
   }, [apps, location.pathname, recordRecent]);
 
   return (
-    <div className="flex h-screen flex-col bg-zinc-900 text-zinc-100">
+    <div className="flex h-dvh flex-col bg-zinc-900 text-zinc-100">
       {/* Skip-to-main shortcut for keyboard-only navigation (WCAG 2.4.1) */}
       <a
         href="#main-content"
@@ -187,24 +191,36 @@ export default function Shell({
         )}
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col-reverse sm:flex-row">
         {/*
-            The rail. It used to carry the full app list (Launcher); now it
-            carries only what genuinely belongs to the ecosystem's chrome
-            rather than to any one app — the way to open the drawer, and the
-            way to report a problem. Always visible, at every width: unlike
-            the old Launcher list, two icon buttons never need a mobile
-            slide-out to avoid crowding the screen.
+            The rail on wide screens, the bottom bar on phones — one element,
+            so there is never a second "Apps" button to confuse a screen
+            reader. It carries what belongs to the ecosystem's chrome rather
+            than to any one app: the way home, the app drawer, and the way to
+            report a problem.
+
+            Home is here as well as on the wordmark because inside an app the
+            wordmark is a 60px target in a corner, and on a phone that was the
+            only way back. A bottom bar is thumb-reachable and stays put while
+            the framed app scrolls inside it.
           */}
         <nav
           aria-label="Shell"
-          className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-zinc-700 py-2 sm:w-16"
+          className="flex shrink-0 flex-row items-center justify-around gap-1 border-t border-zinc-700 bg-zinc-900 px-2 pb-[env(safe-area-inset-bottom)] pt-1 sm:w-16 sm:flex-col sm:justify-start sm:border-r sm:border-t-0 sm:px-0 sm:pb-2 sm:pt-2"
         >
-          <button
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            className="flex flex-col items-center gap-1 rounded-md px-2 py-2 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          <Link
+            to="/"
+            aria-current={location.pathname === "/" ? "page" : undefined}
+            className={railItem}
           >
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 9.5L10 3l7 6.5V17H3z" />
+              <path d="M8 17v-5h4v5" />
+            </svg>
+            Home
+          </Link>
+
+          <button type="button" onClick={() => setDrawerOpen(true)} className={railItem}>
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
               <rect x="3" y="3" width="6" height="6" rx="1" />
               <rect x="11" y="3" width="6" height="6" rx="1" />
@@ -215,9 +231,9 @@ export default function Shell({
           </button>
 
           {canManage && (
-            <div className="w-full border-t border-zinc-700 pt-2">
-              <Link to="/cloud" aria-label="Cloud console" className="flex flex-col items-center rounded-md px-1 py-2 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-accent">Cloud</Link>
-              <Link to="/terminal" aria-label="Terminal" className="flex flex-col items-center rounded-md px-1 py-2 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-accent">Terminal</Link>
+            <div className="flex flex-row sm:w-full sm:flex-col sm:items-center sm:border-t sm:border-zinc-700 sm:pt-2">
+              <Link to="/cloud" aria-label="Cloud console" className={railItem}>Cloud</Link>
+              <Link to="/terminal" aria-label="Terminal" className={railItem}>Terminal</Link>
             </div>
           )}
 
@@ -226,25 +242,15 @@ export default function Shell({
             the ecosystem, not one of its apps, and has to be reachable from
             wherever someone hits a problem.
           */}
-          <div className="mt-auto w-full border-t border-zinc-700 pt-2">
-            <Link
-              to="/report"
-              aria-label="Report a problem"
-              title="Report a problem"
-              className="flex flex-col items-center gap-1 rounded-md px-2 py-2 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            >
+          <div className="flex flex-row sm:mt-auto sm:w-full sm:flex-col sm:items-center sm:border-t sm:border-zinc-700 sm:pt-2">
+            <Link to="/report" aria-label="Report a problem" title="Report a problem" className={railItem}>
               <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M4 3v14" />
                 <path d="M4 4h9l-2 3 2 3H4" />
               </svg>
               Report
             </Link>
-            <a
-              href="https://tnhc.dev/charter"
-              aria-label="TNHC Charter"
-              title="TNHC Charter"
-              className="flex flex-col items-center gap-1 rounded-md px-2 py-2 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            >
+            <a href="https://tnhc.dev/charter" aria-label="TNHC Charter" title="TNHC Charter" className={railItem}>
               <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M5 2h7l4 4v12H5z" />
                 <path d="M12 2v4h4" />
@@ -267,7 +273,7 @@ export default function Shell({
           The iframe still fills exactly h-full, so this adds no scrollbar to a
           framed app; it only lets taller content scroll.
         */}
-        <main id="main-content" role="main" className="min-w-0 flex-1 overflow-y-auto">
+        <main id="main-content" role="main" className="min-h-0 min-w-0 flex-1 overflow-y-auto">
           {children}
         </main>
       </div>

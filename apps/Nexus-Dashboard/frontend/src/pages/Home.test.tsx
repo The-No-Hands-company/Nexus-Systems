@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Home from "./Home";
 
@@ -70,6 +70,44 @@ describe("Home", () => {
     });
     expect(screen.queryByText("Loading…")).toBeNull();
     expect(screen.getByRole("link", { name: "Sign in" })).toBeTruthy();
+  });
+
+  it("says it cannot reach the server, rather than showing the sign-in page, and recovers on retry", async () => {
+    let up = false;
+    vi.stubGlobal("fetch", vi.fn(async (url: RequestInfo | URL) => {
+      const u = String(url);
+      if (u === "/ipa/v1/me") {
+        return up
+          ? jsonResponse({ user: { id: "u1", username: "ada", email: "a@x.dev", role: "user" } })
+          : jsonResponse({ error: "bad_gateway" }, 502);
+      }
+      if (u === "/ipa/v1/apps") return jsonResponse({ apps: [] });
+      throw new Error(`not stubbed: ${u}`);
+    }));
+
+    render(<MemoryRouter><Home /></MemoryRouter>);
+    expect(await screen.findByText("Can't reach Nexus right now")).toBeTruthy();
+    expect(screen.queryByText(/one account for every app/i)).toBeNull();
+
+    up = true;
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText(/Welcome, ada/)).toBeTruthy();
+  });
+
+  it("offers a retry instead of '0 apps available' when the app list fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: RequestInfo | URL) => {
+      const u = String(url);
+      if (u === "/ipa/v1/me") {
+        return jsonResponse({ user: { id: "u1", username: "ada", email: "a@x.dev", role: "user" } });
+      }
+      if (u === "/ipa/v1/apps") return jsonResponse({ error: "bad_gateway" }, 502);
+      throw new Error(`not stubbed: ${u}`);
+    }));
+
+    render(<MemoryRouter><Home /></MemoryRouter>);
+    expect(await screen.findByText(/Could not load your apps/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(screen.queryByText(/0 apps available/)).toBeNull();
   });
 
   it("shows the dashboard to a signed-in user", async () => {

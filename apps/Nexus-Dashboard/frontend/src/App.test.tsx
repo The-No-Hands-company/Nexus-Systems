@@ -17,6 +17,13 @@ vi.mock("./api", () => ({
     email: "founder@example.test",
     role: "founder",
   })),
+  // Home reads the three-way session; derive it from the `me` mock above so a
+  // test that overrides `me` to simulate signed-out still drives Home.
+  session: vi.fn(async () => {
+    const { me } = await import("./api");
+    const user = await me();
+    return user ? { status: "signed-in", user } : { status: "signed-out" };
+  }),
   cloudStatus: vi.fn(async () => ({ tools: { total: 1, healthy: 1 }, users: { total: 1 }, peers: { total: 0 } })),
   cloudIdentity: vi.fn(async () => ({ address: "ns:test", shortId: "T-1", did: "did:key:test" })),
   cloudTrust: vi.fn(async () => null),
