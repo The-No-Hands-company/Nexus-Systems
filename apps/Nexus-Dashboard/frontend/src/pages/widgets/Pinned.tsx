@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import AppLaunchLink from "../../components/AppLaunchLink";
 import { listApps, type AppEntry } from "../../api";
 import { usePinnedApps } from "../../shell/usePinnedApps";
 import { isLauncherApp } from "../../shell/catalog";
@@ -39,8 +39,8 @@ export default function Pinned() {
               const isPinned = pinnedIds.includes(a.id);
               return (
                 <li key={a.id} className="group relative">
-                  <Link
-                    to={a.path}
+                  <AppLaunchLink
+                    app={a}
                     className="flex flex-col gap-2 rounded-lg border border-zinc-700 bg-zinc-800/40 p-3 transition-colors hover:border-zinc-600 hover:bg-zinc-800"
                   >
                     <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-700 text-xs font-semibold uppercase text-zinc-300">
@@ -49,7 +49,7 @@ export default function Pinned() {
                     <span className="line-clamp-1 text-sm font-medium text-zinc-200 group-hover:text-accent">
                       {a.name}
                     </span>
-                  </Link>
+                  </AppLaunchLink>
                   <button
                     type="button"
                     onClick={() => togglePinned(a.id)}

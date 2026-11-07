@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import AppLaunchLink from "../components/AppLaunchLink";
 import { Overlay } from "../../../../../packages/nexus-design/src/components/ui/overlay";
 import { Pill } from "../../../../../packages/nexus-design/src/components/ui/pill";
 import { EmptyState } from "../../../../../packages/nexus-design/src/components/ui/empty-state";
@@ -103,8 +104,8 @@ export default function AppsDrawer({
             const selected = i === highlight;
             return (
               <li key={a.id} role="option" aria-selected={selected ? "true" : "false"}>
-                  <Link
-                    to={a.path}
+                  <AppLaunchLink
+                    app={a}
                     onClick={onClose}
                     onMouseEnter={() => setHighlight(i)}
                     data-app-entry=""
@@ -115,7 +116,7 @@ export default function AppsDrawer({
                   >
                     <span>{a.name}</span>
                     <Pill tone="success">available</Pill>
-                  </Link>
+                  </AppLaunchLink>
               </li>
             );
           })

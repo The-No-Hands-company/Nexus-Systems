@@ -149,13 +149,24 @@ export default function CalendarView() {
             ›
           </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowForm(true)}
-          className="rounded bg-accent px-4 py-1.5 text-sm font-medium text-accent-foreground hover:bg-accent-hover"
-        >
-          + New event
-        </button>
+        <div className="flex items-center gap-2">
+          <a
+            href="https://calendar.tnhc.dev"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded border border-zinc-700 px-3 py-1.5 text-sm font-medium text-zinc-300 hover:bg-zinc-800"
+            title="Open dedicated Calendar in a new tab"
+          >
+            Open standalone app ↗
+          </a>
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            className="rounded bg-accent px-4 py-1.5 text-sm font-medium text-accent-foreground hover:bg-accent-hover"
+          >
+            + New event
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">

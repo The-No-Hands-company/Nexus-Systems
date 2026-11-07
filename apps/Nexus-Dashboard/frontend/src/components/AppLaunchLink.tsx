@@ -14,14 +14,22 @@ export default function AppLaunchLink({
   app,
   className,
   children,
+  onClick,
+  onMouseEnter,
+  title,
   "aria-label": ariaLabel,
   "aria-current": ariaCurrent,
+  "data-app-entry": dataAppEntry,
 }: {
   app: AppEntry;
   className?: string;
   children: ReactNode;
+  onClick?: () => void;
+  onMouseEnter?: () => void;
+  title?: string;
   "aria-label"?: string;
   "aria-current"?: "page" | undefined;
+  "data-app-entry"?: string;
 }) {
   if (app.delivery === "external" && app.publicUrl) {
     return (
@@ -31,13 +39,26 @@ export default function AppLaunchLink({
         rel="noopener noreferrer"
         aria-label={ariaLabel}
         className={className}
+        onClick={onClick}
+        onMouseEnter={onMouseEnter}
+        title={title}
+        data-app-entry={dataAppEntry}
       >
         {children}
       </a>
     );
   }
   return (
-    <Link to={app.path} aria-label={ariaLabel} aria-current={ariaCurrent} className={className}>
+    <Link
+      to={app.path}
+      aria-label={ariaLabel}
+      aria-current={ariaCurrent}
+      className={className}
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      title={title}
+      data-app-entry={dataAppEntry}
+    >
       {children}
     </Link>
   );

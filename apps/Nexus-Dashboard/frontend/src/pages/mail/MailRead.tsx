@@ -329,6 +329,7 @@ export default function MailRead() {
         */
         <iframe
           title="Message content"
+          loading="lazy"
           sandbox=""
           srcDoc={`<!doctype html><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">

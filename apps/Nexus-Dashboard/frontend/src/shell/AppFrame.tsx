@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import type { AppEntry } from "../api";
 import { appById } from "./apps";
 
@@ -17,14 +18,10 @@ export function embedUrl(url: string): string {
 /**
  * Mounts an app inside the shell.
  *
- * No sandbox attribute: these are first-party apps that need scripts, forms,
- * storage and their own origin, so sandboxing would remove nothing an attacker
- * has and break everything the app needs. What actually constrains framing is
- * frame-ancestors on the app's own host.
- *
- * Authentication needs no work here — the session cookie is .tnhc.dev-scoped
- * and the frame is same-site, so the proxy gates and identifies the framed
- * request exactly as it does a direct one.
+ * External apps (Chat, Deploy, Hosting, Draw, Project, Calendar) are standalone
+ * SPAs on their own origins. They are launched in independent browser tabs
+ * rather than in an iframe to avoid duplicate renderer threads, GPU context
+ * exhaustion, and memory spikes on low-end hardware.
  */
 export default function AppFrame({ apps, appId }: { apps: AppEntry[]; appId: string }) {
   const app = appById(apps, appId);
@@ -40,10 +37,43 @@ export default function AppFrame({ apps, appId }: { apps: AppEntry[]; appId: str
     );
   }
 
+  // Standalone external apps run on their own origin and should never be
+  // trapped inside an iframe. Show a dedicated launch screen.
+  if (app.delivery === "external" && app.publicUrl) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-800/80 border border-zinc-700/60 shadow-xl">
+          <span className="text-xl font-bold text-zinc-100">{app.name.slice(0, 2).toUpperCase()}</span>
+        </div>
+        <div>
+          <h1 className="text-2xl font-semibold text-zinc-100">{app.name}</h1>
+          {app.description && (
+            <p className="mt-1.5 max-w-md text-sm text-zinc-400">{app.description}</p>
+          )}
+        </div>
+        <div className="mt-2 flex items-center gap-3">
+          <a
+            href={app.publicUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground shadow-md transition-transform hover:scale-105 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            Launch {app.name} ↗
+          </a>
+          <Link
+            to="/"
+            className="rounded-lg border border-zinc-700 px-4 py-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   // Shell-native apps live as React components inside this SPA, not as
   // standalone pages — iframing their own Dashboard path loops back into the
-  // shell. Show a status page instead. Apps with a publicUrl are different:
-  // they have a real standalone origin and are always safe to frame.
+  // shell. Show a status page instead.
   if (app.delivery === "shell-native" && !app.publicUrl) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
