@@ -294,7 +294,7 @@ const SHELL_NATIVE_APPS: AppEntry[] = [
     description: "Push-to-deploy platform: connect a repo, auto-build, auto-HTTPS, rollbacks included",
     path: "/deploy",
     publicUrl: "https://deploy.tnhc.dev",
-    delivery: "framed",
+    delivery: "external",
     health: "healthy",
     surface: "user-app",
     releaseState: "released",
