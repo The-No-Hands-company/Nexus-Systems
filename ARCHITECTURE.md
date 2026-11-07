@@ -37,6 +37,7 @@ Nexus-Systems/
 │
 ├── apps/                    # All 89 application directories
 │   ├── Nexus-Cloud/         # Control plane (Bun/TS, port 8787)
+│   ├── Nexus-Deploy/        # Push-to-deploy engine + web UI (8096, rootless container sandbox)
 │   ├── Nexus-Calendar/      # Calendar API + single React frontend (3068/8092)
 │   ├── Nexus-Systems-API/   # Cross-service contract definitions
 │   ├── Nexus-Graphic/       # Graphics app (Bun+React+Python+Rust)
@@ -103,8 +104,13 @@ apps/Nexus-<App>/
 | Range | Purpose |
 |---|---|
 | **8787** | Nexus-Cloud control plane |
-| **3068** | Nexus-Calendar loopback API |
+| **8096** | Nexus-Deploy web UI & build plane |
+| **8095** | Nexus-Chat web interface |
+| **8093** | Nexus-Project web interface |
 | **8092** | Nexus-Calendar direct-origin Caddy front door |
+| **8091** | Nexus-Draw web interface |
+| **8090** | Nexus-Hosting delivery plane |
+| **3068** | Nexus-Calendar loopback API |
 | **3000–3099** | Core infrastructure apps (Hosting, Vault, Forge, Engine, Deploy, Monitor) |
 | **3100–3199** | Reserved (expansion) |
 | **3200–3299** | Network/security apps (Network, Tunnel, Edge, Files, Guardian, Auth) |

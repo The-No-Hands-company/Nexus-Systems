@@ -41,9 +41,9 @@ That gives four honest states:
 
 | Status | Meaning | Count |
 |---|---|---|
-| **Live** | Deployed and reachable on `tnhc.dev` today | 7 |
+| **Live** | Deployed and reachable on `tnhc.dev` today | 10 |
 | **Beta** | Deployed, feature-incomplete, in active use | 1 |
-| **In development** | Substantive code beyond the scaffold; not yet deployed | 28 |
+| **In development** | Substantive code beyond the scaffold; not yet deployed | 25 |
 | **Scaffold** | The six-file `ghost` shape: registers with Systems-API, serves health, no domain logic | 73 |
 | **Stub** | Less than the scaffold — a directory with intent and little else | 6 |
 
@@ -72,6 +72,9 @@ scaffold is not a product, and this document will not call one a product.
 | `auth.tnhc.dev` | Nexus-Auth | `127.0.0.1:4310` | OIDC/SSO for every app |
 | `chat.tnhc.dev` | Nexus | `127.0.0.1:3109` | Rust chat runtime, served via Caddy on `:8095` |
 | `cloud.tnhc.dev` | Nexus-Cloud | `127.0.0.1:8787` | Control plane and app registry |
+| `deploy.tnhc.dev` | Nexus-Deploy | `127.0.0.1:8096` | Push-to-deploy platform with rootless sandboxing and Railpack builders |
+| `calendar.tnhc.dev` | Nexus-Calendar | `127.0.0.1:8092` | Shared calendar with events, reminders, and views |
+| `project.tnhc.dev` | Nexus-Project | `127.0.0.1:8093` | Project management boards, WBS, dependencies, and schedules |
 | `draw.tnhc.dev` | Nexus-Draw | `127.0.0.1:8090` | Whiteboard, served as a Nexus-Hosting static site |
 | `hosting.tnhc.dev` | Nexus-Hosting | — | Static-site hosting with presigned upload and deploy |
 | `storage.tnhc.dev` | MinIO | `:9010` | Object storage — infrastructure, not a Nexus app |
@@ -129,7 +132,7 @@ Every app in the ecosystem, by category, with measured status.
 | App | Role | Status |
 |---|---|---|
 | **Nexus-Hosting** | Host a website here, or run the node yourself — domains, TLS, builds, forms | **Live** |
-| **Nexus-Deploy** | Deployment orchestration and release pipelines | In development |
+| **Nexus-Deploy** | Deployment orchestration, rootless sandboxed builds & release pipelines; deploy.tnhc.dev | **Live** |
 | **Nexus-Tunnel** | Sovereign public exposure; every public URL is provisioned here | In development |
 | **Nexus-Router** | Request routing and upstream selection | In development |
 | **Nexus-Edge** | Edge termination and regional request handling | In development |

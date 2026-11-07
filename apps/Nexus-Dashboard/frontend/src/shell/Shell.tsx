@@ -4,6 +4,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Avatar } from "../../../../../packages/nexus-design/src/components/ui/avatar";
 import { Kbd } from "../../../../../packages/nexus-design/src/components/ui/kbd";
 import AppsDrawer from "./AppsDrawer";
+import UserMenu from "./UserMenu";
 import { useDensity } from "./useDensity";
 import type { AppEntry } from "../api";
 import { useRecentApps } from "./useRecentApps";
@@ -180,14 +181,9 @@ export default function Shell({
         )}
 
         {user && (
-          <Link
-            to="/account"
-            className={`${utility ? "" : "ml-auto"} flex items-center gap-2 rounded-md px-2 py-1 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
-            title={user.email}
-          >
-            <Avatar label={user.username || user.email} />
-            <span className="hidden max-w-[10rem] truncate sm:inline">{user.username || user.email}</span>
-          </Link>
+          <div className={`${utility ? "" : "ml-auto"}`}>
+            <UserMenu user={user} />
+          </div>
         )}
       </header>
 

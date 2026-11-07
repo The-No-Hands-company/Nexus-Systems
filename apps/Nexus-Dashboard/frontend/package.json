@@ -8,7 +8,7 @@
     "build": "cd ../../../packages/nexus-design && bun run build && cd - && bunx tsc -b && bunx vite build",
     "preview": "bunx vite preview",
     "check": "bunx tsc --noEmit",
-    "test": "vitest run"
+    "test": "node node_modules/vitest/vitest.mjs run"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

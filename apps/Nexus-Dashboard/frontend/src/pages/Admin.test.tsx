@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import Admin from "./Admin";
 
 const ADMIN = { id: "u-admin", username: "boss", email: "boss@x.dev", role: "founder" };
@@ -137,7 +138,11 @@ describe("Admin", () => {
     // Presentation only — the endpoints are guarded by users:approve
     // server-side, which is what actually enforces this.
     stubFetch(PLAIN);
-    const { container } = render(<Admin />);
+    const { container } = render(
+      <MemoryRouter>
+        <Admin />
+      </MemoryRouter>
+    );
     await waitFor(() => expect(container.textContent).not.toContain("Loading"));
     expect(screen.queryByText("sam")).toBeNull();
     expect(screen.queryByRole("button", { name: /create link only/i })).toBeNull();

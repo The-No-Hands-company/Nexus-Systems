@@ -69,6 +69,7 @@ apps/Nexus-Auth/data/auth-users.json.bak-*
 apps/Nexus-Auth/data/auth-users.json.tmp
 apps/Nexus-Auth/data/auth-recovery.json
 apps/Nexus-Auth/data/auth-invites.json
+apps/Nexus-Auth/data/catalog-preferences.json
 
 # Registered OIDC clients — holds client secrets, and this repo is public.
 # Runtime state: a deploy registers its own clients.

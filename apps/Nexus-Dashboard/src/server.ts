@@ -540,6 +540,38 @@ export async function handleRequest(
     return proxyToAuth(req, path.replace(/^\/api\/v1\/auth\//, "/ipa/v1/auth/"));
   }
 
+  // Calendar events API for widgets and embedded views — delegates to Nexus-API facade.
+  if (
+    path === "/ipa/v1/calendar" ||
+    path.startsWith("/ipa/v1/calendar/") ||
+    path === "/api/v1/calendar" ||
+    path.startsWith("/api/v1/calendar/")
+  ) {
+    const platform = platformApiUrl();
+    if (platform) {
+      const canonicalPath = path.startsWith("/ipa") ? `/api${path.slice(4)}` : path;
+      try {
+        const upstream = new URL(`${platform}${canonicalPath}`);
+        upstream.search = url.search;
+        const res = await fetch(upstream, {
+          method: req.method,
+          headers: platformApiHeaders(req),
+          body: req.method === "GET" || req.method === "HEAD" ? undefined : await req.arrayBuffer(),
+          signal: AbortSignal.timeout(10000),
+        });
+        return new Response(res.body, {
+          status: res.status,
+          headers: {
+            "content-type": res.headers.get("content-type") ?? "application/json",
+            "cache-control": "no-store",
+          },
+        });
+      } catch {
+        return Response.json({ error: "calendar_unavailable" }, { status: 503 });
+      }
+    }
+  }
+
   // GET-only, and only for names on CLOUD_ALLOWLIST — anything else (a
   // mutating method, or a name not in the table) falls through to the
   // catch-all 404 below rather than reaching proxyToCloud at all.

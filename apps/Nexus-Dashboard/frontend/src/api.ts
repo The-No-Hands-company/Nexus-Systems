@@ -386,6 +386,23 @@ export function changePassword(userId: string, currentPassword: string, newPassw
   );
 }
 
+/**
+ * End the current session and clear the ecosystem SSO cookie.
+ * Redirects to the login page on auth.tnhc.dev upon completion.
+ */
+export async function logout(redirectTo = "https://auth.tnhc.dev/login"): Promise<void> {
+  try {
+    await request<{ success?: boolean }>("/ipa/v1/auth/logout", {
+      method: "POST",
+    });
+  } catch {
+    // Ignore network failures on signout
+  }
+  if (typeof window !== "undefined") {
+    window.location.href = redirectTo;
+  }
+}
+
 export type AccessRequest = {
   id: string;
   username: string;
@@ -865,7 +882,7 @@ export type CalendarEventInput = {
 
 export function listCalendarEvents(from: string, to: string) {
   return platformRequest<{ events: CalendarEvent[] }>(
-    `/api/v1/calendar/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    `/ipa/v1/calendar/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
   ).then((r) => {
     if (!Array.isArray(r.events)) throw new Error("malformed_response");
     return r.events;
@@ -874,12 +891,12 @@ export function listCalendarEvents(from: string, to: string) {
 
 export function getCalendarEvent(id: string) {
   return platformRequest<{ event: CalendarEvent }>(
-    `/api/v1/calendar/events/${encodeURIComponent(id)}`,
+    `/ipa/v1/calendar/events/${encodeURIComponent(id)}`,
   ).then((r) => r.event);
 }
 
 export function createCalendarEvent(input: CalendarEventInput) {
-  return platformRequest<{ event: CalendarEvent }>("/api/v1/calendar/events", {
+  return platformRequest<{ event: CalendarEvent }>("/ipa/v1/calendar/events", {
     method: "POST",
     body: JSON.stringify(input),
   }).then((r) => r.event);
@@ -887,20 +904,20 @@ export function createCalendarEvent(input: CalendarEventInput) {
 
 export function updateCalendarEvent(id: string, patch: Partial<CalendarEventInput>) {
   return platformRequest<{ event: CalendarEvent }>(
-    `/api/v1/calendar/events/${encodeURIComponent(id)}`,
+    `/ipa/v1/calendar/events/${encodeURIComponent(id)}`,
     { method: "PATCH", body: JSON.stringify(patch) },
   ).then((r) => r.event);
 }
 
 export function deleteCalendarEvent(id: string) {
-  return platformRequest<void>(`/api/v1/calendar/events/${encodeURIComponent(id)}`, {
+  return platformRequest<void>(`/ipa/v1/calendar/events/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
 }
 
 export function getPublicCalendarEvent(token: string) {
   return platformRequest<{ event: CalendarEvent }>(
-    `/api/v1/calendar/public/${encodeURIComponent(token)}`,
+    `/ipa/v1/calendar/public/${encodeURIComponent(token)}`,
   ).then((r) => r.event);
 }
 

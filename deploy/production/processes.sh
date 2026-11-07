@@ -130,6 +130,14 @@ pid_process_identity_matches() {
         return 1
     fi
     if ! cwd="$("$READLINK_BIN" -f "$PROC_ROOT/$pid/cwd" 2>/dev/null)"; then
+        # Capability-dropped processes (such as Caddy with ambient caps) restrict
+        # /proc/$pid/cwd to root. If the command line is readable and carries the
+        # exact configuration path or executable pattern, accept the process identity.
+        if cmdline="$(tr '\0' ' ' < "$PROC_ROOT/$pid/cmdline" 2>/dev/null)" && [ -n "$cmdline" ]; then
+            case "$cmdline" in
+                *"$exec_pattern"*) return 0 ;;
+            esac
+        fi
         process_error "could not resolve working directory for PID $pid"
         return 1
     fi

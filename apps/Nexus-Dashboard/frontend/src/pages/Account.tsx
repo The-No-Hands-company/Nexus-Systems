@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import {
   me, listSessions, revokeSession, remainingRecoveryCodes, regenerateRecoveryCodes,
-  changePassword, myActivity, ApiError, type Me, type Session, type ActivityEvent,
+  changePassword, myActivity, logout, ApiError, type Me, type Session, type ActivityEvent,
 } from "../api";
 import { PageHeader } from "../../../../../packages/nexus-design/src/components/ui/page-header";
 import { Badge } from "../../../../../packages/nexus-design/src/components/ui/badge";
+import { useTheme, THEMES } from "../shell/useTheme";
+import { useDensity } from "../shell/useDensity";
 
 const EVENT_LABELS: Record<string, string> = {
   login_success: "Signed in",
@@ -67,6 +69,31 @@ function buildRecoveryCodesDownload(username: string, codes: string[]): string {
   return `data:text/plain;charset=utf-8,${encodeURIComponent(text)}`;
 }
 
+function buildAccountExportDownload(user: Me, sessions: Session[], activity: ActivityEvent[]): string {
+  const data = {
+    exportDate: new Date().toISOString(),
+    account: {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role ?? "member",
+    },
+    activeSessions: sessions.map((s) => ({
+      id: s.id,
+      deviceId: s.deviceId,
+      current: s.current,
+      createdAt: s.createdAt,
+      expiresAt: s.expiresAt,
+    })),
+    recentActivity: activity.map((a) => ({
+      event: a.event,
+      deviceId: a.deviceId,
+      at: a.at,
+    })),
+  };
+  return `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(data, null, 2))}`;
+}
+
 export default function Account() {
   const [user, setUser] = useState<Me | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -80,6 +107,11 @@ export default function Account() {
 
   const [newCodes, setNewCodes] = useState<string[] | null>(null);
   const [savedCodes, setSavedCodes] = useState(false);
+
+  const [theme, setTheme] = useTheme();
+  const [density, setDensity] = useDensity();
+  const [loggingOutCurrent, setLoggingOutCurrent] = useState(false);
+  const [revokingOthers, setRevokingOthers] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,6 +164,24 @@ export default function Account() {
       // Leave the row in place — pretending it is gone when the server still
       // honours it would be worse than showing the failure on the next load.
     }
+  }
+
+  async function revokeOtherSessions() {
+    setRevokingOthers(true);
+    const others = sessions.filter((s) => !s.current);
+    try {
+      await Promise.all(others.map((s) => revokeSession(s.id)));
+      setSessions((list) => list.filter((s) => s.current));
+    } catch {
+      listSessions().then(setSessions).catch(() => {});
+    } finally {
+      setRevokingOthers(false);
+    }
+  }
+
+  async function handleSignOutThisDevice() {
+    setLoggingOutCurrent(true);
+    await logout();
   }
 
   if (!user) {
@@ -233,10 +283,103 @@ export default function Account() {
         )}
       </div>
 
+      {/* Appearance & Interface Preferences */}
       <div>
-        <h2 className="text-lg font-medium">Active sessions</h2>
+        <h2 className="text-lg font-medium">Appearance & Preferences</h2>
+        <p className="mt-1 text-sm text-zinc-400">
+          Personalise your Nexus console theme and interface density. Settings are saved locally.
+        </p>
+
+        <div className="mt-4 space-y-4 rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
+          <div>
+            <span className="block text-xs font-medium uppercase tracking-wider text-zinc-400 mb-2">
+              Color Palette
+            </span>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {THEMES.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTheme(t.id)}
+                  aria-pressed={theme === t.id}
+                  className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors text-left ${
+                    theme === t.id
+                      ? "border-accent bg-accent/15 text-accent font-medium shadow-sm"
+                      : "border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                  }`}
+                >
+                  <span
+                    className="h-3.5 w-3.5 rounded-full border border-white/20 shrink-0"
+                    style={{ backgroundColor: t.hex }}
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">{t.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-zinc-800/80 pt-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <span className="block text-xs font-medium uppercase tracking-wider text-zinc-400">
+                Display Density
+              </span>
+              <p className="text-xs text-zinc-500">
+                Adjust padding and row heights across the shell.
+              </p>
+            </div>
+            <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
+              <button
+                type="button"
+                onClick={() => setDensity("balanced")}
+                aria-pressed={density === "balanced"}
+                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                  density === "balanced"
+                    ? "bg-zinc-800 text-zinc-100 shadow-sm"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                Balanced
+              </button>
+              <button
+                type="button"
+                onClick={() => setDensity("compact")}
+                aria-pressed={density === "compact"}
+                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                  density === "compact"
+                    ? "bg-zinc-800 text-zinc-100 shadow-sm"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                Compact
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-medium">Active sessions</h2>
+            <p className="mt-1 text-xs text-zinc-400">
+              Devices currently signed in to your account across the Nexus mesh.
+            </p>
+          </div>
+          {sessions.some((s) => !s.current) && (
+            <button
+              type="button"
+              disabled={revokingOthers}
+              onClick={() => void revokeOtherSessions()}
+              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors disabled:opacity-50"
+            >
+              {revokingOthers ? "Revoking…" : "Sign out all other devices"}
+            </button>
+          )}
+        </div>
+
         {sessions.length === 0 ? (
-          <p className="mt-2 text-sm text-zinc-400">No other sessions.</p>
+          <p className="mt-3 text-sm text-zinc-400">No other sessions.</p>
         ) : (
           <ul className="mt-3 divide-y divide-zinc-800 rounded-lg border border-zinc-800">
             {sessions.map((s) => (
@@ -248,10 +391,20 @@ export default function Account() {
                   </div>
                   <div className="text-zinc-500">{relativeTime(s.createdAt)}</div>
                 </div>
-                {!s.current && (
+                {s.current ? (
                   <button
-                    type="button" onClick={() => void revoke(s.id)}
-                    className="rounded border border-zinc-700 px-3 py-1 text-sm hover:bg-zinc-800"
+                    type="button"
+                    disabled={loggingOutCurrent}
+                    onClick={() => void handleSignOutThisDevice()}
+                    className="rounded border border-red-900/60 bg-red-950/20 px-3 py-1 text-sm text-red-400 hover:bg-red-950/50 hover:text-red-300 transition-colors disabled:opacity-50"
+                  >
+                    {loggingOutCurrent ? "Signing out…" : "Sign out of this device"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void revoke(s.id)}
+                    className="rounded border border-zinc-700 px-3 py-1 text-sm hover:bg-zinc-800 transition-colors"
                   >
                     Sign this device out
                   </button>
@@ -283,6 +436,34 @@ export default function Account() {
             ))}
           </ul>
         )}
+      </div>
+
+      {/* Data Sovereignty & Export */}
+      <div>
+        <h2 className="text-lg font-medium">Data & Sovereignty</h2>
+        <p className="mt-1 text-sm text-zinc-400">
+          Nexus does not track your telemetry or monetize user data. All profile, session, and audit logs stay on your local node.
+        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <a
+            href={buildAccountExportDownload(user, sessions, activity)}
+            download={`nexus-account-export-${user.username.toLowerCase().replace(/[^a-z0-9]/g, "")}-${new Date().toISOString().slice(0, 10)}.json`}
+            className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-800 transition-colors"
+          >
+            <svg className="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Export account data (.json)
+          </a>
+          <button
+            type="button"
+            disabled={loggingOutCurrent}
+            onClick={() => void handleSignOutThisDevice()}
+            className="inline-flex items-center gap-2 rounded-md border border-red-900/60 bg-red-950/30 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-950/60 hover:text-red-300 transition-colors disabled:opacity-50"
+          >
+            Sign out of Nexus
+          </button>
+        </div>
       </div>
       </div>
     </section>

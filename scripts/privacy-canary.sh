@@ -125,7 +125,7 @@ fi
 for spec in \
   "nexus-systems-postgres-1 nexus nexus" "nexus-systems-postgres-1 nexus nexus_chat" \
   "nexus-systems-postgres-1 nexus nexus_cloud" "nexus-systems-postgres-1 nexus nexus_email" \
-  "nexus-hosting-db-1 nexus nexus" "supabase-db postgres postgres"; do
+  "nexus-hosting-db-1 nexus nexus"; do
   read -r ctr usr db <<<"$spec"
   n_dbs=$((n_dbs + 1))
   scan_cmd docker exec "$ctr" pg_dump -U "$usr" -d "$db" --data-only

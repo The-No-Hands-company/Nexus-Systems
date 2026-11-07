@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Shell from "./Shell";
 
@@ -57,18 +57,21 @@ describe("Shell", () => {
     renderInRouter(
       <Shell apps={[]} user={{ username: "ada", email: "ada@example.com" }}>x</Shell>,
     );
-    const link = screen.getByRole("link", { name: /ada/i });
-    expect(link.getAttribute("href")).toBe("/account");
+    const trigger = screen.getByRole("button", { name: /ada/i });
+    expect(trigger).toBeTruthy();
     // The address is the tooltip, not the label: it is longer, less readable
     // and not what someone scans for.
-    expect(link.getAttribute("title")).toBe("ada@example.com");
+    expect(trigger.getAttribute("title")).toBe("ada@example.com");
+    fireEvent.click(trigger);
+    const link = screen.getByRole("menuitem", { name: /account & security/i });
+    expect(link.getAttribute("href")).toBe("/account");
   });
 
   it("omits the identity entirely when nobody is signed in", () => {
     // The shell renders for signed-out visitors too. An empty avatar or a
     // "null" label would be worse than showing nothing.
     renderInRouter(<Shell apps={[]}>x</Shell>);
-    expect(screen.queryByRole("link", { name: /account/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /user menu/i })).toBeNull();
   });
 
   it("always offers a way home and a way to report a problem", () => {

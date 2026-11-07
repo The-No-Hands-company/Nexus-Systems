@@ -360,6 +360,10 @@ start_nexus_chat_service() {
 }
 
 start_nexus_api_service() {
+    local cal_secret="${NEXUS_CALENDAR_DASHBOARD_SECRET:-}"
+    if [ -z "$cal_secret" ] && [ -f "$ROOT/apps/Nexus-Calendar/.env" ]; then
+        cal_secret="$(sed -n 's/^NEXUS_CALENDAR_DASHBOARD_SECRET=//p' "$ROOT/apps/Nexus-Calendar/.env" | head -1 | tr -d '\r"')"
+    fi
     start_service "nexus-api" "$ROOT/apps/Nexus-API" 3036 \
         PORT=3036 \
         NEXUS_API_BIND_HOST=127.0.0.1 \
@@ -369,6 +373,7 @@ start_nexus_api_service() {
         NEXUS_API_CLOUD_URL=http://127.0.0.1:8787 \
         NEXUS_API_MAIL_URL=http://127.0.0.1:3140 \
         NEXUS_API_CALENDAR_URL=http://127.0.0.1:3068 \
+        NEXUS_CALENDAR_DASHBOARD_SECRET="$cal_secret" \
         NEXUS_API_ENABLE_CLOUD_INTEGRATION=false \
         bun run src/gateway-index.ts
 }
@@ -773,12 +778,17 @@ cmd_start() {
         local calendar_db="${NEXUS_CALENDAR_DB:-$ROOT/data/calendar.sqlite}"
         local calendar_jwt_audience="${NEXUS_CALENDAR_JWT_AUDIENCE:-calendar.$DOMAIN}"
         local calendar_web_root="${NEXUS_CALENDAR_WEB_ROOT:-$ROOT/apps/Nexus-Calendar/frontend/dist}"
+        local cal_secret="${NEXUS_CALENDAR_DASHBOARD_SECRET:-}"
+        if [ -z "$cal_secret" ] && [ -f "$ROOT/apps/Nexus-Calendar/.env" ]; then
+            cal_secret="$(sed -n 's/^NEXUS_CALENDAR_DASHBOARD_SECRET=//p' "$ROOT/apps/Nexus-Calendar/.env" | head -1 | tr -d '\r"')"
+        fi
         local -a calendar_env=(
             PORT=3068
             NEXUS_BIND_HOST=127.0.0.1
             NEXUS_CALENDAR_DB="$calendar_db"
             NEXUS_CALENDAR_JWT_AUDIENCE="$calendar_jwt_audience"
             NEXUS_CALENDAR_BASE_URL=http://127.0.0.1:8092
+            NEXUS_CALENDAR_DASHBOARD_SECRET="$cal_secret"
             NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310
             NEXUS_CLOUD_URL=http://localhost:8787
         )
@@ -1164,6 +1174,8 @@ cmd_service_status() {
         local pid port
         port="$(service_port "$svc")"
         if pid="$(validated_pid "$svc" "$port" "$SERVICE_DIR" "$SERVICE_EXEC_PATTERN" 2>/dev/null)"; then
+            echo -e "  ${G}● $svc${R} (managed, PID: $pid)"
+        elif pid="$(reconcile_pid "$svc" "$port" "$SERVICE_DIR" "$SERVICE_EXEC_PATTERN" 2>/dev/null)"; then
             echo -e "  ${G}● $svc${R} (managed, PID: $pid)"
         else
             local state
