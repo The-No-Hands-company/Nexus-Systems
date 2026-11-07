@@ -83,7 +83,7 @@ probe() { # probe <curl args...>: counts any HTTP response; up to 3 tries
   done
   return 0
 }
-for host in auth.tnhc.dev app.tnhc.dev cloud.tnhc.dev chat.tnhc.dev hosting.tnhc.dev storage.tnhc.dev draw.tnhc.dev email-ingress.tnhc.dev demo.tnhc.dev calendar.tnhc.dev; do
+for host in auth.tnhc.dev app.tnhc.dev cloud.tnhc.dev chat.tnhc.dev hosting.tnhc.dev storage.tnhc.dev draw.tnhc.dev email-ingress.tnhc.dev demo.tnhc.dev calendar.tnhc.dev deploy.tnhc.dev; do
   probe -H "Host: $host" -H "CF-Connecting-IP: $ADDR" -H "X-Forwarded-For: $ADDR" \
     -H "User-Agent: $MARK" "$PROXY/?$MARK"
   probe -X POST -H "Host: $host" -H "CF-Connecting-IP: $ADDR" -H "X-Forwarded-For: $ADDR" \
@@ -107,6 +107,9 @@ search_logs
 # 2. every running container's recent logs
 # Only TNHC's own containers (allow-list by compose project, plus the unlabelled
 # tunnel); other tenants on this host are not ours to count or search.
+# Member-deployed containers in the rootless nexus-deploy sandbox belong to
+# members and receive no canary probes; proxy header/cookie/tag stripping for
+# member apps is verified by apps/Nexus-Deploy `npm run verify`.
 containers=$(docker ps --format '{{.Label "com.docker.compose.project"}} {{.Names}}' 2>/dev/null \
   | awk '$1=="nexus-systems"||$1=="nexus-hosting"||$1=="tnhc-community-production"{print $2} NF==1&&$1=="cloudflared"{print $1}') || containers=""
 if [ -z "$containers" ]; then add_hit "error:docker-unavailable"; else

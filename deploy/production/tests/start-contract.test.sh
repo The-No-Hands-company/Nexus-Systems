@@ -10,6 +10,7 @@ TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/nexus-terminal-production-test.XXXXXX")"
 FIXTURE_ROOT="$TEST_ROOT/workspace"
 START_RECORD="$TEST_ROOT/start-service.args"
 CURL_RECORD="$TEST_ROOT/curl.args"
+DEPLOY_ENV_RECORD="$TEST_ROOT/nexus-deploy.env"
 
 cleanup() {
     rm -rf "$TEST_ROOT"
@@ -21,10 +22,17 @@ mkdir -p \
     "$FIXTURE_ROOT/apps/Nexus-Dashboard/src" \
     "$FIXTURE_ROOT/apps/Nexus-API" \
     "$FIXTURE_ROOT/apps/Nexus-Calendar/frontend/dist" \
+    "$FIXTURE_ROOT/apps/Nexus-Deploy/dist" \
     "$FIXTURE_ROOT/packages/phantom-sdk/wasm/target/release"
 touch "$FIXTURE_ROOT/apps/Nexus-Dashboard/frontend/dist/index.html"
 touch "$FIXTURE_ROOT/apps/Nexus-Calendar/frontend/dist/index.html"
 touch "$FIXTURE_ROOT/apps/Nexus-Calendar/package.json"
+touch "$FIXTURE_ROOT/apps/Nexus-Deploy/dist/index.js"
+cat > "$FIXTURE_ROOT/apps/Nexus-Deploy/.env" <<'DEPLOY_ENV'
+NEXUS_DEPLOY_APP_SECRET=deploy-app-secret-sentinel
+NEXUS_DEPLOY_JWT_SECRET=deploy-jwt-secret-sentinel
+CLOUD_USER_APPS_KEY=deploy-user-apps-sentinel
+DEPLOY_ENV
 touch "$FIXTURE_ROOT/packages/phantom-sdk/wasm/target/release/libphantom_wasm.so"
 
 # deploy.sh is a command as well as a function library. Source the real function
@@ -64,6 +72,10 @@ export NEXUS_CALENDAR_JWT_AUDIENCE="calendar.test.example"
 # Capture the behavior of cmd_start at its service-launch boundary. Everything
 # outside that boundary is inert and local to TEST_ROOT.
 start_service() {
+    if [ "$1" = "nexus-deploy" ]; then
+        printf 'APP_SECRET=%s\nJWT_SECRET=%s\nCLOUD_USER_APPS_KEY=%s\n' \
+            "${APP_SECRET:-}" "${JWT_SECRET:-}" "${CLOUD_USER_APPS_KEY:-}" > "$DEPLOY_ENV_RECORD"
+    fi
     printf '%s' "$1" >> "$START_RECORD"
     shift
     printf '\t%s' "$@" >> "$START_RECORD"
@@ -134,6 +146,19 @@ dashboard_args="$(service_args dashboard)"
 proxy_args="$(service_args proxy)"
 calendar_args="$(service_args calendar)"
 calendar_web_args="$(service_args nexus-calendar-web)"
+nexus_deploy_args="$(service_args nexus-deploy)"
+
+assert_contains $'nexus-deploy\t' "$nexus_deploy_args" "production launch did not start Nexus-Deploy"
+assert_contains $'\t8096\t' "$nexus_deploy_args" "Nexus-Deploy did not use port 8096"
+assert_contains $'\tCLOUD_URL=http://127.0.0.1:8787' "$nexus_deploy_args" "Nexus-Deploy did not receive the loopback Cloud URL"
+assert_contains $'\tHOSTING_SITE_URL=http://127.0.0.1:8090' "$nexus_deploy_args" "Nexus-Deploy did not receive the loopback Hosting site-proxy URL"
+assert_not_contains 'APP_SECRET=' "$nexus_deploy_args" "Nexus-Deploy exposed APP_SECRET in launcher argv"
+assert_not_contains 'JWT_SECRET=' "$nexus_deploy_args" "Nexus-Deploy exposed JWT_SECRET in launcher argv"
+assert_not_contains 'CLOUD_USER_APPS_KEY=' "$nexus_deploy_args" "Nexus-Deploy exposed CLOUD_USER_APPS_KEY in launcher argv"
+assert_contains 'APP_SECRET=deploy-app-secret-sentinel' "$(<"$DEPLOY_ENV_RECORD")" "Nexus-Deploy did not inherit APP_SECRET in subshell env" # pragma: allowlist secret
+assert_contains 'JWT_SECRET=deploy-jwt-secret-sentinel' "$(<"$DEPLOY_ENV_RECORD")" "Nexus-Deploy did not inherit JWT_SECRET in subshell env" # pragma: allowlist secret
+assert_contains 'CLOUD_USER_APPS_KEY=deploy-user-apps-sentinel' "$(<"$DEPLOY_ENV_RECORD")" "Nexus-Deploy did not inherit CLOUD_USER_APPS_KEY in subshell env" # pragma: allowlist secret
+assert_contains 'http://localhost:8096/api/health' "$(<"$CURL_RECORD")" "production status did not health-check Nexus-Deploy"
 
 assert_service_order terminal dashboard
 assert_service_order nexus-api dashboard

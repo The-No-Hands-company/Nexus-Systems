@@ -24,6 +24,9 @@ ALLOW_FILES=(
   apps/Nexus-Hosting/crates/nexus-proxy/src/geo.rs
   # `peer_addr` here is a CLI argument (a node to connect to), not a visitor.
   apps/Phantom/crates/phantom-node/src/main.rs
+  # Conformance suite proving the front door strips address headers before reaching a member app.
+  apps/Nexus-Deploy/src/verify/checks.ts
+  apps/Nexus-Deploy/src/verify/live-harness.ts
 )
 # shellcheck disable=SC2206
 ALLOW_FILES+=(${PRIVACY_ALLOW_FILES:-})

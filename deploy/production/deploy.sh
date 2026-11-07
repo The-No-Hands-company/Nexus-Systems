@@ -414,6 +414,44 @@ start_auth_service() {
     export -n NEXUS_AUTH_AUDIT_DATABASE_URL
 }
 
+start_nexus_deploy_service() {
+    if [ ! -f "$ROOT/apps/Nexus-Deploy/dist/index.js" ]; then
+        warn "Deploy not built — run: (cd apps/Nexus-Deploy && npm run build)"
+        return 1
+    fi
+    local deploy_env_file="$ROOT/apps/Nexus-Deploy/.env"
+    if [ ! -f "$deploy_env_file" ]; then
+        local deploy_app_secret deploy_jwt_secret
+        deploy_app_secret="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+        deploy_jwt_secret="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+        touch "$deploy_env_file"
+        chmod 600 "$deploy_env_file"
+        printf 'NEXUS_DEPLOY_APP_SECRET=%s\n' "$deploy_app_secret" >> "$deploy_env_file"
+        printf 'NEXUS_DEPLOY_JWT_SECRET=%s\n' "$deploy_jwt_secret" >> "$deploy_env_file"
+        log "Generated Deploy secrets in apps/Nexus-Deploy/.env"
+    fi
+    local nexus_deploy_app_secret nexus_deploy_jwt_secret
+    nexus_deploy_app_secret="$(sed -n 's/^NEXUS_DEPLOY_APP_SECRET=//p' "$deploy_env_file" | head -1 | tr -d '\r"')"
+    nexus_deploy_jwt_secret="$(sed -n 's/^NEXUS_DEPLOY_JWT_SECRET=//p' "$deploy_env_file" | head -1 | tr -d '\r"')"
+    (
+        set -a
+        # shellcheck source=/dev/null
+        . "$deploy_env_file"
+        set +a
+        export APP_SECRET="${APP_SECRET:-$nexus_deploy_app_secret}"
+        export JWT_SECRET="${JWT_SECRET:-$nexus_deploy_jwt_secret}"
+        start_service "nexus-deploy" "$ROOT/apps/Nexus-Deploy" 8096 \
+            PORT=8096 \
+            BASE_URL=https://deploy."$DOMAIN" \
+            BASE_DOMAIN="$DOMAIN" \
+            NEXUS_AUTH_URL=http://127.0.0.1:4310 \
+            NEXUS_AUTH_PUBLIC_URL=https://auth."$DOMAIN" \
+            CLOUD_URL=http://127.0.0.1:8787 \
+            HOSTING_SITE_URL="${HOSTING_SITE_UPSTREAM:-http://127.0.0.1:8090}" \
+            node dist/index.js
+    )
+}
+
 preflight_service_start() {
     case "$1" in
         auth) : ;;
@@ -422,8 +460,9 @@ preflight_service_start() {
         dashboard) : ;;
         nexus-chat) validate_nexus_chat_environment ;;
         nexus-chat-web) validate_nexus_chat_caddy ;;
+        nexus-deploy|deploy) : ;;
         proxy) adopt_cloud_registration_environment_for_dependents ;;
-        *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, and proxy"; return 1 ;;
+        *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, and proxy"; return 1 ;;
     esac
 }
 
@@ -444,8 +483,9 @@ start_named_service() {
         dashboard) start_dashboard_service ;;
         nexus-chat) start_nexus_chat_service ;;
         nexus-chat-web) start_nexus_chat_web_service ;;
+        nexus-deploy|deploy) start_nexus_deploy_service ;;
         proxy) start_proxy_service ;;
-        *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, and proxy"; return 1 ;;
+        *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, and proxy"; return 1 ;;
     esac
 }
 
@@ -709,7 +749,8 @@ cmd_start() {
     if command -v "$CADDY_BIN" >/dev/null 2>&1; then
         if [ -f "$ROOT/apps/Nexus-Draw/frontend/dist/index.html" ]; then
             start_service "nexus-draw-web" "$ROOT" 8091 \
-                "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-draw.Caddyfile" --adapter caddyfile
+                "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-draw.Caddyfile" --adapter caddyfile \
+                || warn "nexus-draw-web deferred"
         else
             warn "draw UI not built — run: (cd apps/Nexus-Draw/frontend && npm install && npm run build)"
         fi
@@ -785,33 +826,12 @@ cmd_start() {
     fi
 
     # 4d. Nexus-Deploy — push-to-deploy platform on 8096. Secrets (APP_SECRET,
-    # JWT_SECRET) live in apps/Nexus-Deploy/.env, generated once on first start.
-    # The service is Node.js (not Bun): must be built before deploy with
-    # `cd apps/Nexus-Deploy && npm run build`.
+    # JWT_SECRET, CLOUD_USER_APPS_KEY) live in apps/Nexus-Deploy/.env, generated
+    # once on first start, and are exported in the subshell environment rather
+    # than passed in ps-visible argv. The service is Node.js (not Bun): must be
+    # built before deploy with `cd apps/Nexus-Deploy && npm run build`.
     if [ -f "$ROOT/apps/Nexus-Deploy/dist/index.js" ]; then
-        local deploy_env_file="$ROOT/apps/Nexus-Deploy/.env"
-        if [ ! -f "$deploy_env_file" ]; then
-            local deploy_app_secret deploy_jwt_secret
-            deploy_app_secret="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
-            deploy_jwt_secret="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
-            touch "$deploy_env_file"
-            chmod 600 "$deploy_env_file"
-            printf 'NEXUS_DEPLOY_APP_SECRET=%s\n' "$deploy_app_secret" >> "$deploy_env_file"
-            printf 'NEXUS_DEPLOY_JWT_SECRET=%s\n' "$deploy_jwt_secret" >> "$deploy_env_file"
-            log "Generated Deploy secrets in apps/Nexus-Deploy/.env"
-        fi
-        local nexus_deploy_app_secret nexus_deploy_jwt_secret
-        nexus_deploy_app_secret="$(sed -n 's/^NEXUS_DEPLOY_APP_SECRET=//p' "$deploy_env_file" | head -1 | tr -d '\r"')"
-        nexus_deploy_jwt_secret="$(sed -n 's/^NEXUS_DEPLOY_JWT_SECRET=//p' "$deploy_env_file" | head -1 | tr -d '\r"')"
-        start_service "nexus-deploy" "$ROOT/apps/Nexus-Deploy" 8096 \
-            PORT=8096 \
-            BASE_URL=https://deploy."$DOMAIN" \
-            BASE_DOMAIN="$DOMAIN" \
-            NEXUS_AUTH_URL=http://127.0.0.1:4310 \
-            NEXUS_AUTH_PUBLIC_URL=https://auth."$DOMAIN" \
-            APP_SECRET="$nexus_deploy_app_secret" \
-            JWT_SECRET="$nexus_deploy_jwt_secret" \
-            node dist/index.js
+        start_nexus_deploy_service || warn "nexus-deploy deferred"
     else
         warn "Deploy not built — run: (cd apps/Nexus-Deploy && npm run build)"
     fi
@@ -1055,6 +1075,7 @@ stop_service() {
 
 cmd_restart_service() {
     local svc=${1:-}
+    [ "$svc" = "deploy" ] && svc="nexus-deploy"
 
     preflight_service_start "$svc" || return 1
     stop_service "$svc" || return 1
@@ -1166,7 +1187,7 @@ cmd_status() {
     # reaches, so a healthy API behind a dead front door still reads as down.
     # nexus-draw-web is similar: the Draw API is on 3075, but the front door
     # on 8091 joins the SPA + API + WebSocket, so probe the front door.
-    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:3068/health" "http://localhost:8092/health" "http://localhost:8095/api/v1/health" "http://localhost:8091/health" "http://127.0.0.1:3110/health" "http://localhost:3132/health" "http://localhost:3075/health" "http://localhost:8080/health"; do
+    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:3068/health" "http://localhost:8092/health" "http://localhost:8095/api/v1/health" "http://localhost:8091/health" "http://localhost:8096/api/health" "http://127.0.0.1:3110/health" "http://localhost:3132/health" "http://localhost:3075/health" "http://localhost:8080/health"; do
         if http_endpoint_healthy "$endpoint"; then
             echo -e "  ${G}●${R} $endpoint"
         else
