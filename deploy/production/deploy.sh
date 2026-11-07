@@ -447,6 +447,8 @@ start_nexus_deploy_service() {
             NEXUS_AUTH_URL=http://127.0.0.1:4310 \
             NEXUS_AUTH_PUBLIC_URL=https://auth."$DOMAIN" \
             CLOUD_URL=http://127.0.0.1:8787 \
+            NEXUS_CLOUD_INTERNAL_URL="http://127.0.0.1:8787" \
+            NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
             HOSTING_SITE_URL="${HOSTING_SITE_UPSTREAM:-http://127.0.0.1:8090}" \
             node dist/index.js
     )
@@ -460,7 +462,7 @@ preflight_service_start() {
         dashboard) : ;;
         nexus-chat) validate_nexus_chat_environment ;;
         nexus-chat-web) validate_nexus_chat_caddy ;;
-        nexus-deploy|deploy) : ;;
+        nexus-deploy|deploy) adopt_cloud_registration_environment_for_dependents ;;
         proxy) adopt_cloud_registration_environment_for_dependents ;;
         *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, and proxy"; return 1 ;;
     esac
