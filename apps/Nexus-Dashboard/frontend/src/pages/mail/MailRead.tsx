@@ -12,6 +12,48 @@ type State =
   | { kind: "unavailable"; reason: string }
   | { kind: "ready"; message: MailMessage };
 
+function sanitizeEmailHtml(html: string): string {
+  if (typeof DOMParser === "undefined") return "";
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+
+    const DANGEROUS_TAGS = [
+      "script", "iframe", "object", "embed", "applet", "base",
+      "form", "input", "button", "textarea", "link", "meta",
+      "frame", "frameset"
+    ];
+    for (const tag of DANGEROUS_TAGS) {
+      doc.querySelectorAll(tag).forEach((el) => el.remove());
+    }
+
+    doc.querySelectorAll("*").forEach((el) => {
+      const attrs = Array.from(el.attributes);
+      for (const attr of attrs) {
+        const name = attr.name.toLowerCase();
+        const val = attr.value.trim().toLowerCase();
+        if (name.startsWith("on")) {
+          el.removeAttribute(attr.name);
+        }
+        if (
+          (name === "href" || name === "src" || name === "action") &&
+          (val.startsWith("javascript:") || val.startsWith("vbscript:"))
+        ) {
+          el.removeAttribute(attr.name);
+        }
+      }
+      if (el.tagName === "A") {
+        el.setAttribute("target", "_blank");
+        el.setAttribute("rel", "noopener noreferrer");
+      }
+    });
+
+    return doc.body.innerHTML;
+  } catch {
+    return "";
+  }
+}
+
 export default function MailRead() {
   const { messageId } = useParams<{ messageId: string }>();
   const [state, setState] = useState<State>({ kind: "loading" });
@@ -319,24 +361,11 @@ export default function MailRead() {
       )}
 
       {showHtml && m.html ? (
-        /*
-          The HTML is sanitised server-side and then rendered inside a sandboxed
-          frame with no script permission and its own CSP. Two layers on
-          purpose: sanitisers have been defeated before, and this page is the
-          one origin holding the session cookie, so a bypass here is account
-          takeover rather than a broken layout. srcdoc keeps it same-document
-          without giving it a URL of its own to navigate from.
-        */
-        <iframe
-          title="Message content"
-          loading="lazy"
-          sandbox=""
-          srcDoc={`<!doctype html><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">
-<style>body{font:14px/1.5 system-ui,sans-serif;color:#e6f2ee;background:transparent;margin:0}
-a{color:#27c9a5}blockquote{border-left:2px solid #333;margin:0;padding-left:12px;color:#9db4ad}</style>
-${m.html}`}
-          className="min-h-[24rem] w-full rounded border border-zinc-800 bg-zinc-950"
+        <div
+          role="region"
+          aria-label="Formatted message body"
+          className="min-h-[16rem] w-full overflow-x-auto rounded border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-200 leading-relaxed select-text"
+          dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(m.html) }}
         />
       ) : (
         <pre className="whitespace-pre-wrap break-words font-sans text-sm text-zinc-200">

@@ -92,6 +92,8 @@ export default function Shell({
     if (app) recordRecent(app.id);
   }, [apps, location.pathname, recordRecent]);
 
+  const isMailHost = typeof window !== "undefined" && window.location.hostname.startsWith("mail.");
+
   return (
     <div className="flex h-dvh flex-col bg-zinc-900 text-zinc-100">
       {/* Skip-to-main shortcut for keyboard-only navigation (WCAG 2.4.1) */}
@@ -105,19 +107,29 @@ export default function Shell({
         role="banner"
         className="flex h-14 shrink-0 items-center gap-2 border-b border-zinc-700 px-3 sm:gap-3 sm:px-4"
       >
-        {/*
-            The wordmark is the way home.
-
-            It was a bare span, so once inside an app there was no route back to
-            the grid except editing the URL. Making the mark itself the link is
-            what every other product does, so it is what people try first.
-          */}
-        <Link to="/" className="flex items-center gap-1.5 font-semibold tracking-tight hover:opacity-90" aria-label="Nexus home">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="text-accent shrink-0">
-            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-          </svg>
-          <span>Nexus</span>
-        </Link>
+        {isMailHost ? (
+          <div className="flex items-center gap-2">
+            <Link to="/mail" className="flex items-center gap-1.5 font-semibold tracking-tight hover:opacity-90" aria-label="Nexus Mail home">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="text-accent shrink-0">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+              </svg>
+              <span>Nexus Mail</span>
+            </Link>
+            <a
+              href="https://app.tnhc.dev"
+              className="ml-2 hidden sm:inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            >
+              ← Dashboard
+            </a>
+          </div>
+        ) : (
+          <Link to="/" className="flex items-center gap-1.5 font-semibold tracking-tight hover:opacity-90" aria-label="Nexus home">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="text-accent shrink-0">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+            </svg>
+            <span>Nexus</span>
+          </Link>
+        )}
 
         {/*
             The search trigger. Hidden below sm — the rail's Apps button is the

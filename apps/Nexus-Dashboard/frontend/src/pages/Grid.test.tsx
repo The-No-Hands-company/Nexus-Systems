@@ -13,8 +13,8 @@ const APPS = [
   { id: "nexus-paint", name: "Nexus Paint", description: "Painting canvas",
     publicUrl: "https://paint.tnhc.dev", path: "/paint", delivery: "external", health: "healthy",
     primaryShelf: "create", secondaryShelves: [], audiences: ["creator"], capabilities: ["drawing"], maturity: "stable", visibility: "default", reviewStatus: "approved", surface: "user-app", releaseState: "released" },
-  { id: "nexus-draw", name: "Nexus Draw", description: "Whiteboard",
-    publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "offline",
+  { id: "nexus-sketch", name: "Nexus Sketch", description: "Whiteboard",
+    publicUrl: "https://sketch.tnhc.dev", path: "/sketch", delivery: "framed", health: "offline",
     primaryShelf: "create", secondaryShelves: [], audiences: ["creator"], capabilities: ["drawing"], maturity: "stable", visibility: "default", reviewStatus: "approved", surface: "user-app", releaseState: "released" },
 ];
 
@@ -68,8 +68,8 @@ describe("Grid", () => {
 
     render(<MemoryRouter><Grid /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText("Notes")).toBeTruthy());
-    expect(screen.queryByText("Draw")).toBeNull();
-    expect(screen.queryByRole("link", { name: /draw/i })).toBeNull();
+    expect(screen.queryByText("Sketch")).toBeNull();
+    expect(screen.queryByRole("link", { name: /sketch/i })).toBeNull();
   });
 
   it("says so when no apps are reachable instead of rendering an empty page", async () => {

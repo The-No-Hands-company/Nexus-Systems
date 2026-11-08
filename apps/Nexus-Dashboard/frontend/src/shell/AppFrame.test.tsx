@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import AppFrame, { embedUrl } from "./AppFrame";
 
 const apps = [
@@ -23,15 +24,12 @@ describe("embedUrl", () => {
 });
 
 describe("AppFrame", () => {
-  it("frames the app with the embed flag", () => {
-    render(<AppFrame apps={apps} appId="nexus-draw" />);
-    const frame = screen.getByTitle("Draw") as HTMLIFrameElement;
-    expect(frame.src).toBe("https://draw.tnhc.dev/?embed=1");
-  });
-
-  it("titles the frame so it is reachable by assistive tech", () => {
-    render(<AppFrame apps={apps} appId="nexus-draw" />);
-    expect(screen.getByTitle("Draw")).toBeTruthy();
+  it("renders a standalone launch card for apps with publicUrl without iframes", () => {
+    render(<MemoryRouter><AppFrame apps={apps} appId="nexus-draw" /></MemoryRouter>);
+    const link = screen.getByRole("link", { name: /Launch Draw/i });
+    expect(link.getAttribute("href")).toBe("https://draw.tnhc.dev");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(screen.queryByTitle("Draw")).toBeNull(); // zero iframes
   });
 
   it("says so plainly when the app is unknown, instead of rendering nothing", () => {

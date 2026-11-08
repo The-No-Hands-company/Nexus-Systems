@@ -28,7 +28,7 @@ function stubFetch(signedIn: boolean, role = "user") {
       return jsonResponse({
         apps: [
           { id: "nexus-chat", name: "Nexus Chat", description: "Chat", publicUrl: "https://chat.tnhc.dev", path: "/chat", delivery: "framed", health: "healthy", surface: "user-app", releaseState: "released", maturity: "stable", visibility: "default", reviewStatus: "approved", primaryShelf: "everyday" },
-          { id: "nexus-calendar", name: "Nexus Calendar", description: "Calendar", publicUrl: "https://calendar.tnhc.dev", path: "/calendar", delivery: "framed", health: "healthy", surface: "user-app", releaseState: "staged", maturity: "stable", visibility: "default", reviewStatus: "approved", primaryShelf: "everyday" },
+          { id: "nexus-roadmap", name: "Nexus Roadmap", description: "Roadmap", publicUrl: "https://roadmap.tnhc.dev", path: "/roadmap", delivery: "external", health: "healthy", surface: "user-app", releaseState: "staged", maturity: "stable", visibility: "default", reviewStatus: "approved", primaryShelf: "everyday" },
           { id: "nexus-cloud", name: "Nexus Cloud", description: "Control", path: "/cloud", delivery: "shell-native", health: "healthy", surface: "admin-console", releaseState: "released", maturity: "stable", visibility: "default", reviewStatus: "approved", primaryShelf: "operate" },
         ],
       });
@@ -121,7 +121,7 @@ describe("Home", () => {
     // Chat (released user app) is launchable and shown.
     expect(screen.getAllByText("Chat").length).toBeGreaterThanOrEqual(1);
     // A staged app is not offered as a launch tile.
-    expect(screen.queryByText("Calendar")).toBeNull();
+    expect(screen.queryByText("Roadmap")).toBeNull();
     // The app-count line renders; the exact number depends on the pinned apps.
     expect(screen.getByText(/\d+ apps? available/)).toBeTruthy();
   });

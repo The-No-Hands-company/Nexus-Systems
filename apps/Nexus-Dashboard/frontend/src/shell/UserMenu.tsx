@@ -17,12 +17,33 @@ export interface UserMenuProps {
 export default function UserMenu({ user }: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [copied, setCopied] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useTheme();
   const [density, setDensity] = useDensity();
 
   const isOperator = user.role === "founder" || user.role === "admin";
   const displayName = user.username || user.email;
+
+  async function handleCopy() {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      await navigator.clipboard.writeText(user.email || user.username);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }
+
+  function handleHardReload() {
+    if (typeof window !== "undefined") {
+      if ("caches" in window) {
+        window.caches.keys().then((keys) => Promise.all(keys.map((k) => window.caches.delete(k)))).finally(() => {
+          window.location.reload();
+        });
+      } else {
+        window.location.reload();
+      }
+    }
+  }
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -118,6 +139,27 @@ export default function UserMenu({ user }: UserMenuProps) {
                 <span className="text-xs text-accent">Admin</span>
               </Link>
             )}
+          </div>
+
+          {/* Quick Actions / Developer & User QoL */}
+          <div className="py-1 border-t border-zinc-800/80">
+            <button
+              type="button"
+              onClick={() => void handleCopy()}
+              className="w-full flex items-center justify-between rounded-md px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+            >
+              <span>{copied ? "✓ Copied to clipboard" : "Copy Account ID"}</span>
+              <span className="text-[10px] text-zinc-500 font-mono">{user.email.split("@")[0]}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleHardReload}
+              className="w-full flex items-center justify-between rounded-md px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+              title="Clears browser caches and fetches the latest bundles"
+            >
+              <span>Purge Cache & Reload</span>
+              <span className="text-[10px] text-zinc-500">Ctrl+F5</span>
+            </button>
           </div>
 
           <div className="my-1 border-t border-zinc-800/80" />

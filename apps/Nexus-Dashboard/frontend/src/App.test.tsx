@@ -62,7 +62,7 @@ describe("shell routing", () => {
 
   it("mounts the requested app inside the shell", async () => {
     render(<App />);
-    await waitFor(() => expect(screen.getByTitle("Draw")).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("link", { name: /Launch Draw/i })).toBeTruthy());
     // Chrome and app together: the shell is present, not replaced.
     expect(screen.getByRole("banner")).toBeTruthy();
   });
@@ -106,13 +106,13 @@ describe("shell routing", () => {
     // Still loading: a real app must not flash "not found" while its own
     // existence is simply unknown yet.
     expect(screen.queryByText("App not found.")).toBeNull();
-    expect(screen.queryByTitle("Draw")).toBeNull();
+    expect(screen.queryByRole("link", { name: /Launch Draw/i })).toBeNull();
 
     resolveList([
       { id: "nexus-draw", name: "Draw", description: "", publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "healthy", surface: "user-app", releaseState: "released", maturity: "stable", visibility: "default", reviewStatus: "approved", primaryShelf: "create", secondaryShelves: [], audiences: ["creator"], capabilities: ["drawing"] },
     ]);
 
-    await waitFor(() => expect(screen.getByTitle("Draw")).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("link", { name: /Launch Draw/i })).toBeTruthy());
   });
 
   it("keeps old /a/:id links working by redirecting to the flat path", async () => {
@@ -120,7 +120,7 @@ describe("shell routing", () => {
     // because we tidied the scheme.
     window.history.pushState({}, "", "/a/nexus-draw");
     render(<App />);
-    await waitFor(() => expect(screen.getByTitle("Draw")).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("link", { name: /Launch Draw/i })).toBeTruthy());
     expect(window.location.pathname).toBe("/draw");
   });
 

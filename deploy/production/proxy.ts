@@ -794,6 +794,9 @@ async function handleRequestInner(
       } else if (host === `project.${DOMAIN}` || host === `www.project.${DOMAIN}`) {
         upstreamUrl = FALLBACK_PROJECT_UPSTREAM;
         fixedKind = "app";
+      } else if (host === `mail.${DOMAIN}` || host === `www.mail.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_DASHBOARD_UPSTREAM;
+        fixedKind = "app";
       } else if (host === DEPLOY_HOST) {
         upstreamUrl = deployUpstream();
         fixedKind = "app";

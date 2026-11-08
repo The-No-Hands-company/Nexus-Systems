@@ -37,9 +37,10 @@ export default function AppFrame({ apps, appId }: { apps: AppEntry[]; appId: str
     );
   }
 
-  // Standalone external apps run on their own origin and should never be
-  // trapped inside an iframe. Show a dedicated launch screen.
-  if (app.delivery === "external" && app.publicUrl) {
+  // Any app with a public URL runs on its own origin as a standalone app.
+  // We NEVER embed third-party or sub-apps in iframes to prevent massive CPU/RAM spikes
+  // on low-end hardware.
+  if (app.publicUrl) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-800/80 border border-zinc-700/60 shadow-xl">
@@ -72,40 +73,27 @@ export default function AppFrame({ apps, appId }: { apps: AppEntry[]; appId: str
   }
 
   // Shell-native apps live as React components inside this SPA, not as
-  // standalone pages — iframing their own Dashboard path loops back into the
-  // shell. Show a status page instead.
-  if (app.delivery === "shell-native" && !app.publicUrl) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-        <p className="text-lg font-semibold text-zinc-100">{app.name}</p>
-        {app.description && (
-          <p className="max-w-sm text-sm text-zinc-500">{app.description}</p>
-        )}
-        <span
-          className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
-            app.health === "healthy"
-              ? "bg-emerald-950 text-emerald-400"
-              : "bg-zinc-800 text-zinc-500"
-          }`}
-        >
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              app.health === "healthy" ? "bg-emerald-400" : "bg-zinc-600"
-            }`}
-          />
-          {app.health === "healthy" ? "Live — opening soon" : "Coming soon"}
-        </span>
-      </div>
-    );
-  }
-
+  // standalone pages. Show a status page if not directly navigated.
   return (
-    <iframe
-      key={app.id}
-      title={app.name}
-      src={embedUrl(app.publicUrl ?? app.path)}
-      className="h-full w-full border-0"
-      allow="clipboard-read; clipboard-write; fullscreen"
-    />
+    <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+      <p className="text-lg font-semibold text-zinc-100">{app.name}</p>
+      {app.description && (
+        <p className="max-w-sm text-sm text-zinc-500">{app.description}</p>
+      )}
+      <span
+        className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+          app.health === "healthy"
+            ? "bg-emerald-950 text-emerald-400"
+            : "bg-zinc-800 text-zinc-500"
+        }`}
+      >
+        <span
+          className={`h-1.5 w-1.5 rounded-full ${
+            app.health === "healthy" ? "bg-emerald-400" : "bg-zinc-600"
+          }`}
+        />
+        {app.health === "healthy" ? "Live — opening soon" : "Coming soon"}
+      </span>
+    </div>
   );
 }

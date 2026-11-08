@@ -192,6 +192,8 @@ export default function App() {
     loadApps();
   }, [loadApps]);
 
+  const isMailHost = typeof window !== "undefined" && window.location.hostname.startsWith("mail.");
+
   return (
     <BrowserRouter>
       <RouteTitle />
@@ -199,8 +201,8 @@ export default function App() {
         {/* Home decides its own chrome: signed in, it wraps itself in Shell;
             signed out, it stays bare. It fetches its own user and apps, so
             this route needs no props — same pattern as every route below
-            that depends on appsState instead. */}
-        <Route path="/" element={<Home />} />
+            that depends on appsState instead. On mail.tnhc.dev, land in Mail. */}
+        <Route path="/" element={isMailHost ? <Navigate to="/mail" replace /> : <Home />} />
         {/* `/nexus` was the original repository name, not a second product. */}
         <Route path="/nexus" element={<Navigate to="/chat" replace />} />
         {/* Old addresses for the ways in, kept so existing links still land:
