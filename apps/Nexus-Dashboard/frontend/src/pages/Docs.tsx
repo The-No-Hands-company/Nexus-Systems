@@ -59,12 +59,83 @@ https://deploy.tnhc.dev`
     ]
   },
   {
+    id: "document-suite",
+    category: "Work & Docs",
+    title: "Document & Knowledge Suite",
+    description: "Sovereign knowledge management, structured wiki articles, and rich-text document editing.",
+    content: [
+      "Nexus Wiki (wiki.tnhc.dev): High-performance FastAPI and SQLite wiki engine for structured team knowledge bases, category indexes, revisions history, and automatic backlinks.",
+      "Nexus Notes (notes.tnhc.dev): Sovereign Markdown note-taking app with live side-by-side preview, custom notebooks, tag filtering, and pin shortcuts.",
+      "Nexus Docs (docs-app.tnhc.dev): Modern rich-text document workspace with folders, covers, icons, callout blocks, checkboxes, and inline code formatting."
+    ],
+    codeBlock: {
+      language: "bash",
+      code: `# Run quality gates across the Document Suite
+cd apps/Nexus-Wiki && ./check.sh
+cd apps/Nexus-Notes && ./check.sh
+cd apps/Nexus-Docs && ./check.sh`
+    },
+    links: [
+      { label: "Open Wiki", url: "https://wiki.tnhc.dev", external: true },
+      { label: "Open Notes", url: "https://notes.tnhc.dev", external: true },
+      { label: "Open Docs", url: "https://docs-app.tnhc.dev", external: true }
+    ]
+  },
+  {
+    id: "creative-suite",
+    category: "Create",
+    title: "The Creative Studio Suite",
+    description: "Interface design, vector illustration, video streaming, and media asset library.",
+    content: [
+      "Nexus Design (design.tnhc.dev): Professional UI and component design tool with infinite vector canvas, layers, styling inspectors, and asset export.",
+      "Nexus Graphic (graphic.tnhc.dev): Vector graphic illustration studio for icons, logos, and diagram assets.",
+      "Nexus Photos (photos.tnhc.dev): Private photo library with album organization, EXIF metadata extraction, and thumbnail processing pipelines.",
+      "Nexus Video (video.tnhc.dev): Video streaming, playlists, video player, and sovereign media catalog."
+    ],
+    codeBlock: {
+      language: "bash",
+      code: `# Creative suite services ports
+Nexus-Design:  http://127.0.0.1:3074 -> https://design.tnhc.dev
+Nexus-Graphic: http://127.0.0.1:3080 -> https://graphic.tnhc.dev
+Nexus-Photos:  http://127.0.0.1:3096 -> https://photos.tnhc.dev
+Nexus-Video:   http://127.0.0.1:3113 -> https://video.tnhc.dev`
+    },
+    links: [
+      { label: "Open Design", url: "https://design.tnhc.dev", external: true },
+      { label: "Open Graphic", url: "https://graphic.tnhc.dev", external: true },
+      { label: "Open Photos", url: "https://photos.tnhc.dev", external: true },
+      { label: "Open Video", url: "https://video.tnhc.dev", external: true }
+    ]
+  },
+  {
+    id: "developer-services",
+    category: "Developer",
+    title: "Developer & Infrastructure Services",
+    description: "Git repository viewer, encrypted secrets vault, terminal sessions, and container orchestration.",
+    content: [
+      "Nexus Code (code.tnhc.dev): Sovereign Git repository viewer, syntax-highlighted source browser, branch navigator, commit history tree, and gists/snippets.",
+      "Nexus Vault (vault.tnhc.dev): Encrypted API key and secrets manager with AES-256 derivation, audit logs verification, and role-based token provisioning.",
+      "Nexus Terminal (Port 3110): Browser terminal with multi-tab pty sessions and authenticated operator access."
+    ],
+    codeBlock: {
+      language: "bash",
+      code: `# Quality checks for Developer Suite
+cd apps/Nexus-Code && ./check.sh
+cd apps/Nexus-Vault && ./check.sh
+cd apps/Nexus-Terminal && ./check.sh`
+    },
+    links: [
+      { label: "Open Code", url: "https://code.tnhc.dev", external: true },
+      { label: "Open Vault", url: "https://vault.tnhc.dev", external: true }
+    ]
+  },
+  {
     id: "apps",
     category: "Applications",
-    title: "Ecosystem Applications Directory",
-    description: "Guide to the primary user applications running on the Nexus platform.",
+    title: "Ecosystem Core Applications",
+    description: "Guide to the primary communication and productivity tools running on Nexus.",
     content: [
-      "Nexus Chat (chat.tnhc.dev): High-performance, community-owned messaging and voice chat powered by Axum and WebSockets.",
+      "Nexus Chat (chat.tnhc.dev): High-performance messaging, channels, and voice chat powered by Axum and WebSockets.",
       "Nexus Mail (mail.tnhc.dev): Sovereign email web client with end-to-end HTML sanitization and background SMTP/IMAP integration via mailapi (:3140).",
       "Nexus Calendar (calendar.tnhc.dev): Shared calendars, event scheduling, RSVP invites, and month/week agenda views.",
       "Nexus Project (project.tnhc.dev): Work breakdown structure (WBS), Kanban boards, milestone tracking, and critical path scheduling.",

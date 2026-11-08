@@ -7,8 +7,8 @@ import { buildCatalogReleaseFixture } from "../../../../Nexus-Cloud/src/catalog/
 // Uses ids that are NOT pinned in SHELL_NATIVE_APPS, so the registry entry is
 // what renders (a pinned id would be overridden by the hardcoded pin).
 const APPS = [
-  { id: "nexus-notes", name: "Nexus Notes", description: "Real-time messaging",
-    publicUrl: "https://notes.tnhc.dev", path: "/notes", delivery: "framed", health: "healthy",
+  { id: "nexus-memo", name: "Nexus Memo", description: "Real-time messaging",
+    publicUrl: "https://memo.tnhc.dev", path: "/memo", delivery: "framed", health: "healthy",
     primaryShelf: "everyday", secondaryShelves: [], audiences: ["general"], capabilities: ["messaging"], maturity: "stable", visibility: "default", reviewStatus: "approved", surface: "user-app", releaseState: "released" },
   { id: "nexus-paint", name: "Nexus Paint", description: "Painting canvas",
     publicUrl: "https://paint.tnhc.dev", path: "/paint", delivery: "external", health: "healthy",
@@ -46,11 +46,11 @@ describe("Grid", () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ apps: APPS })));
 
     render(<MemoryRouter><Grid /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Notes")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Memo")).toBeTruthy());
     // A framed app stays in the shell: the link is the in-shell path, framing is
     // decided at the route.
-    expect(screen.getByRole("link", { name: /notes/i }).getAttribute("href"))
-      .toBe("/notes");
+    expect(screen.getByRole("link", { name: /memo/i }).getAttribute("href"))
+      .toBe("/memo");
   });
 
   it("links an external app out to its own origin in a new tab", async () => {
@@ -67,7 +67,7 @@ describe("Grid", () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ apps: APPS })));
 
     render(<MemoryRouter><Grid /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Notes")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Memo")).toBeTruthy());
     expect(screen.queryByText("Sketch")).toBeNull();
     expect(screen.queryByRole("link", { name: /sketch/i })).toBeNull();
   });

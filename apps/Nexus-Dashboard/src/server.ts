@@ -503,10 +503,15 @@ export async function handleRequest(
 
   // Apply rate limiting strictly to dynamic API routes (/ipa/)
   if (path.startsWith("/ipa/")) {
-    const rateLimitResult = checkRateLimit(req, { maxTokens: 200, refillRatePerSecond: 50 });
+    const isMail = path.startsWith(MAIL_PREFIX);
+    const rateLimitResult = checkRateLimit(req, {
+      maxTokens: 120,
+      refillRatePerSecond: 30,
+      keyPrefix: isMail ? "mail" : "api",
+    });
     if (!rateLimitResult.allowed) {
       const response = createRateLimitResponse(rateLimitResult);
-      return path.startsWith(MAIL_PREFIX)
+      return isMail
         ? withMailDiagnostics(req, crypto.randomUUID(), response)
         : response;
     }
@@ -523,7 +528,7 @@ export async function handleRequest(
   }
 
 
-  if (req.method === "GET" && path === "/ipa/apps") return fetchApps(req);
+  if (req.method === "GET" && (path === "/ipa/apps" || path === "/api/apps")) return fetchApps(req);
 
   // Platform API facade, served from this origin so the SPA need not reach a
   // separate api.<domain> host. The frontend's VITE_NEXUS_API_URL points here;

@@ -8,39 +8,55 @@ import { useDensity } from "./useDensity";
 
 export interface UserMenuProps {
   user: {
+    id?: string;
     username: string;
     email: string;
     role?: string;
+    did?: string;
   };
 }
 
 export default function UserMenu({ user }: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
+  const [copiedDid, setCopiedDid] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useTheme();
   const [density, setDensity] = useDensity();
 
   const isOperator = user.role === "founder" || user.role === "admin";
   const displayName = user.username || user.email;
+  const sovereignDid = user.did || `did:phantom:${(user.id || user.username || "anon").slice(0, 16)}`;
 
-  async function handleCopy() {
+  async function handleCopyId() {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
-      await navigator.clipboard.writeText(user.email || user.username);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      await navigator.clipboard.writeText(user.id || user.email || user.username);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
+    }
+  }
+
+  async function handleCopyDid() {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      await navigator.clipboard.writeText(sovereignDid);
+      setCopiedDid(true);
+      setTimeout(() => setCopiedDid(false), 2000);
     }
   }
 
   function handleHardReload() {
     if (typeof window !== "undefined") {
-      if ("caches" in window) {
-        window.caches.keys().then((keys) => Promise.all(keys.map((k) => window.caches.delete(k)))).finally(() => {
-          window.location.reload();
-        });
+      const win = window as unknown as Window & { caches?: CacheStorage };
+      if (win.caches) {
+        win.caches
+          .keys()
+          .then((keys) => Promise.all(keys.map((k) => win.caches!.delete(k))))
+          .finally(() => {
+            win.location.reload();
+          });
       } else {
-        window.location.reload();
+        win.location.reload();
       }
     }
   }
@@ -100,19 +116,40 @@ export default function UserMenu({ user }: UserMenuProps) {
         <div
           role="menu"
           aria-label="User navigation"
-          className="absolute right-0 top-full mt-2 w-72 origin-top-right rounded-lg border border-zinc-800 bg-zinc-950 p-2 shadow-2xl ring-1 ring-black/50 z-50 text-zinc-200"
+          className="absolute right-0 top-full mt-2 w-80 origin-top-right rounded-xl border border-zinc-800 bg-zinc-950 p-2 shadow-2xl ring-1 ring-black/50 z-50 text-zinc-200"
         >
           {/* Header profile info */}
-          <div className="flex items-start gap-3 p-3 border-b border-zinc-800/80 pb-3">
-            <Avatar label={displayName} className="h-10 w-10 text-base" />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-1">
-                <span className="truncate font-semibold text-zinc-100">{displayName}</span>
-                <Badge variant={isOperator ? "accent" : "default"} className="text-[10px] uppercase tracking-wider">
-                  {user.role ?? "member"}
-                </Badge>
+          <div className="p-3 border-b border-zinc-800/80">
+            <div className="flex items-start gap-3">
+              <Avatar label={displayName} className="h-10 w-10 text-base shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="truncate font-semibold text-zinc-100">{displayName}</span>
+                  <Badge variant={isOperator ? "accent" : "default"} className="text-[10px] uppercase tracking-wider">
+                    {user.role ?? "member"}
+                  </Badge>
+                </div>
+                <p className="truncate text-xs text-zinc-400 mt-0.5">{user.email}</p>
+                <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-emerald-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Session Active · Sovereign Auth</span>
+                </div>
               </div>
-              <p className="truncate text-xs text-zinc-400 mt-0.5">{user.email}</p>
+            </div>
+
+            {/* Sovereign Identity DID Badge */}
+            <div className="mt-2.5 flex items-center justify-between rounded-md bg-zinc-900/80 px-2 py-1 text-[11px]">
+              <span className="truncate font-mono text-zinc-400" title={sovereignDid}>
+                {sovereignDid}
+              </span>
+              <button
+                type="button"
+                onClick={() => void handleCopyDid()}
+                className="ml-2 text-zinc-400 hover:text-zinc-200 text-[10px] font-medium"
+                title="Copy Sovereign DID"
+              >
+                {copiedDid ? "✓ Copied" : "Copy"}
+              </button>
             </div>
           </div>
 
@@ -124,7 +161,12 @@ export default function UserMenu({ user }: UserMenuProps) {
               role="menuitem"
               className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-900 hover:text-white"
             >
-              <span>Account & Security</span>
+              <div className="flex items-center gap-2.5">
+                <svg className="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span>Account & Security</span>
+              </div>
               <span className="text-xs text-zinc-500">Manage</span>
             </Link>
 
@@ -134,8 +176,28 @@ export default function UserMenu({ user }: UserMenuProps) {
               role="menuitem"
               className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-900 hover:text-white"
             >
-              <span>Platform Docs</span>
-              <span className="text-xs text-zinc-500">Guides</span>
+              <div className="flex items-center gap-2.5">
+                <svg className="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                <span>Documentation & Guides</span>
+              </div>
+              <span className="text-xs text-zinc-500">Hub</span>
+            </Link>
+
+            <Link
+              to="/report"
+              onClick={() => setOpen(false)}
+              role="menuitem"
+              className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-900 hover:text-white"
+            >
+              <div className="flex items-center gap-2.5">
+                <svg className="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span>Report an Issue</span>
+              </div>
+              <span className="text-xs text-zinc-500">Feedback</span>
             </Link>
 
             {isOperator && (
@@ -145,7 +207,13 @@ export default function UserMenu({ user }: UserMenuProps) {
                 role="menuitem"
                 className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-900 hover:text-white"
               >
-                <span>Operator Console</span>
+                <div className="flex items-center gap-2.5">
+                  <svg className="h-4 w-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span>Operator Console</span>
+                </div>
                 <span className="text-xs text-accent">Admin</span>
               </Link>
             )}
@@ -155,11 +223,11 @@ export default function UserMenu({ user }: UserMenuProps) {
           <div className="py-1 border-t border-zinc-800/80">
             <button
               type="button"
-              onClick={() => void handleCopy()}
+              onClick={() => void handleCopyId()}
               className="w-full flex items-center justify-between rounded-md px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
             >
-              <span>{copied ? "✓ Copied to clipboard" : "Copy Account ID"}</span>
-              <span className="text-[10px] text-zinc-500 font-mono">{user.email.split("@")[0]}</span>
+              <span>{copiedId ? "✓ Copied to clipboard" : "Copy Account UUID"}</span>
+              <span className="text-[10px] text-zinc-500 font-mono">{(user.id || user.email).slice(0, 10)}…</span>
             </button>
             <button
               type="button"
@@ -245,12 +313,15 @@ export default function UserMenu({ user }: UserMenuProps) {
               role="menuitem"
               disabled={loggingOut}
               onClick={() => void handleLogout()}
-              className="w-full flex items-center justify-between rounded-md px-3 py-2 text-sm text-red-400 hover:bg-red-950/40 hover:text-red-300 transition-colors disabled:opacity-50"
+              className="w-full flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium text-red-400 hover:bg-red-950/40 hover:text-red-300 transition-colors disabled:opacity-50"
             >
-              <span>{loggingOut ? "Signing out…" : "Sign out of Nexus"}</span>
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
+              <div className="flex items-center gap-2">
+                <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span>{loggingOut ? "Signing out…" : "Log Out of Platform"}</span>
+              </div>
+              <span className="text-[10px] text-red-500 font-mono">SSO</span>
             </button>
           </div>
         </div>

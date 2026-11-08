@@ -16,9 +16,10 @@ echo "nexus-dashboard..."
 # they are generated, not committed, for the same reason.
 (
   cd frontend
+  export ESBUILD_BINARY_PATH="${ESBUILD_BINARY_PATH:-/tmp/esbuild}"
   bun run check
   bun run build
-  bun run test
+  node node_modules/vitest/vitest.mjs run --pool=threads
 )
 
 # Scoped to tests/ on purpose. A bare `bun test` walks into frontend/, whose
