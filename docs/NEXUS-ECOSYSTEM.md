@@ -41,7 +41,7 @@ That gives four honest states:
 
 | Status | Meaning | Count |
 |---|---|---|
-| **Live** | Deployed and reachable on `tnhc.dev` today | 17 |
+| **Live** | Deployed and reachable on `tnhc.dev` today | 18 |
 | **Beta** | Deployed, feature-incomplete, in active use | 1 |
 | **In development** | Substantive code beyond the scaffold; not yet deployed | 25 |
 | **Scaffold** | The six-file `ghost` shape: registers with Systems-API, serves health, no domain logic | 73 |
@@ -84,6 +84,7 @@ scaffold is not a product, and this document will not call one a product.
 | `notes.tnhc.dev` | Nexus-Notes | `127.0.0.1:3093` | Sovereign markdown note-taking with notebooks, tags, and search |
 | `docs-app.tnhc.dev` | Nexus-Docs | `127.0.0.1:3136` | Document workspace, rich text formatting, folders, and covers |
 | `wiki.tnhc.dev` | Nexus-Wiki | `127.0.0.1:3160` | Structured team knowledge base, revision diffs, and backlinks |
+| `code.tnhc.dev` | Nexus-Code | `127.0.0.1:3126` | Sovereign Git repository browser, code viewer, and gists |
 | `hosting.tnhc.dev` | Nexus-Hosting | — | Static-site hosting with presigned upload and deploy |
 | `storage.tnhc.dev` | MinIO | `:9010` | Object storage — infrastructure, not a Nexus app |
 
@@ -197,7 +198,7 @@ Every app in the ecosystem, by category, with measured status.
 
 | App | Role | Status |
 |---|---|---|
-| **Nexus-Code** | Code hosting and repository management | In development |
+| **Nexus-Code** | Code hosting, repository management, gists; live at code.tnhc.dev | **Live** |
 | **Nexus-Code-Review** | Review workflow and change gating | Scaffold |
 | **Nexus-IDE** | Integrated development environment | In development |
 | **Nexus-Editor** | Lightweight text and code editing | Scaffold |

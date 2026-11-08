@@ -487,6 +487,24 @@ const SHELL_NATIVE_APPS: AppEntry[] = [
     visibility: "default",
     reviewStatus: "approved",
   },
+  {
+    id: "nexus-code",
+    name: "Code",
+    description: "Sovereign Git repository browser, code viewer, and gists",
+    path: "/code",
+    publicUrl: "https://code.tnhc.dev",
+    delivery: "external",
+    health: "healthy",
+    surface: "user-app",
+    releaseState: "released",
+    primaryShelf: "develop",
+    secondaryShelves: ["work"],
+    audiences: ["developer", "power-user"],
+    capabilities: ["code", "repositories", "version-control"],
+    maturity: "stable",
+    visibility: "default",
+    reviewStatus: "approved",
+  },
 ];
 
 export async function listApps(): Promise<AppEntry[]> {

@@ -71,6 +71,7 @@ service_identity() {
         nexus-notes|notes) SERVICE_DIR="$ROOT/apps/Nexus-Notes"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-docs|docs) SERVICE_DIR="$ROOT/apps/Nexus-Docs"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-wiki|wiki) SERVICE_DIR="$ROOT/apps/Nexus-Wiki"; SERVICE_EXEC_PATTERN="uvicorn nexus_wiki.main:app" ;;
+        nexus-code|code) SERVICE_DIR="$ROOT/apps/Nexus-Code"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         terminal)       SERVICE_DIR="$ROOT/apps/Nexus-Terminal"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         mailapi)        SERVICE_DIR="$ROOT/apps/Nexus-Email"; SERVICE_EXEC_PATTERN="/nexus-mailapi" ;;
         mailsmtpd)      SERVICE_DIR="$ROOT/apps/Nexus-Email"; SERVICE_EXEC_PATTERN="/nexus-mailsmtpd" ;;
@@ -102,6 +103,7 @@ service_port() {
         nexus-notes|notes) printf '%s\n' 3093 ;;
         nexus-docs|docs) printf '%s\n' 3136 ;;
         nexus-wiki|wiki) printf '%s\n' 3160 ;;
+        nexus-code|code) printf '%s\n' 3126 ;;
         terminal) printf '%s\n' 3110 ;;
         mailapi) printf '%s\n' 3140 ;;
         mailsmtpd) printf '%s\n' "${NEXUS_EMAIL_MX_PORT:-2525}" ;;
@@ -483,8 +485,8 @@ preflight_service_start() {
         nexus-chat-web) validate_nexus_chat_caddy ;;
         nexus-deploy|deploy) adopt_cloud_registration_environment_for_dependents ;;
         proxy) adopt_cloud_registration_environment_for_dependents ;;
-        nexus-design|design|nexus-graphic|graphic|nexus-photos|photos|nexus-video|video|nexus-notes|notes|nexus-docs|docs|nexus-wiki|wiki) : ;;
-        *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, proxy, creative, and document suites"; return 1 ;;
+        nexus-design|design|nexus-graphic|graphic|nexus-photos|photos|nexus-video|video|nexus-notes|notes|nexus-docs|docs|nexus-wiki|wiki|nexus-code|code) : ;;
+        *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, proxy, creative, document, and developer suites"; return 1 ;;
     esac
 }
 
@@ -544,6 +546,14 @@ start_nexus_wiki_service() {
         python3 -m uvicorn nexus_wiki.main:app --host 127.0.0.1 --port 3160
 }
 
+start_nexus_code_service() {
+    start_service "nexus-code" "$ROOT/apps/Nexus-Code" 3126 \
+        PORT=3126 \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_NEXUS_CODE_BASE_URL=https://code."$DOMAIN" \
+        bun run src/index.ts
+}
+
 start_proxy_service() {
     start_service "proxy" "$ROOT/deploy/production" 8080 \
         PROXY_PORT=8080 DOMAIN="$DOMAIN" CLOUD_URL=http://localhost:8787 \
@@ -569,8 +579,9 @@ start_named_service() {
         nexus-notes|notes) start_nexus_notes_service ;;
         nexus-docs|docs) start_nexus_docs_service ;;
         nexus-wiki|wiki) start_nexus_wiki_service ;;
+        nexus-code|code) start_nexus_code_service ;;
         proxy) start_proxy_service ;;
-        *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, proxy, creative, and document suites"; return 1 ;;
+        *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, proxy, creative, document, and developer suites"; return 1 ;;
     esac
 }
 
@@ -1243,7 +1254,7 @@ cmd_stop() {
     local svc
 
     log "Stopping all Nexus services..."
-    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
         stop_service "$svc" || true
     done
     cd "$ROOT"
@@ -1253,7 +1264,7 @@ cmd_stop() {
 
 cmd_service_status() {
     echo "Service Status:"
-    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
         service_identity "$svc" || continue
         local pid port
         port="$(service_port "$svc")"

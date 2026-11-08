@@ -117,6 +117,7 @@ apps/Nexus-<App>/
 | **3093** | Nexus-Notes personal sovereign notes & engine API (`notes.tnhc.dev`) |
 | **3136** | Nexus-Docs collaborative document workspace & engine API (`docs-app.tnhc.dev`) |
 | **3160** | Nexus-Wiki structured team knowledge base & engine API (`wiki.tnhc.dev`) |
+| **3126** | Nexus-Code Git repository browser & gists (`code.tnhc.dev`) |
 | **3068** | Nexus-Calendar loopback API |
 | **3000–3099** | Core infrastructure apps (Hosting, Vault, Forge, Engine, Deploy, Monitor) |
 | **3100–3199** | Reserved (expansion) |
