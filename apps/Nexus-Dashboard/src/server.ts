@@ -496,13 +496,20 @@ export async function handleRequest(
 
   console.log(`[nexus-dashboard] ${req.method} ${path}`);
 
-  // Apply rate limiting to all API routes
-  const rateLimitResult = checkRateLimit(req, { maxTokens: 100, refillRatePerSecond: 20 });
-  if (!rateLimitResult.allowed) {
-    const response = createRateLimitResponse(rateLimitResult);
-    return path.startsWith(MAIL_PREFIX)
-      ? withMailDiagnostics(req, crypto.randomUUID(), response)
-      : response;
+
+  if (req.method === "GET" && path === "/health") {
+    return Response.json({ service: "nexus-dashboard", status: "ok" });
+  }
+
+  // Apply rate limiting strictly to dynamic API routes (/ipa/)
+  if (path.startsWith("/ipa/")) {
+    const rateLimitResult = checkRateLimit(req, { maxTokens: 200, refillRatePerSecond: 50 });
+    if (!rateLimitResult.allowed) {
+      const response = createRateLimitResponse(rateLimitResult);
+      return path.startsWith(MAIL_PREFIX)
+        ? withMailDiagnostics(req, crypto.randomUUID(), response)
+        : response;
+    }
   }
 
   if (path === "/ipa/terminal/attach") {
@@ -515,9 +522,6 @@ export async function handleRequest(
     return Response.json({ error: "upgrade_failed" }, { status: 400 });
   }
 
-  if (req.method === "GET" && path === "/health") {
-    return Response.json({ service: "nexus-dashboard", status: "ok" });
-  }
 
   if (req.method === "GET" && path === "/ipa/apps") return fetchApps(req);
 

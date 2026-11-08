@@ -40,8 +40,15 @@ function getBucket(key: string): Bucket {
 }
 
 function getClientKey(req: Request, prefix = "default"): string {
-  // Keyed on the proxy's opaque client tag; the address never reaches us.
-  const tag = req.headers.get("x-nexus-client-tag") || "unknown";
+  // Keyed on the proxy's opaque client tag, session cookie, or connecting IP
+  const cookie = req.headers.get("cookie") || "";
+  const sessionMatch = cookie.match(/nexus_session=([^;]+)/);
+  const tag =
+    req.headers.get("x-nexus-client-tag") ||
+    req.headers.get("cf-connecting-ip") ||
+    (sessionMatch ? sessionMatch[1].slice(0, 16) : null) ||
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "unknown";
   return `${prefix}:${tag}`;
 }
 
