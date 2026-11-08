@@ -427,14 +427,16 @@ start_auth_service() {
             | head -1 | tr -d '\r"')"
         [ -n "$NEXUS_AUTH_AUDIT_DATABASE_URL" ] && log "Adopted NEXUS_AUTH_AUDIT_DATABASE_URL from apps/Nexus-Auth/.env"
     fi
-    export NEXUS_AUTH_AUDIT_DATABASE_URL
+    export NEXUS_AUTH_AUDIT_DATABASE_URL NEXUS_EMAIL_SYSTEM_MAIL_TOKEN
     start_service "auth" "$ROOT/apps/Nexus-Auth" 4310 \
         PORT=4310 \
+        DOMAIN="$DOMAIN" \
         NEXUS_AUTH_BASE_URL="http://127.0.0.1:4310" \
         NEXUS_AUTH_COOKIE_DOMAIN=".$DOMAIN" \
+        NEXUS_POST_LOGIN_URL="https://app.$DOMAIN/" \
         NEXUS_CLOUD_URL=http://localhost:8787 \
         bun run src/index.ts
-    export -n NEXUS_AUTH_AUDIT_DATABASE_URL
+    export -n NEXUS_AUTH_AUDIT_DATABASE_URL NEXUS_EMAIL_SYSTEM_MAIL_TOKEN
 }
 
 start_nexus_deploy_service() {
@@ -487,7 +489,7 @@ preflight_service_start() {
         nexus-chat-web) validate_nexus_chat_caddy ;;
         nexus-deploy|deploy) adopt_cloud_registration_environment_for_dependents ;;
         proxy) adopt_cloud_registration_environment_for_dependents ;;
-        nexus-design|design|nexus-graphic|graphic|nexus-photos|photos|nexus-video|video|nexus-notes|notes|nexus-docs|docs|nexus-wiki|wiki|nexus-code|code|nexus-vault|vault) : ;;
+        nexus-design|design|nexus-graphic|graphic|nexus-photos|photos|nexus-video|video|nexus-notes|notes|nexus-docs|docs|nexus-wiki|wiki|nexus-code|code|nexus-vault|vault|mailapi) : ;;
         *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, proxy, creative, document, and developer suites"; return 1 ;;
     esac
 }
@@ -573,6 +575,42 @@ start_proxy_service() {
         bun run proxy.ts
 }
 
+adopt_email_environment() {
+    if [ -z "${NEXUS_EMAIL_DATABASE_URL:-}" ] && [ -f "$ROOT/apps/Nexus-Email/.env" ]; then
+        NEXUS_EMAIL_DATABASE_URL="$(sed -n 's/^NEXUS_EMAIL_DATABASE_URL=//p' "$ROOT/apps/Nexus-Email/.env" | head -1 | tr -d '\r"')"
+        [ -n "$NEXUS_EMAIL_DATABASE_URL" ] && log "Adopted NEXUS_EMAIL_DATABASE_URL from apps/Nexus-Email/.env"
+    fi
+    for key in NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN NEXUS_EMAIL_EGRESS NEXUS_EMAIL_SMTP_HOST \
+        NEXUS_EMAIL_SMTP_PORT NEXUS_EMAIL_SMTP_USER NEXUS_EMAIL_SMTP_PASS \
+        NEXUS_EMAIL_DKIM_KEY_PATH NEXUS_EMAIL_DKIM_SELECTOR; do
+        if [ -z "${!key:-}" ] && [ -f "$ROOT/apps/Nexus-Email/.env" ]; then
+            printf -v "$key" '%s' "$(sed -n "s/^$key=//p" "$ROOT/apps/Nexus-Email/.env" | head -1 | tr -d '\r"')"
+        fi
+    done
+    ensure_system_mail_token
+}
+
+start_mailapi_service() {
+    adopt_email_environment
+    local mailapi_bin
+    if [ -x "$ROOT/apps/Nexus-Email/target/release/nexus-mailapi" ]; then
+        mailapi_bin="$ROOT/apps/Nexus-Email/target/release/nexus-mailapi"
+    else
+        mailapi_bin="$ROOT/apps/Nexus-Email/target/debug/nexus-mailapi"
+    fi
+    if [ -x "$mailapi_bin" ]; then
+        export NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN NEXUS_EMAIL_SYSTEM_MAIL_TOKEN
+        start_service "mailapi" "$ROOT/apps/Nexus-Email" 3140 \
+            NEXUS_EMAIL_BIND=127.0.0.1:3140 \
+            NEXUS_EMAIL_DOMAIN="$DOMAIN" \
+            NEXUS_EMAIL_DATABASE_URL="${NEXUS_EMAIL_DATABASE_URL:-postgres://nexus:nexus@localhost:5432/nexus_email}" \
+            "$mailapi_bin"
+        export -n NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN NEXUS_EMAIL_SYSTEM_MAIL_TOKEN
+    else
+        log "mailapi binary not built - skipping (cargo build -p nexus-mailapi)"
+    fi
+}
+
 start_named_service() {
     case "$1" in
         auth) start_auth_service ;;
@@ -592,6 +630,7 @@ start_named_service() {
         nexus-code|code) start_nexus_code_service ;;
         nexus-vault|vault) start_nexus_vault_service ;;
         proxy) start_proxy_service ;;
+        mailapi) start_mailapi_service ;;
         *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, proxy, creative, document, and developer suites"; return 1 ;;
     esac
 }
@@ -785,8 +824,10 @@ cmd_start() {
     export NEXUS_AUTH_AUDIT_DATABASE_URL NEXUS_EMAIL_SYSTEM_MAIL_TOKEN
     start_service "auth" "$ROOT/apps/Nexus-Auth" 4310 \
         PORT=4310 \
+        DOMAIN="$DOMAIN" \
         NEXUS_AUTH_BASE_URL="http://127.0.0.1:4310" \
         NEXUS_AUTH_COOKIE_DOMAIN=".$DOMAIN" \
+        NEXUS_POST_LOGIN_URL="https://app.$DOMAIN/" \
         NEXUS_CLOUD_URL=http://localhost:8787 \
         bun run src/index.ts
     export -n NEXUS_AUTH_AUDIT_DATABASE_URL NEXUS_EMAIL_SYSTEM_MAIL_TOKEN

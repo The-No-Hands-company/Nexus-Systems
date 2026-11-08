@@ -52,3 +52,27 @@ export async function sendSystemMail(message: {
 export function isPlausibleEmail(value: string): boolean {
   return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
+
+/** Provision a mailbox in Nexus-Email for a newly created or approved account. */
+export async function provisionMailbox(user: {
+  subject: string;
+  username: string;
+  email?: string;
+}): Promise<boolean> {
+  const token = process.env.NEXUS_EMAIL_SYSTEM_MAIL_TOKEN?.trim();
+  if (!token) return false;
+  const base = process.env.NEXUS_EMAIL_SYSTEM_MAIL_URL?.trim() || DEFAULT_SYSTEM_MAIL_URL;
+
+  try {
+    const res = await fetch(`${base}/internal/v1/mailboxes/provision`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify(user),
+      signal: AbortSignal.timeout(SYSTEM_MAIL_TIMEOUT_MS),
+    });
+    await res.body?.cancel();
+    return res.ok;
+  } catch {
+    return false;
+  }
+}

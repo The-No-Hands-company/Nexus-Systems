@@ -5,6 +5,8 @@ import { platformApiHeaders, platformApiUrl } from "./platform-api";
 export type Caller = {
   subject: string;
   role: string | null;
+  username?: string | null;
+  email?: string | null;
 };
 
 /** Roles permitted to use operator-only Dashboard surfaces. */
@@ -35,12 +37,19 @@ async function sessionIdentityFromPlatform(
     if (!res.ok) return undefined;
 
     const body = (await res.json().catch(() => null)) as {
-      user?: { id?: unknown; role?: unknown };
+      user?: { id?: unknown; role?: unknown; username?: unknown; email?: unknown };
     } | null;
     const id = body?.user?.id;
     if (typeof id !== "string" || !id) return undefined;
     const role = body?.user?.role;
-    return { subject: id, role: typeof role === "string" ? role : null };
+    const username = body?.user?.username;
+    const email = body?.user?.email;
+    return {
+      subject: id,
+      role: typeof role === "string" ? role : null,
+      username: typeof username === "string" ? username : null,
+      email: typeof email === "string" ? email : null,
+    };
   } catch {
     return undefined;
   }
@@ -64,13 +73,20 @@ async function sessionIdentity(req: Request): Promise<Caller | null> {
     if (!res.ok) return null;
 
     const body = (await res.json().catch(() => null)) as {
-      user?: { id?: unknown; role?: unknown };
+      user?: { id?: unknown; role?: unknown; username?: unknown; email?: unknown };
     } | null;
     const id = body?.user?.id;
     if (typeof id !== "string" || !id) return null;
 
     const role = body?.user?.role;
-    return { subject: id, role: typeof role === "string" ? role : null };
+    const username = body?.user?.username;
+    const email = body?.user?.email;
+    return {
+      subject: id,
+      role: typeof role === "string" ? role : null,
+      username: typeof username === "string" ? username : null,
+      email: typeof email === "string" ? email : null,
+    };
   } catch {
     return null;
   }

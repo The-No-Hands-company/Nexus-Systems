@@ -24,7 +24,7 @@ import {
 } from "./users";
 import { consumeRecoveryCode, countRemainingRecoveryCodes, issueRecoveryCodes } from "./recovery";
 import { createInvite, redeemInvite } from "./invites";
-import { isPlausibleEmail, sendSystemMail } from "./system-mail";
+import { isPlausibleEmail, sendSystemMail, provisionMailbox } from "./system-mail";
 import { checkRateLimit, recordFailure, clearFailures } from "./ratelimit";
 import {
   ONBOARDING_HEADERS,
@@ -137,8 +137,8 @@ const EMAILED_INVITES_PER_DAY = 20;
 function defaultPostLogin(): string {
   const configured = process.env.NEXUS_POST_LOGIN_URL?.trim();
   if (configured) return configured;
-  const domain = cookieDomain()?.replace(/^\./, "");
-  return domain ? `https://app.${domain}/` : "/";
+  const domain = (cookieDomain()?.replace(/^\./, "") || process.env.DOMAIN || "tnhc.dev").trim();
+  return `https://app.${domain}/`;
 }
 
 /** Exposed for tests: the destination a return-address-less sign-in uses. */
@@ -462,6 +462,7 @@ async function handleOnboarding(request: Request, path: string, signedIn: boolea
       return renderClaimError(CLAIM_ERRORS[result.reason] ?? "That claim could not be completed.", 400);
     }
     clearFailures("claim", tag);
+    void provisionMailbox({ subject: result.user.id, username: result.user.username, email: result.user.email });
     return renderSignedInWelcome(result.user, result.recoveryCodes, 200);
   }
 
@@ -487,6 +488,7 @@ async function handleOnboarding(request: Request, path: string, signedIn: boolea
     return renderJoinError(JOIN_ERRORS[result.reason] ?? "That invite could not be redeemed.", 400);
   }
   clearFailures("invite", tag);
+  void provisionMailbox({ subject: result.user.id, username: result.user.username, email: result.user.email });
   return renderSignedInWelcome(result.user, result.recoveryCodes, 201);
 }
 
@@ -505,6 +507,13 @@ export async function handleRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
     const auth = requireAuth(request);
+
+    if (request.method === "GET" && (path === "/" || path === "")) {
+      return new Response(null, {
+        status: 303,
+        headers: { location: defaultPostLogin(), "cache-control": "no-store" },
+      });
+    }
 
     if (request.method === "GET" && path === "/health") {
       return jsonResponse({ status: "ok", service: "nexus-auth", timestamp: new Date().toISOString(), phantom: phantomApp.status() });
@@ -924,6 +933,9 @@ export async function handleRequest(request: Request): Promise<Response> {
         action === "approve" ? "approved" : "rejected",
         auth.userId,
       );
+      if (action === "approve" && updated) {
+        void provisionMailbox({ subject: updated.id, username: updated.username, email: updated.email });
+      }
       // Rejection kills any existing sessions — a previously approved user
       // who re-requested and was rejected must not keep working.
       if (action === "reject") revokeAllUserSessions(targetId!);
@@ -1163,6 +1175,7 @@ export async function handleRequest(request: Request): Promise<Response> {
 
       try {
         const user = createUser({ username, email, password, role: "user" });
+        void provisionMailbox({ subject: user.id, username: user.username, email: user.email });
         return jsonResponse({ user }, { status: 201 });
       } catch (err) {
         return jsonResponse({ error: (err as Error).message }, { status: 409 });

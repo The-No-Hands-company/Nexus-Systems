@@ -375,7 +375,7 @@ export function sanitizeUser(user: User): SafeUser {
   return safe;
 }
 
-export function seedDefaultUsers(adminUsername?: string, _operatorUsername?: string): SafeUser[] {
+export function seedDefaultUsers(adminUsername?: string, operatorUsername?: string): SafeUser[] {
   const results: SafeUser[] = [];
 
   // Check by role so a renamed founder account doesn't trigger a duplicate seed
@@ -387,6 +387,17 @@ export function seedDefaultUsers(adminUsername?: string, _operatorUsername?: str
       email: `${admin}@nexus.local`,
       password: process.env.NEXUS_AUTH_FOUNDER_PASSWORD || "nexus-founder-2026",
       role: "founder",
+    }));
+  }
+
+  const hasOperator = listUsers().some(u => u.role === "operator" || u.role === "user");
+  if (!hasOperator && operatorUsername) {
+    const operator = operatorUsername.trim().toLowerCase();
+    results.push(createUser({
+      username: operator,
+      email: `${operator}@nexus.local`,
+      password: process.env.NEXUS_AUTH_OPERATOR_PASSWORD || "nexus-operator-2026",
+      role: "operator",
     }));
   }
 

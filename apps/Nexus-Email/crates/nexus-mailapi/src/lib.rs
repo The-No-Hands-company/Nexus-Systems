@@ -117,18 +117,77 @@ fn subject(headers: &HeaderMap) -> Result<String, ApiError> {
         ))
 }
 
-/// The caller's mailbox, or 404 if they have none yet.
+/// The caller's mailbox, auto-provisioning one if they do not have one yet.
 async fn mailbox_of(state: &SharedState, headers: &HeaderMap) -> Result<Uuid, ApiError> {
     let subj = subject(headers)?;
-    state
+    if let Some(id) = state
         .store
         .mailbox_for_subject(&subj)
         .await
         .map_err(|e| server(&format!("mailbox lookup: {e}")))?
-        .ok_or(ApiError(
-            StatusCode::NOT_FOUND,
-            "no mailbox for this account".into(),
-        ))
+    {
+        return Ok(id);
+    }
+
+    let display_name = headers
+        .get("x-nexus-username")
+        .and_then(|v| v.to_str().ok())
+        .filter(|s| !s.is_empty())
+        .unwrap_or(&subj);
+
+    match state.store.create_identity_mailbox(&subj, display_name).await {
+        Ok(mb) => {
+            let mut candidate_addr = None;
+            if let Some(email_str) = headers
+                .get("x-nexus-email")
+                .and_then(|v| v.to_str().ok())
+                .filter(|s| !s.is_empty())
+            {
+                if let Ok(addr) = Address::parse(email_str) {
+                    if addr.domain == state.primary_domain.to_ascii_lowercase() {
+                        candidate_addr = Some(addr);
+                    }
+                }
+            }
+
+            if candidate_addr.is_none() {
+                let username = headers
+                    .get("x-nexus-username")
+                    .and_then(|v| v.to_str().ok())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(&subj);
+                let clean_user: String = username
+                    .to_ascii_lowercase()
+                    .chars()
+                    .filter(|c| c.is_ascii_alphanumeric() || *c == '.' || *c == '_' || *c == '-')
+                    .collect();
+                if !clean_user.is_empty() {
+                    let formatted = format!("{}@{}", clean_user, state.primary_domain);
+                    if let Ok(addr) = Address::parse(&formatted) {
+                        candidate_addr = Some(addr);
+                    }
+                }
+            }
+
+            if let Some(addr) = candidate_addr {
+                if state.store.resolve(&addr).await.is_err() {
+                    let _ = state.store.add_address(mb.id, &addr, true).await;
+                }
+            }
+            Ok(mb.id)
+        }
+        Err(_) => {
+            state
+                .store
+                .mailbox_for_subject(&subj)
+                .await
+                .map_err(|e| server(&format!("mailbox lookup after provision: {e}")))?
+                .ok_or(ApiError(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "failed to auto-provision mailbox".into(),
+                ))
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -170,6 +229,7 @@ pub fn router(state: SharedState) -> Router {
         .route("/internal/v1/cloudflare-email", post(cloudflare_email))
         .route_layer(DefaultBodyLimit::max(25 * 1024 * 1024))
         .route("/internal/v1/system-mail", post(send_system_mail))
+        .route("/internal/v1/mailboxes/provision", post(provision_mailbox))
         .route(
             "/api/v1/health",
             get(|| async { Json(serde_json::json!({"ok": true})) }),
@@ -257,16 +317,7 @@ pub fn system_sender(primary_domain: &str) -> String {
     format!("noreply@{}", primary_domain.to_ascii_lowercase())
 }
 
-/// Platform mail from Nexus-Auth: an invitation or an approval notice. Loopback
-/// only (this service binds 127.0.0.1 and the proxy never routes this path),
-/// and the caller must present the system-mail token. The body is read raw and
-/// parsed only after the token checks out, so an unauthenticated caller learns
-/// nothing about what the endpoint accepts.
-async fn send_system_mail(
-    State(state): State<SharedState>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+fn check_system_token(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
     let Some(expected) = state.system_mail_token.as_deref() else {
         return Err(ApiError(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -284,6 +335,101 @@ async fn send_system_mail(
             "invalid system-mail credential".into(),
         ));
     }
+    Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ProvisionMailboxRequest {
+    pub subject: String,
+    pub username: Option<String>,
+    pub email: Option<String>,
+}
+
+async fn provision_mailbox(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Json(req): Json<ProvisionMailboxRequest>,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    check_system_token(&state, &headers)?;
+    let subj = req.subject.trim();
+    if subj.is_empty() {
+        return Err(bad("missing subject"));
+    }
+
+    if let Some(existing_id) = state
+        .store
+        .mailbox_for_subject(subj)
+        .await
+        .map_err(|e| server(&format!("mailbox lookup: {e}")))?
+    {
+        return Ok((
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "ok": true,
+                "mailboxId": existing_id,
+                "alreadyExisted": true
+            })),
+        ));
+    }
+
+    let display_name = req.username.as_deref().unwrap_or(subj);
+    let mb = state
+        .store
+        .create_identity_mailbox(subj, display_name)
+        .await
+        .map_err(|e| server(&format!("mailbox provision: {e}")))?;
+
+    let mut candidate_addr = None;
+    if let Some(email_str) = req.email.as_deref() {
+        if let Ok(addr) = Address::parse(email_str) {
+            if addr.domain == state.primary_domain.to_ascii_lowercase() {
+                candidate_addr = Some(addr);
+            }
+        }
+    }
+
+    if candidate_addr.is_none() {
+        let username = req.username.as_deref().unwrap_or(subj);
+        let clean_user: String = username
+            .to_ascii_lowercase()
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '.' || *c == '_' || *c == '-')
+            .collect();
+        if !clean_user.is_empty() {
+            let formatted = format!("{}@{}", clean_user, state.primary_domain);
+            if let Ok(addr) = Address::parse(&formatted) {
+                candidate_addr = Some(addr);
+            }
+        }
+    }
+
+    if let Some(addr) = candidate_addr {
+        if state.store.resolve(&addr).await.is_err() {
+            let _ = state.store.add_address(mb.id, &addr, true).await;
+        }
+    }
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "ok": true,
+            "mailboxId": mb.id,
+            "alreadyExisted": false
+        })),
+    ))
+}
+
+/// Platform mail from Nexus-Auth: an invitation or an approval notice. Loopback
+/// only (this service binds 127.0.0.1 and the proxy never routes this path),
+/// and the caller must present the system-mail token. The body is read raw and
+/// parsed only after the token checks out, so an unauthenticated caller learns
+/// nothing about what the endpoint accepts.
+async fn send_system_mail(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    check_system_token(&state, &headers)?;
     if body.len() > 4096 {
         return Err(bad("request is too large"));
     }

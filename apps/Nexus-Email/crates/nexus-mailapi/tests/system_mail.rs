@@ -123,3 +123,74 @@ async fn test_system_mail_when_daily_limit_is_reached_should_answer_429() {
     let second = post(api.addr, Some(TOKEN), &invite(&api.domain, &format!("b-{}@elsewhere.test", Uuid::now_v7().simple()))).await;
     assert_eq!(second.0, 429);
 }
+
+async fn post_provision(addr: std::net::SocketAddr, token: Option<&str>, body: &str) -> (u16, String) {
+    let mut s = TcpStream::connect(addr).await.unwrap();
+    let mut req = format!(
+        "POST /internal/v1/mailboxes/provision HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n",
+        body.len()
+    );
+    if let Some(t) = token {
+        req.push_str(&format!("Authorization: Bearer {t}\r\n"));
+    }
+    req.push_str("\r\n");
+    s.write_all(req.as_bytes()).await.unwrap();
+    s.write_all(body.as_bytes()).await.unwrap();
+    let mut out = Vec::new();
+    s.read_to_end(&mut out).await.unwrap();
+    let text = String::from_utf8_lossy(&out).into_owned();
+    let status = text.split_whitespace().nth(1).and_then(|c| c.parse().ok()).unwrap_or(0);
+    (status, text)
+}
+
+async fn get_folders(addr: std::net::SocketAddr, subject: &str, username: Option<&str>, email: Option<&str>) -> (u16, String) {
+    let mut s = TcpStream::connect(addr).await.unwrap();
+    let mut req = format!(
+        "GET /api/v1/folders HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nX-Nexus-Subject: {subject}\r\n"
+    );
+    if let Some(u) = username {
+        req.push_str(&format!("X-Nexus-Username: {u}\r\n"));
+    }
+    if let Some(e) = email {
+        req.push_str(&format!("X-Nexus-Email: {e}\r\n"));
+    }
+    req.push_str("\r\n");
+    s.write_all(req.as_bytes()).await.unwrap();
+    let mut out = Vec::new();
+    s.read_to_end(&mut out).await.unwrap();
+    let text = String::from_utf8_lossy(&out).into_owned();
+    let status = text.split_whitespace().nth(1).and_then(|c| c.parse().ok()).unwrap_or(0);
+    (status, text)
+}
+
+#[tokio::test]
+async fn test_provision_mailbox_creates_mailbox_and_address() {
+    let api = start(Some(TOKEN), 50).await;
+    let subj = format!("usr-{}", Uuid::now_v7().simple());
+    let user = format!("user{}", Uuid::now_v7().simple());
+    let email = format!("{user}@{}", api.domain);
+    let body = format!(r#"{{"subject":"{subj}","username":"{user}","email":"{email}"}}"#);
+    let (status, resp) = post_provision(api.addr, Some(TOKEN), &body).await;
+    assert_eq!(status, 201, "{resp}");
+    assert!(resp.contains(r#""alreadyExisted":false"#));
+
+    // Calling it a second time is idempotent
+    let (status2, resp2) = post_provision(api.addr, Some(TOKEN), &body).await;
+    assert_eq!(status2, 200, "{resp2}");
+    assert!(resp2.contains(r#""alreadyExisted":true"#));
+}
+
+#[tokio::test]
+async fn test_mailbox_of_auto_provisions_on_first_access() {
+    let api = start(Some(TOKEN), 50).await;
+    let subj = format!("usr-jit-{}", Uuid::now_v7().simple());
+    let user = format!("jit{}", Uuid::now_v7().simple());
+    let email = format!("{user}@{}", api.domain);
+
+    // Initial get_folders auto-provisions and returns 200 OK with folders
+    let (status, resp) = get_folders(api.addr, &subj, Some(&user), Some(&email)).await;
+    assert_eq!(status, 200, "{resp}");
+    assert!(resp.contains("INBOX"));
+    assert!(resp.contains("Sent"));
+    assert!(resp.contains("Trash"));
+}

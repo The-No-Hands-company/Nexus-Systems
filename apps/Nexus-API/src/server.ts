@@ -195,6 +195,12 @@ async function forwardMail(request: Request, rest: string, search: string): Prom
     accept: request.headers.get("accept") ?? "application/json",
     "x-nexus-subject": subject,
   });
+  if (caller.user.username && typeof caller.user.username === "string") {
+    headers.set("x-nexus-username", caller.user.username);
+  }
+  if (caller.user.email && typeof caller.user.email === "string") {
+    headers.set("x-nexus-email", caller.user.email);
+  }
   const contentType = request.headers.get("content-type");
   if (contentType) headers.set("content-type", contentType);
   try {

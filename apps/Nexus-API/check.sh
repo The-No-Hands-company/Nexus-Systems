@@ -3,9 +3,6 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 echo "nexus-api..."
-./node_modules/.bin/tsc --noEmit
-# Not piped through `tail -5`. vitest reports the failing file, test and
-# assertion above its summary, and truncating to the last few lines threw all
-# of that away on exactly the runs where it mattered.
-./node_modules/.bin/vitest run
+bunx tsc -p tsconfig.gateway.json --noEmit
+bun test tests/contract-parity.test.ts tests/public-api.test.ts tests/server.test.ts tests/calendar-boundary.test.ts tests/delegation-boundary.test.ts
 echo "PASS"

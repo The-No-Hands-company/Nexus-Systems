@@ -212,6 +212,8 @@ async function proxyToMail(req: Request, rest: string, search: string): Promise<
     : new Headers({
         "content-type": req.headers.get("content-type") ?? "application/json",
         "x-nexus-subject": who?.subject ?? "",
+        ...(who?.username ? { "x-nexus-username": who.username } : {}),
+        ...(who?.email ? { "x-nexus-email": who.email } : {}),
       });
   if (req.method === "POST" && !headers.has("content-type")) {
     headers.set("content-type", "application/json");

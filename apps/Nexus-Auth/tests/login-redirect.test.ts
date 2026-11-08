@@ -144,4 +144,10 @@ describe("signing in without a return address", () => {
     expect(dest).not.toContain("/login");
     expect(dest).toContain("app.");
   });
+
+  test("root GET / redirects to default post login dashboard", async () => {
+    const res = await handleRequest(new Request(`${BASE}/`));
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("https://app.tnhc.dev/");
+  });
 });

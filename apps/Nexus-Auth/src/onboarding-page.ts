@@ -154,7 +154,7 @@ const passwordFields = (minLength: number) => `
 const otherWaysIn = `
     <hr class="divider" />
     <nav class="links" aria-label="Sign-in options">
-      <p>Already have an account? <a href="/login">Sign in</a></p>
+      <p>Already have an account? <a href="/login?redirect_uri=https%3A%2F%2Fapp.tnhc.dev%2F">Sign in</a></p>
     </nav>`;
 
 export function renderRequestPage(options: { username?: string; email?: string; note?: string; error?: string }): string {

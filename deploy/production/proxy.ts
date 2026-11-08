@@ -115,7 +115,7 @@ const FALLBACK_DASHBOARD_UPSTREAM = process.env.DASHBOARD_UPSTREAM || "http://12
 // the Supabase gateway. /request, /claim and /join are the ways in for someone
 // without an account, and /recover the way back in after a lost password
 // (apps/Nexus-Auth/src/onboarding-page.ts).
-const AUTH_OWN_PATHS = /^\/(login$|request$|claim$|join$|recover(\/password)?$|health$|api\/v1\/(auth|account)(\/|$)|\.well-known\/openid-configuration$)/;
+const AUTH_OWN_PATHS = /^\/(login$|request$|claim$|join$|recover(\/password)?$|health$|api\/v1\/(auth|account)(\/|$)|\.well-known\/openid-configuration$|$)/;
 // The Supabase APIs the TNHC Community app uses (it installs Auth, Postgrest and
 // Functions; see TNHC-Community's CommunityRepository). Only these reach the
 // gateway: Studio's dashboard login, pg-meta, storage, realtime and analytics
