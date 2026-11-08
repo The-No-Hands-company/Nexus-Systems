@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@theme {
+  --color-nexus-950: #09090b;
+  --color-nexus-900: #121215;
+  --color-nexus-850: #18181b;
+  --color-nexus-800: #27272a;
+  --color-nexus-700: #3f3f46;
+  --color-nexus-accent: #10b981;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #27272a; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3f3f46; }

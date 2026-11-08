@@ -114,6 +114,9 @@ export default function App() {
     }
   }, []);
 
+  const selectedNoteIdRef = useRef<string | null>(selectedNoteId);
+  selectedNoteIdRef.current = selectedNoteId;
+
   const refreshNotes = useCallback(async () => {
     try {
       let url = "/api/v1/notes";
@@ -126,14 +129,14 @@ export default function App() {
       if (res.ok) {
         const data: Note[] = await res.json();
         setNotes(data);
-        if (data.length > 0 && !selectedNoteId) {
+        if (data.length > 0 && !selectedNoteIdRef.current) {
           selectNote(data[0]);
         }
       }
     } catch (err) {
       console.error("Failed to load notes", err);
     }
-  }, [selectedNotebook, searchQuery, selectedNoteId]);
+  }, [selectedNotebook, searchQuery]);
 
   useEffect(() => {
     refreshNotebooks();

@@ -114,6 +114,9 @@ export default function App() {
   const [isAddingFolder, setIsAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
 
+  const activeDocIdRef = useRef<string | null>(activeDocId);
+  activeDocIdRef.current = activeDocId;
+
   const activeDoc = useMemo(() => {
     return documents.find((d) => d.id === activeDocId) || null;
   }, [documents, activeDocId]);
@@ -142,14 +145,14 @@ export default function App() {
       if (res.ok) {
         const data: Document[] = await res.json();
         setDocuments(data);
-        if (data.length > 0 && !activeDocId) {
+        if (data.length > 0 && !activeDocIdRef.current) {
           selectDocument(data[0]);
         }
       }
     } catch (err) {
       console.error("Failed to load documents", err);
     }
-  }, [selectedFolder, searchQuery, activeDocId]);
+  }, [selectedFolder, searchQuery]);
 
   useEffect(() => {
     loadFolders();
