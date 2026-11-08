@@ -21,6 +21,7 @@ export default function UserMenu({ user }: UserMenuProps) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
   const [copiedDid, setCopiedDid] = useState(false);
+  const [showSessionDetails, setShowSessionDetails] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useTheme();
   const [density, setDensity] = useDensity();
@@ -150,6 +151,38 @@ export default function UserMenu({ user }: UserMenuProps) {
               >
                 {copiedDid ? "✓ Copied" : "Copy"}
               </button>
+            </div>
+
+            {/* Collapsible Session Details */}
+            <div className="mt-2 pt-2 border-t border-zinc-900">
+              <button
+                type="button"
+                onClick={() => setShowSessionDetails((v) => !v)}
+                className="w-full flex items-center justify-between text-[11px] text-zinc-400 hover:text-zinc-200"
+              >
+                <span>Active Session Details</span>
+                <span>{showSessionDetails ? "▲" : "▼"}</span>
+              </button>
+              {showSessionDetails && (
+                <div className="mt-2 space-y-1.5 rounded bg-zinc-900/90 p-2 text-[10px] text-zinc-300 font-mono">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">Host:</span>
+                    <span>{typeof window !== "undefined" ? window.location.host : "app.tnhc.dev"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">Auth Method:</span>
+                    <span>Ed25519 DID Cookie</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">Cookie Flags:</span>
+                    <span className="text-emerald-400">HttpOnly · SameSite=Lax</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">Protocol:</span>
+                    <span>{typeof window !== "undefined" ? window.location.protocol : "https:"}</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

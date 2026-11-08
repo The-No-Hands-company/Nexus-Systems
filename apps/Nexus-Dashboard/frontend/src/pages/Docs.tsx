@@ -36,6 +36,88 @@ const DOC_SECTIONS: DocSection[] = [
     ]
   },
   {
+    id: "apps-inventory",
+    category: "Catalog",
+    title: "The 26 Core Platform Applications",
+    description: "The official registry of active, released services running across the Nexus ecosystem.",
+    content: [
+      "The platform provides exactly 26 core sovereign applications grouped into six primary shelves:",
+      "1. Work Shelf: Nexus Mail (mail.tnhc.dev :3140), Calendar (calendar.tnhc.dev :3068), Project (project.tnhc.dev :3152), Docs (docs-app.tnhc.dev :3062), Notes (notes.tnhc.dev :3064), Wiki (wiki.tnhc.dev :3066).",
+      "2. Create Shelf: Nexus Design (design.tnhc.dev :3074), Graphic (graphic.tnhc.dev :3080), Photos (photos.tnhc.dev :3096), Video (video.tnhc.dev :3113), Draw (draw.tnhc.dev :3070).",
+      "3. Developer Shelf: Nexus Deploy (deploy.tnhc.dev :3150), Code (code.tnhc.dev :3072), Terminal (:3110), Modeling (:3094), AI (:3071).",
+      "4. Operate Shelf: Nexus Cloud (cloud.tnhc.dev :3060), Edge (:3069), Guardian (:3061), Tunnel (:3063), Router (:3067), Database (:3088), Vault (:3112).",
+      "5. Connect Shelf: Nexus Chat (chat.tnhc.dev :3142), Hosting (hosting.tnhc.dev :3084), Dashboard (app.tnhc.dev :3000), Auth (auth.tnhc.dev :4310)."
+    ],
+    codeBlock: {
+      language: "bash",
+      code: `# Inspect active registered services
+bun run dhts/nexus-v1-radar/scan.ts`
+    },
+    links: [
+      { label: "App Grid", url: "/apps" },
+      { label: "System Health Status", url: "https://status.tnhc.dev", external: true }
+    ]
+  },
+  {
+    id: "v1-radar",
+    category: "Radar",
+    title: "v1.0 Production Maturity Radar",
+    description: "Comprehensive 6-pillar feature completeness scorecards and production roadmaps.",
+    content: [
+      "To ensure every application meets high enterprise quality standards, the Nexus v1.0 Production Maturity Radar audits applications across 6 core pillars:",
+      "1. Core Engine & Business Logic: CRUD integrity, SQLite/Postgres persistence, data validation.",
+      "2. User Interface & Theme Compliance: Design system adoption, Void/Slate tokens, responsiveness, WCAG 2.1 AA keyboard navigation.",
+      "3. API & Protocol Completeness: OpenAPI contracts, error handling, rate limiting.",
+      "4. Security & Sovereign Auth: Ed25519 signatures, role-based access control, input sanitization.",
+      "5. Observability & Quality Gates: Passing check.sh scripts, unit/integration tests, /health endpoints.",
+      "6. Offline & Self-Hosting Readiness: Rootless operation, zero external cloud dependencies, Docker/systemd service configs.",
+      "The radar is available both as a CLI tool (bun run radar) and an interactive web server at http://127.0.0.1:3200."
+    ],
+    codeBlock: {
+      language: "bash",
+      code: `# Run the Maturity Radar CLI
+bun run radar
+
+# Launch the interactive Radar Web UI
+bun run radar:server
+# Open in browser: http://127.0.0.1:3200`
+    },
+    links: [
+      { label: "Radar Web Dashboard", url: "http://127.0.0.1:3200", external: true }
+    ]
+  },
+  {
+    id: "auth-did",
+    category: "Security",
+    title: "Sovereign Auth & Ed25519 DIDs",
+    description: "Decentralized cryptographic identity, zero-knowledge proofs, and secure cross-domain SSO.",
+    content: [
+      "Nexus Auth manages identity without tracking or third-party identity providers. Every account is assigned a decentralized identifier (DID) backed by Ed25519 keypairs.",
+      "Sessions use secure HTTP-only cookies partitioned across *.tnhc.dev domains with SameSite=Lax protection. The dashboard shell automatically handles identity refresh, token validation, and multi-device session revocation."
+    ],
+    links: [
+      { label: "Open Auth Portal", url: "https://auth.tnhc.dev", external: true },
+      { label: "Account Settings", url: "/account" }
+    ]
+  },
+  {
+    id: "infra-ops",
+    category: "Operate",
+    title: "Infrastructure & Node Operations",
+    description: "Caddy reverse proxy, rootless isolation, service watchdog, and unified deployment scripts.",
+    content: [
+      "All services are managed by the unified production deployment script at deploy/production/deploy.sh.",
+      "The ecosystem includes built-in automated health checks, dynamic rate limiters, and systemd watchdog supervision to ensure 99.99% uptime with self-healing process restarts."
+    ],
+    codeBlock: {
+      language: "bash",
+      code: `# Start or restart the ecosystem
+bash deploy/production/deploy.sh start
+bash deploy/production/deploy.sh restart dashboard
+bash deploy/production/deploy.sh status`
+    }
+  },
+  {
     id: "nexus-deploy",
     category: "Developer",
     title: "Nexus Deploy — Push-to-Deploy Platform",

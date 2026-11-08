@@ -393,24 +393,57 @@ export default function MailRead() {
       )}
 
       {m.attachments.length > 0 && (
-        <div className="rounded-lg border border-zinc-800 p-4">
-          <h2 className="text-xs uppercase tracking-wide text-zinc-500">Attachments</h2>
-          <ul className="mt-2 space-y-1">
-            {m.attachments.map((a, i) => (
-              <li key={`${a.filename}-${i}`} className="text-sm">
-                <a
-                  href={attachmentUrl(m.id, a.index)}
-                  download={a.filename}
-                  className="text-zinc-200 underline hover:text-white"
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs uppercase tracking-wide text-zinc-500 font-semibold">
+              Attachments ({m.attachments.length})
+            </h2>
+            <span className="text-[11px] text-zinc-500 font-mono">MinIO S3 Secured</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {m.attachments.map((a, i) => {
+              const isImage = a.mime_type.startsWith("image/");
+              const url = attachmentUrl(m.id, a.index);
+              return (
+                <div
+                  key={`${a.filename}-${i}`}
+                  className="flex flex-col gap-2 rounded-lg border border-zinc-800 bg-zinc-900/90 p-3 text-xs"
                 >
-                  {a.filename}
-                </a>{" "}
-                <span className="text-zinc-500">
-                  ({a.mime_type}, {Math.max(1, Math.round(a.size / 1024))} KB)
-                </span>
-              </li>
-            ))}
-          </ul>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0 flex items-center gap-2">
+                      <span className="text-base">{isImage ? "🖼️" : "📄"}</span>
+                      <div className="truncate">
+                        <p className="truncate font-medium text-zinc-200" title={a.filename}>
+                          {a.filename}
+                        </p>
+                        <p className="text-[10px] text-zinc-500 font-mono">
+                          {Math.max(1, Math.round(a.size / 1024))} KB • {a.mime_type}
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      href={url}
+                      download={a.filename}
+                      className="shrink-0 rounded bg-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white transition-colors"
+                      title="Download file"
+                    >
+                      Download ↓
+                    </a>
+                  </div>
+                  {isImage && (
+                    <div className="mt-1 overflow-hidden rounded border border-zinc-800/80 bg-black/40">
+                      <img
+                        src={url}
+                        alt={a.filename}
+                        loading="lazy"
+                        className="max-h-48 w-full object-contain"
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </section>

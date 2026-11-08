@@ -505,7 +505,7 @@ export async function handleRequest(
   if (path.startsWith("/ipa/")) {
     const isMail = path.startsWith(MAIL_PREFIX);
     const rateLimitResult = checkRateLimit(req, {
-      maxTokens: 120,
+      maxTokens: isMail ? 150 : 120,
       refillRatePerSecond: 30,
       keyPrefix: isMail ? "mail" : "api",
     });

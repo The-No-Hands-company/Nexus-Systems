@@ -1,4 +1,4 @@
-import type { Dependency, Project, ScheduleResult, Status, Task, Workspace } from "./types";
+import type { Dependency, Project, Role, ScheduleResult, Status, Task, Workspace } from "./types";
 import type { LinkType } from "./types";
 
 export class ProjectApiError extends Error {
@@ -61,10 +61,28 @@ export function projectApi(base: string) {
       r<void>(`/api/v1/project/tasks/${id}`, { method: "DELETE" }),
 
     // Dependencies
+    listDependencies: (projectId: string) =>
+      r<{ dependencies: Dependency[] }>(`/api/v1/project/projects/${projectId}/dependencies`).then(d => d.dependencies),
     createDependency: (projectId: string, body: { predecessorId: string; successorId: string; type: LinkType; lagDays?: number }) =>
       r<Dependency>(`/api/v1/project/projects/${projectId}/dependencies`, { method: "POST", body: JSON.stringify(body) }),
     deleteDependency: (id: string) =>
       r<void>(`/api/v1/project/dependencies/${id}`, { method: "DELETE" }),
+
+    // Members & Auth Directory
+    listWorkspaceMembers: (workspaceId: string) =>
+      r<{ members: { subject: string; role: Role }[] }>(`/api/v1/project/workspaces/${workspaceId}/members`).then(d => d.members).catch(() => []),
+    listProjectMembers: (projectId: string) =>
+      r<{ members: { subject: string }[] }>(`/api/v1/project/projects/${projectId}/members`).then(d => d.members).catch(() => []),
+    listAuthUsers: async (): Promise<Array<{ id: string; username: string; email: string; role?: string }>> => {
+      try {
+        const res = await fetch("/ipa/v1/auth/users", { credentials: "include" });
+        if (res.ok) {
+          const d = await res.json() as { users?: Array<{ id: string; username: string; email: string; role?: string }> };
+          if (Array.isArray(d.users)) return d.users;
+        }
+      } catch {}
+      return [];
+    },
 
     // Schedule
     getSchedule: (projectId: string) =>

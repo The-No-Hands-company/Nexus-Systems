@@ -157,6 +157,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+export async function requestWithRetry<T>(path: string, init?: RequestInit, maxRetries = 2): Promise<T> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await request<T>(path, init);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429 && attempt < maxRetries) {
+        attempt++;
+        const backoffMs = Math.min(2000, 350 * Math.pow(2, attempt) + Math.random() * 150);
+        await new Promise((r) => setTimeout(r, backoffMs));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 /**
  * Three outcomes, because "the server says you are not signed in" and "we could
  * not reach the server" are different facts. Collapsing them sent signed-in
@@ -624,7 +641,7 @@ export function changePassword(userId: string, currentPassword: string, newPassw
  * End the current session and clear the ecosystem SSO cookie.
  * Redirects to the login page on auth.tnhc.dev upon completion.
  */
-export async function logout(redirectTo = "https://auth.tnhc.dev/login"): Promise<void> {
+export async function logout(redirectTo?: string): Promise<void> {
   try {
     await request<{ success?: boolean }>("/ipa/v1/auth/logout", {
       method: "POST",
@@ -633,7 +650,14 @@ export async function logout(redirectTo = "https://auth.tnhc.dev/login"): Promis
     // Ignore network failures on signout
   }
   if (typeof window !== "undefined") {
-    window.location.href = redirectTo;
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch {}
+    const defaultTarget = window.location.hostname.endsWith("tnhc.dev")
+      ? "https://auth.tnhc.dev/login"
+      : "/login";
+    window.location.href = redirectTo || defaultTarget;
   }
 }
 
@@ -1007,15 +1031,15 @@ export type MailMessage = {
 export type SendOutcome = { recipient: string; status: string; reason: string | null };
 
 export function listMailFolders() {
-  return request<MailFolder[]>("/ipa/mail/folders");
+  return requestWithRetry<MailFolder[]>("/ipa/mail/folders");
 }
 
 export function listMailMessages(folderId: string) {
-  return request<MailSummary[]>(`/ipa/mail/folders/${encodeURIComponent(folderId)}/messages`);
+  return requestWithRetry<MailSummary[]>(`/ipa/mail/folders/${encodeURIComponent(folderId)}/messages`);
 }
 
 export function readMailMessage(id: string) {
-  return request<MailMessage>(`/ipa/mail/messages/${encodeURIComponent(id)}`);
+  return requestWithRetry<MailMessage>(`/ipa/mail/messages/${encodeURIComponent(id)}`);
 }
 
 export function markMailSeen(id: string, seen: boolean) {
@@ -1045,7 +1069,7 @@ export function emptyMailTrash() {
 }
 
 export function threadMessages(threadId: string) {
-  return request<MailSummary[]>(`/ipa/mail/threads/${encodeURIComponent(threadId)}/messages`);
+  return requestWithRetry<MailSummary[]>(`/ipa/mail/threads/${encodeURIComponent(threadId)}/messages`);
 }
 
 /// The URL an attachment downloads from. It remains same-origin so the
@@ -1061,7 +1085,7 @@ export function searchMail(
   const params = new URLSearchParams({ q });
   if (filters.folder) params.set("folder", filters.folder);
   if (filters.unread !== undefined) params.set("unread", String(filters.unread));
-  return request<MailSummary[]>(`/ipa/mail/search?${params.toString()}`);
+  return requestWithRetry<MailSummary[]>(`/ipa/mail/search?${params.toString()}`);
 }
 
 export type OutgoingAttachment = {
@@ -1078,6 +1102,7 @@ export function sendMail(body: {
   bcc?: string[];
   subject: string;
   text: string;
+  html?: string;
   in_reply_to?: string;
   references?: string[];
   attachments?: OutgoingAttachment[];

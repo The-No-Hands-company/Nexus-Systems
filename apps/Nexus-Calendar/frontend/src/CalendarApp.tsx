@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppHeader } from "../../../../packages/nexus-app-shell/src";
 import type { CalendarApi, CalEvent, EventInput } from "./calendar-api";
 import type { CalendarRuntime } from "./runtime";
 import EventDetails from "./EventDetails";
 import EventEditor from "./EventEditor";
 import MonthGrid from "./MonthGrid";
+import WeekGrid from "./WeekGrid";
+import DayGrid from "./DayGrid";
 import SharingPanel from "./SharingPanel";
+import { exportEventsToIcs, parseIcsToEvents } from "./ics";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -19,12 +22,9 @@ const rangeFor = (year: number, month: number) => ({
   to: `${year}-${String(month + 1).padStart(2, "0")}-${String(new Date(Date.UTC(year, month + 1, 0)).getUTCDate()).padStart(2, "0")}`,
 });
 
-// Same contract as Draw's embed.ts: the shell frames apps with ?embed=1.
 const isEmbedded = () =>
   typeof window !== "undefined" && new URLSearchParams(window.location.search).get("embed") === "1";
 
-// Standalone (calendar.<domain>), "/" is this app's own root, so a Nexus home
-// link has to point at the dashboard host. Inside the shell "/" is the dashboard.
 function dashboardHref(shellContext: boolean): string {
   if (shellContext || typeof window === "undefined") return "/";
   const labels = window.location.hostname.split(".");
@@ -47,6 +47,7 @@ export default function CalendarApp({
 }) {
   const [year, setYear] = useState(today.getUTCFullYear());
   const [month, setMonth] = useState(today.getUTCMonth());
+  const [viewMode, setViewMode] = useState<"month" | "week" | "day">("month");
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +56,8 @@ export default function CalendarApp({
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalEvent | null>(null);
   const [sharingOpen, setSharingOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const todayText = datePart(today);
   const range = useMemo(() => rangeFor(year, month), [year, month]);
@@ -119,6 +122,38 @@ export default function CalendarApp({
     }
   }
 
+  function handleExportIcs() {
+    const icsContent = exportEventsToIcs(events);
+    const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `calendar-${year}-${String(month + 1).padStart(2, "0")}.ics`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleImportIcs(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const parsed = parseIcsToEvents(text);
+      for (const ev of parsed) {
+        await api.createEvent(ev);
+      }
+      await load();
+    } catch {
+      setError("validation");
+    } finally {
+      setImporting(false);
+      e.target.value = "";
+    }
+  }
+
   const selectedEvents = selectedDay
     ? events.filter((event) =>
         event.startTime.slice(0, 10) === selectedDay ||
@@ -139,7 +174,6 @@ export default function CalendarApp({
 
   const embedded = isEmbedded();
 
-  // 44px targets: the old px-2 py-1 arrows were about 28px tall.
   const navButton =
     "flex min-h-11 min-w-11 items-center justify-center rounded text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors";
 
@@ -161,6 +195,70 @@ export default function CalendarApp({
       >
         Today
       </button>
+
+      {/* View Mode Switcher */}
+      <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-800 p-0.5 ml-1">
+        <button
+          type="button"
+          onClick={() => setViewMode("month")}
+          className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+            viewMode === "month" ? "bg-zinc-900 text-zinc-100 shadow-sm" : "text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          Month
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (!selectedDay) setSelectedDay(todayText);
+            setViewMode("week");
+          }}
+          className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+            viewMode === "week" ? "bg-zinc-900 text-zinc-100 shadow-sm" : "text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          Week
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (!selectedDay) setSelectedDay(todayText);
+            setViewMode("day");
+          }}
+          className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+            viewMode === "day" ? "bg-zinc-900 text-zinc-100 shadow-sm" : "text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          Day
+        </button>
+      </div>
+
+      {/* Export & Import .ics */}
+      <div className="hidden sm:inline-flex items-center gap-1 ml-auto">
+        <button
+          type="button"
+          onClick={handleExportIcs}
+          title="Export current calendar to RFC 5545 .ics"
+          className="min-h-11 rounded border border-zinc-700 px-2.5 text-xs text-zinc-300 hover:border-zinc-500 hover:text-zinc-100 transition-colors"
+        >
+          Export .ics
+        </button>
+        <label
+          title="Import .ics events from Google/Apple Calendar"
+          className="min-h-11 flex items-center justify-center cursor-pointer rounded border border-zinc-700 px-2.5 text-xs text-zinc-300 hover:border-zinc-500 hover:text-zinc-100 transition-colors"
+        >
+          {importing ? "Importing…" : "Import .ics"}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".ics,text/calendar"
+            onChange={handleImportIcs}
+            disabled={importing}
+            className="sr-only"
+          />
+        </label>
+      </div>
+
       <button
         type="button"
         aria-label="Create event for today"
@@ -172,7 +270,7 @@ export default function CalendarApp({
           setEditingEvent(null);
           setEditorOpen(true);
         }}
-        className="min-h-11 whitespace-nowrap rounded bg-accent px-3 text-sm font-semibold text-zinc-900 hover:opacity-90 transition-opacity"
+        className="min-h-11 whitespace-nowrap rounded bg-accent px-3 text-sm font-semibold text-zinc-900 hover:opacity-90 transition-opacity ml-1"
       >
         +<span className="hidden sm:inline"> New</span>
       </button>
@@ -191,7 +289,7 @@ export default function CalendarApp({
       </div>
 
       <main className="flex min-h-0 flex-1 flex-col md:flex-row overflow-hidden">
-        {/* Calendar grid */}
+        {/* Calendar grid according to viewMode */}
         <section aria-label="Calendar" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
           {loading ? (
             <p className="p-6 text-zinc-400">Loading calendar…</p>
@@ -216,27 +314,72 @@ export default function CalendarApp({
               {events.length === 0 && (
                 <p className="px-4 pt-3 text-sm text-zinc-500">No events this month.</p>
               )}
-              <MonthGrid
-                year={year}
-                month={month}
-                events={events}
-                selectedDay={selectedDay}
-                today={todayText}
-                onSelectDay={(day) => {
-                  setSelectedDay(day);
-                  setSelectedEvent(null);
-                  setSharingOpen(false);
-                  setEditingEvent(null);
-                  setEditorOpen(false);
-                }}
-                onSelectEvent={(event) => {
-                  setSelectedDay(event.startTime.slice(0, 10));
-                  setSelectedEvent(event);
-                  setEditorOpen(false);
-                  setEditingEvent(null);
-                  setSharingOpen(false);
-                }}
-              />
+              {viewMode === "month" && (
+                <MonthGrid
+                  year={year}
+                  month={month}
+                  events={events}
+                  selectedDay={selectedDay}
+                  today={todayText}
+                  onSelectDay={(day) => {
+                    setSelectedDay(day);
+                    setSelectedEvent(null);
+                    setSharingOpen(false);
+                    setEditingEvent(null);
+                    setEditorOpen(false);
+                  }}
+                  onSelectEvent={(event) => {
+                    setSelectedDay(event.startTime.slice(0, 10));
+                    setSelectedEvent(event);
+                    setEditorOpen(false);
+                    setEditingEvent(null);
+                    setSharingOpen(false);
+                  }}
+                />
+              )}
+              {viewMode === "week" && (
+                <WeekGrid
+                  currentDate={new Date(Date.UTC(year, month, selectedDay ? parseInt(selectedDay.slice(8, 10), 10) : today.getUTCDate()))}
+                  events={events}
+                  selectedDay={selectedDay}
+                  today={todayText}
+                  onSelectDay={(day) => {
+                    setSelectedDay(day);
+                    setSelectedEvent(null);
+                    setSharingOpen(false);
+                    setEditingEvent(null);
+                    setEditorOpen(false);
+                  }}
+                  onSelectEvent={(event) => {
+                    setSelectedDay(event.startTime.slice(0, 10));
+                    setSelectedEvent(event);
+                    setEditorOpen(false);
+                    setEditingEvent(null);
+                    setSharingOpen(false);
+                  }}
+                />
+              )}
+              {viewMode === "day" && (
+                <DayGrid
+                  day={selectedDay ?? todayText}
+                  events={events}
+                  today={todayText}
+                  onSelectEvent={(event) => {
+                    setSelectedDay(event.startTime.slice(0, 10));
+                    setSelectedEvent(event);
+                    setEditorOpen(false);
+                    setEditingEvent(null);
+                    setSharingOpen(false);
+                  }}
+                  onNewEventAtHour={(hour) => {
+                    const targetDay = selectedDay ?? todayText;
+                    setSelectedDay(targetDay);
+                    setSelectedEvent(null);
+                    setEditingEvent(null);
+                    setEditorOpen(true);
+                  }}
+                />
+              )}
             </>
           )}
         </section>

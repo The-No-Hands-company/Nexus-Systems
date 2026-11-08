@@ -4,6 +4,7 @@ import { useApi } from "../runtime";
 import { PriorityIcon } from "../components/PriorityIcon";
 import { StatusBadge } from "../components/StatusBadge";
 import { TaskDrawer } from "../components/TaskDrawer";
+import { AssigneeBadge } from "../components/AssigneeBadge";
 
 interface Props { project: Project; }
 
@@ -27,11 +28,11 @@ function AddTaskRow({ projectId, defaultStatusId, onCreated }: {
   if (!active) {
     return (
       <tr>
-        <td colSpan={6} className="py-1">
+        <td colSpan={7} className="py-1">
           <button
             type="button"
             onClick={() => setActive(true)}
-            className="flex items-center gap-1 px-3 py-1.5 text-xs text-zinc-700 hover:text-zinc-400 hover:bg-zinc-800 rounded transition-colors w-full"
+            className="flex items-center gap-1 px-3 py-1.5 text-xs text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800 rounded transition-colors w-full"
           >
             + Add task
           </button>
@@ -43,7 +44,7 @@ function AddTaskRow({ projectId, defaultStatusId, onCreated }: {
   return (
     <tr>
       <td className="py-2 px-3 text-zinc-600 font-mono text-xs">—</td>
-      <td className="py-2 px-3" colSpan={5}>
+      <td className="py-2 px-3" colSpan={6}>
         <input
           autoFocus
           value={title}
@@ -105,7 +106,7 @@ export function ListView({ project }: Props) {
         setLoading(false);
       }).catch(() => setLoading(false));
     return () => { cancelled = true; };
-  }, [project.id]);
+  }, [project.id, api]);
 
   const rows = flattenTree(buildTree(tasks));
 
@@ -121,13 +122,20 @@ export function ListView({ project }: Props) {
             <th scope="col" className="text-left py-2 px-3">Title</th>
             <th scope="col" className="text-left py-2 px-3 w-32">Status</th>
             <th scope="col" aria-label="Priority" className="text-left py-2 px-3 w-10">P</th>
+            <th scope="col" className="text-left py-2 px-3 w-28">Assignee</th>
             <th scope="col" className="text-left py-2 px-3 w-24">Start</th>
             <th scope="col" className="text-left py-2 px-3 w-24">Finish</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map(({ task, depth }) => {
+          {rows.map(({ task, children, depth }) => {
             const status = statusById.get(task.statusId);
+            const subtaskCount = children.length;
+            const completedCount = children.filter(
+              c => statusById.get(c.task.statusId)?.category === "completed"
+            ).length;
+            const progressPct = subtaskCount > 0 ? Math.round((completedCount / subtaskCount) * 100) : task.progress;
+
             return (
               <tr
                 key={task.id}
@@ -135,27 +143,42 @@ export function ListView({ project }: Props) {
                 aria-label={task.title}
                 onClick={() => setSelected(task)}
                 onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(task); } }}
-                className="border-b border-zinc-800 hover:bg-zinc-800/50 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                className="border-b border-zinc-800/80 hover:bg-zinc-800/50 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent transition-colors"
                 data-testid={`list-row-${task.id}`}
               >
                 <td className="py-2 px-3 text-zinc-600 font-mono text-xs">{task.number}</td>
                 <td className="py-2 px-3">
-                  <span style={{ paddingLeft: `${depth * 20}px` }} className="flex items-center gap-1">
+                  <span style={{ paddingLeft: `${depth * 20}px` }} className="flex items-center gap-2">
                     {depth > 0 && <span className="text-zinc-600 text-xs">└</span>}
-                    <span className="text-zinc-100">{task.title}</span>
+                    {task.kind === "milestone" && (
+                      <span className="text-purple-400 font-bold" title="Milestone">◆</span>
+                    )}
+                    <span className="text-zinc-100 font-medium">{task.title}</span>
+                    {subtaskCount > 0 && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-400 border border-zinc-700">
+                        {completedCount}/{subtaskCount} ({progressPct}%)
+                      </span>
+                    )}
                   </span>
                 </td>
                 <td className="py-2 px-3">
                   {status && <StatusBadge status={status} />}
                 </td>
                 <td className="py-2 px-3"><PriorityIcon priority={task.priority} /></td>
+                <td className="py-2 px-3">
+                  {task.assigneeSubject ? (
+                    <AssigneeBadge subject={task.assigneeSubject} size="sm" showName={true} />
+                  ) : (
+                    <span className="text-zinc-600 text-xs">—</span>
+                  )}
+                </td>
                 <td className="py-2 px-3 text-zinc-400 text-xs">{task.startDate ?? "—"}</td>
                 <td className="py-2 px-3 text-zinc-400 text-xs">{task.finishDate ?? "—"}</td>
               </tr>
             );
           })}
           {rows.length === 0 && (
-            <tr><td colSpan={6} className="py-8 text-center text-zinc-500">No tasks yet.</td></tr>
+            <tr><td colSpan={7} className="py-8 text-center text-zinc-500">No tasks yet.</td></tr>
           )}
           {statuses.length > 0 && (
             <AddTaskRow
@@ -171,6 +194,8 @@ export function ListView({ project }: Props) {
         <TaskDrawer
           task={selected}
           statuses={statuses}
+          allTasks={tasks}
+          onTasksChanged={setTasks}
           onClose={() => setSelected(null)}
           onUpdated={t => {
             setTasks(ts => ts.map(x => x.id === t.id ? t : x));

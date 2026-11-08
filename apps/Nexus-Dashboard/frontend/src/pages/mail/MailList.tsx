@@ -106,12 +106,27 @@ export default function MailList() {
   }
 
   if (state.kind === "unavailable") {
+    const isRateLimit = state.reason.includes("rate_limit") || state.reason.includes("429");
     return (
       <section className="mx-auto max-w-5xl px-4 py-6 sm:p-8">
-        <h1 className="text-2xl font-semibold">Mail</h1>
-        <p role="alert" className="mt-2 text-zinc-400">
-          Mail is unavailable right now ({state.reason}).
-        </p>
+        <h1 className="text-2xl font-semibold text-zinc-100">Mail</h1>
+        <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-6 text-center">
+          <p role="alert" className="text-zinc-200 font-medium">
+            {isRateLimit ? "Mail service is syncing (rate limit queue active)." : `Mail is unavailable right now (${state.reason}).`}
+          </p>
+          <p className="mt-2 text-xs text-zinc-400">
+            {isRateLimit
+              ? "Requests are paced to prevent server spikes. You can retry in a moment."
+              : "Please check your network connection or verify that mail services are healthy."}
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-4 rounded-md bg-zinc-800 px-4 py-2 text-xs font-semibold text-zinc-100 hover:bg-zinc-700 transition-colors"
+          >
+            Retry Now
+          </button>
+        </div>
       </section>
     );
   }
@@ -266,6 +281,92 @@ export default function MailList() {
           Search
         </button>
       </form>
+
+      {/* Quick Search Filter Pills */}
+      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+        <span className="text-zinc-500 font-medium mr-1">Filter:</span>
+        <button
+          type="button"
+          onClick={() => {
+            setDraftQuery("");
+            setDraftUnreadOnly(false);
+            setDraftSearchFolder("default");
+            setParams(new URLSearchParams());
+          }}
+          className={`rounded-full px-2.5 py-1 transition-colors ${
+            !query && !selectedUnread ? "bg-accent text-accent-foreground font-semibold" : "bg-zinc-800/80 text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          All
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const next = new URLSearchParams(params);
+            const newUnread = !selectedUnread;
+            if (newUnread) next.set("unread", "true");
+            else next.delete("unread");
+            setDraftUnreadOnly(newUnread);
+            setParams(next);
+          }}
+          className={`rounded-full px-2.5 py-1 transition-colors ${
+            selectedUnread ? "bg-accent text-accent-foreground font-semibold" : "bg-zinc-800/80 text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          ● Unread
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const next = new URLSearchParams(params);
+            const token = "has:attachment";
+            const currentQ = draftQuery.includes(token)
+              ? draftQuery.replace(token, "").trim()
+              : `${draftQuery} ${token}`.trim();
+            setDraftQuery(currentQ);
+            if (currentQ) next.set("q", currentQ);
+            else next.delete("q");
+            setParams(next);
+          }}
+          className={`rounded-full px-2.5 py-1 transition-colors ${
+            draftQuery.includes("has:attachment") ? "bg-accent text-accent-foreground font-semibold" : "bg-zinc-800/80 text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          📎 Has attachment
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const promptVal = prompt("Enter sender email to filter (e.g. alice@tnhc.dev):");
+            if (promptVal) {
+              const next = new URLSearchParams(params);
+              const token = `from:${promptVal.trim()}`;
+              setDraftQuery(token);
+              next.set("q", token);
+              setParams(next);
+            }
+          }}
+          className="rounded-full bg-zinc-800/80 px-2.5 py-1 text-zinc-400 hover:text-zinc-200 transition-colors"
+        >
+          👤 from:
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const promptVal = prompt("Enter subject keyword to filter:");
+            if (promptVal) {
+              const next = new URLSearchParams(params);
+              const token = `subject:${promptVal.trim()}`;
+              setDraftQuery(token);
+              next.set("q", token);
+              setParams(next);
+            }
+          }}
+          className="rounded-full bg-zinc-800/80 px-2.5 py-1 text-zinc-400 hover:text-zinc-200 transition-colors"
+        >
+          🏷️ subject:
+        </button>
+      </div>
       {viewingTrash && (
         <div className="space-y-2 rounded border border-zinc-800 bg-zinc-900/50 p-3">
           <p className="text-sm text-zinc-400">

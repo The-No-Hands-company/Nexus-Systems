@@ -45,6 +45,7 @@ function getClientKey(req: Request, prefix = "default"): string {
   const sessionMatch = cookie.match(/nexus_session=([^;]+)/);
   const clientTag = req.headers.get("x-nexus-client-tag");
   const connectingIp = req.headers.get("cf-connecting-ip");
+  const realIp = req.headers.get("x-real-ip");
   const identity = req.headers.get("x-nexus-identity");
   const subject = req.headers.get("x-nexus-subject");
   const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
@@ -55,6 +56,7 @@ function getClientKey(req: Request, prefix = "default"): string {
     (identity ? `id_${identity.slice(0, 16)}` : null) ||
     (subject ? `sub_${subject}` : null) ||
     connectingIp ||
+    realIp ||
     forwarded ||
     "unknown";
   return `${prefix}:${tag}`;

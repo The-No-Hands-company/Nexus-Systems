@@ -602,6 +602,16 @@ async fn external_body_with_object_client_is_delivered_successfully() {
         let object_key = format!("obj-{}", Uuid::now_v7().simple());
         let gen_id = Uuid::now_v7();
         sqlx::query(
+            "INSERT INTO object_generations (id, object_key, lifecycle_state, created_at)
+             VALUES ($1, $2, 'referenced', NOW())",
+        )
+        .bind(gen_id)
+        .bind(&object_key)
+        .execute(store.pool())
+        .await
+        .unwrap();
+
+        sqlx::query(
             "UPDATE messages SET body_inline = NULL, body_object_key = $2,
              body_object_generation_id = $3 WHERE id = $1",
         )

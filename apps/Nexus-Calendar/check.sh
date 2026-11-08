@@ -1,6 +1,7 @@
 #!/bin/bash
 # Quality gate. Runs from any cwd; invoked identically by a developer and by CI.
 set -euo pipefail
+export ESBUILD_BINARY_PATH="${ESBUILD_BINARY_PATH:-/tmp/esbuild}"
 cd "$(dirname "$0")"
 echo "nexus-calendar..."
 # Not piped through `tail -1`. That printed the run's summary line and threw

@@ -26,7 +26,7 @@ export interface Client {
 /** Starts a server on a dedicated test port with a fresh in-memory database. */
 export async function startTestServer() {
   process.env.NEXUS_PROJECT_DB = ":memory:";
-  process.env.PORT = "43160";
+  process.env.PORT = "0";
   process.env.NEXUS_PROJECT_DASHBOARD_SECRET = TEST_SECRET;
   // Integration with Nexus-Cloud is intentionally outside this in-process
   // server suite. Keep the fire-and-forget client disabled even when the test

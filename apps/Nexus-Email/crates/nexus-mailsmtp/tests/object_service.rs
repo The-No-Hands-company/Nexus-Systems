@@ -11,6 +11,7 @@ use std::{
 use axum::{
     extract::{ConnectInfo, Query},
     http::StatusCode,
+    response::IntoResponse,
     routing::get,
     Extension, Router,
 };
@@ -1103,7 +1104,8 @@ fn daemon_command(
     let mut command = Command::new(env!("CARGO_BIN_EXE_nexus-mailsmtpd"));
     command
         .env_clear()
-        .env("TMPDIR", std::env::current_dir().unwrap())
+        .env("PATH", std::env::var("PATH").unwrap_or_default())
+        .env("TMPDIR", "/tmp")
         .env("NEXUS_EMAIL_DATABASE_URL", db_url)
         .env("NEXUS_EMAIL_NODE_KEY_PATH", key_path)
         .env("NEXUS_EMAIL_MX_BIND", mx_bind)
@@ -1119,6 +1121,7 @@ fn daemon_command(
         .env("S3_ACCESS_KEY", "test")
         .env("S3_SECRET_KEY", "test")
         .env("S3_BUCKET", "mail")
+        .env("NEXUS_EMAIL_OBJECT_STORAGE_MIGRATION_MARKER", "1")
         .env("RUST_LOG", "trace")
         .kill_on_drop(true);
     command
@@ -1154,16 +1157,28 @@ async fn daemon_hosts_service_without_leaking_evidence_in_trace_logs() {
         db_url
             .query_pairs_mut()
             .append_pair("options", &format!("-csearch_path={schema}"));
-        let object_app = Router::new().route(
-            "/mail/*key",
-            get(|Query(query): Query<HashMap<String, String>>| async move {
-                if query.get("versionId").map(String::as_str) == Some(VERSION) {
-                    (StatusCode::OK, [("x-amz-version-id", VERSION)], BODY)
-                } else {
-                    (StatusCode::NOT_FOUND, [("x-amz-version-id", "wrong")], "")
-                }
-            }),
-        );
+        const VERSIONING_ENABLED_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?><VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Status>Enabled</Status></VersioningConfiguration>"#;
+        let object_app = Router::new()
+            .route(
+                "/mail/",
+                get(|| async {
+                    ([("content-type", "application/xml")], VERSIONING_ENABLED_XML).into_response()
+                }),
+            )
+            .route(
+                "/mail/*key",
+                get(|Query(query): Query<HashMap<String, String>>| async move {
+                    if query.get("versionId").map(String::as_str) == Some(VERSION) {
+                        (StatusCode::OK, [("x-amz-version-id", VERSION)], BODY).into_response()
+                    } else {
+                        (StatusCode::NOT_FOUND, [("x-amz-version-id", "wrong")], "").into_response()
+                    }
+                })
+                .put(|| async {
+                    ([("x-amz-version-id", "v-cap-probe-1")], StatusCode::OK)
+                })
+                .delete(|| async { StatusCode::NO_CONTENT }),
+            );
         let object_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let object_address = object_listener.local_addr().unwrap();
         let object_task =
@@ -1172,7 +1187,7 @@ async fn daemon_hosts_service_without_leaking_evidence_in_trace_logs() {
         let reserved = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let service_address = reserved.local_addr().unwrap();
         drop(reserved);
-        let node_key = NodeKeyFile(PathBuf::from(format!(".test-node-key-{}", Uuid::new_v4())));
+        let node_key = NodeKeyFile(PathBuf::from(format!("/tmp/.test-node-key-{}", Uuid::new_v4())));
         let mut daemon = daemon_command(
             db_url.as_str(),
             &node_key.0,
@@ -1265,7 +1280,7 @@ async fn daemon_leaves_object_service_disabled_when_configuration_is_unsafe() {
             } else {
                 service_address.to_string()
             };
-            let node_key = NodeKeyFile(PathBuf::from(format!(".test-node-key-{}", Uuid::new_v4())));
+            let node_key = NodeKeyFile(PathBuf::from(format!("/tmp/.test-node-key-{}", Uuid::new_v4())));
             let mut command = daemon_command(
                 db_url.as_str(),
                 &node_key.0,
@@ -1333,7 +1348,7 @@ async fn occupied_object_listener_does_not_stop_smtp_or_imap() {
         let imap = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let imap_address = imap.local_addr().unwrap();
         drop((mx, imap));
-        let node_key = NodeKeyFile(PathBuf::from(format!(".test-node-key-{}", Uuid::new_v4())));
+        let node_key = NodeKeyFile(PathBuf::from(format!("/tmp/.test-node-key-{}", Uuid::new_v4())));
         let mut daemon = daemon_command(
             db_url.as_str(),
             &node_key.0,

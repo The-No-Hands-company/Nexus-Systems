@@ -1,11 +1,12 @@
 #!/bin/bash
 # Quality gate. Runs from any cwd; invoked identically by a developer and by CI.
 set -euo pipefail
+export ESBUILD_BINARY_PATH="${ESBUILD_BINARY_PATH:-/tmp/esbuild-0.21.5}"
 cd "$(dirname "$0")"
 echo "nexus-project..."
-./node_modules/.bin/tsc --noEmit
+node ./node_modules/typescript/bin/tsc --noEmit
 # Lint and formatting, before the tests so a style error fails fast.
-./node_modules/.bin/biome check src tests
+bun x biome check src tests
 # The React frontend has its own Vitest/jsdom package. Restrict this Bun gate
 # to the backend test files at this package root so Bun does not try to execute
 # frontend .tsx files without a DOM. The frontend package runs its own gate.
@@ -24,4 +25,10 @@ if [ "$ran" != "$expected" ]; then
   echo "FAIL: bun ran $ran test files but $expected exist" >&2
   exit 1
 fi
+(
+  cd frontend
+  bun run check
+  bun run test
+  bun run build
+)
 echo "PASS"

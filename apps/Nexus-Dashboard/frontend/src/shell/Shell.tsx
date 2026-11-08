@@ -4,6 +4,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Avatar } from "../../../../../packages/nexus-design/src/components/ui/avatar";
 import { Kbd } from "../../../../../packages/nexus-design/src/components/ui/kbd";
 import AppsDrawer from "./AppsDrawer";
+import CommandPalette from "./CommandPalette";
 import UserMenu from "./UserMenu";
 import { useDensity } from "./useDensity";
 import type { AppEntry } from "../api";
@@ -66,17 +67,18 @@ export default function Shell({
   const [, recordRecent] = useRecentApps();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const launcherApps = apps.filter(isLauncherApp);
   const canManage = user?.role === "founder" || user?.role === "admin";
 
-  // ⌘K / Ctrl+K opens the apps drawer from anywhere in the shell. preventDefault
+  // ⌘K / Ctrl+K opens the command palette from anywhere in the shell. preventDefault
   // is required, not decorative: without it Chrome and Firefox both still open
   // their own in-page find bar on top of the drawer.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        setDrawerOpen(true);
+        setPaletteOpen((prev) => !prev);
       }
     }
     document.addEventListener("keydown", onKeyDown);
@@ -138,7 +140,7 @@ export default function Shell({
           */}
         <button
           type="button"
-          onClick={() => setDrawerOpen(true)}
+          onClick={() => setPaletteOpen(true)}
           className="ml-2 hidden h-[var(--nexus-control-height)] items-center gap-2 rounded-md border border-zinc-700 px-3 text-sm text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:flex"
         >
           <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
@@ -293,6 +295,7 @@ export default function Shell({
         </main>
       </div>
 
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} apps={launcherApps} user={user} />
       <AppsDrawer apps={launcherApps} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>
   );
