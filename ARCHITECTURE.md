@@ -110,6 +110,10 @@ apps/Nexus-<App>/
 | **8092** | Nexus-Calendar direct-origin Caddy front door |
 | **8091** | Nexus-Draw web interface |
 | **8090** | Nexus-Hosting delivery plane |
+| **3074** | Nexus-Design UI editor & engine API (`design.tnhc.dev`) |
+| **3080** | Nexus-Graphic vector canvas & engine API (`graphic.tnhc.dev`) |
+| **3096** | Nexus-Photos photo library & engine API (`photos.tnhc.dev`) |
+| **3113** | Nexus-Video streaming & channels API (`video.tnhc.dev`) |
 | **3068** | Nexus-Calendar loopback API |
 | **3000–3099** | Core infrastructure apps (Hosting, Vault, Forge, Engine, Deploy, Monitor) |
 | **3100–3199** | Reserved (expansion) |

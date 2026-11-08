@@ -88,6 +88,10 @@ const FALLBACK_HOSTING_UPSTREAM = process.env.HOSTING_UPSTREAM || "http://127.0.
 const FALLBACK_DRAW_UPSTREAM = process.env.DRAW_UPSTREAM || "http://127.0.0.1:8091";
 const FALLBACK_CALENDAR_UPSTREAM = process.env.CALENDAR_UPSTREAM || "http://127.0.0.1:8092";
 const FALLBACK_PROJECT_UPSTREAM = process.env.PROJECT_UPSTREAM || "http://127.0.0.1:8093";
+const FALLBACK_DESIGN_UPSTREAM = process.env.DESIGN_UPSTREAM || "http://127.0.0.1:3074";
+const FALLBACK_GRAPHIC_UPSTREAM = process.env.GRAPHIC_UPSTREAM || "http://127.0.0.1:3080";
+const FALLBACK_PHOTOS_UPSTREAM = process.env.PHOTOS_UPSTREAM || "http://127.0.0.1:3096";
+const FALLBACK_VIDEO_UPSTREAM = process.env.VIDEO_UPSTREAM || "http://127.0.0.1:3113";
 // deploy.<DOMAIN> is Nexus Deploy's control plane: its dashboard, its API and the
 // push-to-deploy webhook. The apps it runs are NOT here; they are reached on
 // their own hostnames through Cloud's routes.
@@ -793,6 +797,18 @@ async function handleRequestInner(
         fixedKind = "app";
       } else if (host === `project.${DOMAIN}` || host === `www.project.${DOMAIN}`) {
         upstreamUrl = FALLBACK_PROJECT_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `design.${DOMAIN}` || host === `www.design.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_DESIGN_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `graphic.${DOMAIN}` || host === `www.graphic.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_GRAPHIC_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `photos.${DOMAIN}` || host === `www.photos.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_PHOTOS_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `video.${DOMAIN}` || host === `www.video.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_VIDEO_UPSTREAM;
         fixedKind = "app";
       } else if (host === `mail.${DOMAIN}` || host === `www.mail.${DOMAIN}`) {
         upstreamUrl = FALLBACK_DASHBOARD_UPSTREAM;

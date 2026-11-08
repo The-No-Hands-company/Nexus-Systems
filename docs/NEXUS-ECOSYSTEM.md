@@ -41,7 +41,7 @@ That gives four honest states:
 
 | Status | Meaning | Count |
 |---|---|---|
-| **Live** | Deployed and reachable on `tnhc.dev` today | 10 |
+| **Live** | Deployed and reachable on `tnhc.dev` today | 14 |
 | **Beta** | Deployed, feature-incomplete, in active use | 1 |
 | **In development** | Substantive code beyond the scaffold; not yet deployed | 25 |
 | **Scaffold** | The six-file `ghost` shape: registers with Systems-API, serves health, no domain logic | 73 |
@@ -77,6 +77,10 @@ scaffold is not a product, and this document will not call one a product.
 | `calendar.tnhc.dev` | Nexus-Calendar | `127.0.0.1:8092` | Shared calendar with events, reminders, and views |
 | `project.tnhc.dev` | Nexus-Project | `127.0.0.1:8093` | Project management boards, WBS, dependencies, and schedules |
 | `draw.tnhc.dev` | Nexus-Draw | `127.0.0.1:8090` | Whiteboard, served as a Nexus-Hosting static site |
+| `design.tnhc.dev` | Nexus-Design | `127.0.0.1:3074` | UI/UX interface design tool, vector layers, and properties |
+| `graphic.tnhc.dev` | Nexus-Graphic | `127.0.0.1:3080` | Vector graphics, illustration canvas, and Phantom SDK |
+| `photos.tnhc.dev` | Nexus-Photos | `127.0.0.1:3096` | Photo library, albums, metadata manager, and image editor |
+| `video.tnhc.dev` | Nexus-Video | `127.0.0.1:3113` | Video streaming, channel playlists, and media catalog |
 | `hosting.tnhc.dev` | Nexus-Hosting | — | Static-site hosting with presigned upload and deploy |
 | `storage.tnhc.dev` | MinIO | `:9010` | Object storage — infrastructure, not a Nexus app |
 
@@ -236,11 +240,11 @@ Every app in the ecosystem, by category, with measured status.
 | App | Role | Status |
 |---|---|---|
 | **Nexus-Draw** | Whiteboard and diagramming (Canvas 2D); live at draw.tnhc.dev | **Live** |
-| **Nexus-Design** | Interface and graphic design tooling | In development |
-| **Nexus-Graphic** | Raster and vector graphics | In development |
+| **Nexus-Design** | Interface and graphic design tooling; live at design.tnhc.dev | **Live** |
+| **Nexus-Graphic** | Raster and vector graphics; live at graphic.tnhc.dev | **Live** |
 | **Nexus-Modeling** | 3D modelling kernel targeting full-parity DCC | In development |
-| **Nexus-Photos** | Photo library and editing | In development |
-| **Nexus-Video** | Video editing and processing | In development |
+| **Nexus-Photos** | Photo library and editing; live at photos.tnhc.dev | **Live** |
+| **Nexus-Video** | Video editing and processing; live at video.tnhc.dev | **Live** |
 | **Nexus-Media** | Media library and playback | Scaffold |
 | **Nexus-Music** | Music library and playback | Scaffold |
 | **Nexus-Radio-Live** | Live radio streaming | Scaffold |

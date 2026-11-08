@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import { NexusDiscovery } from "../../../packages/nexus-discovery/src/index";
 import { PhantomApp } from "../../../packages/phantom-sdk/src/integration";
 import { startHeartbeat } from "./cloud";
@@ -121,6 +122,30 @@ export async function createServer() {
         if (!name) return json({ error: "name required" }, 400);
         return json(engine.addPlaylist(name, stringField(b, "description")), 201);
       }
+
+      if (request.method === "GET" && !path.startsWith("/api/") && path !== "/health") {
+        const webRoot = process.env.WEB_ROOT || join(import.meta.dir, "..", "frontend", "dist");
+        if (path !== "/") {
+          const asset = Bun.file(join(webRoot, path));
+          if (await asset.exists()) {
+            const isHashed = path.startsWith("/assets/") && /\.(js|css|woff2?|svg|png|jpg)$/.test(path);
+            const headers: Record<string, string> = { "X-Content-Type-Options": "nosniff" };
+            if (isHashed) headers["cache-control"] = "public, max-age=31536000, immutable";
+            return new Response(asset, { headers });
+          }
+        }
+        const shell = Bun.file(join(webRoot, "index.html"));
+        if (await shell.exists()) {
+          return new Response(shell, {
+            headers: {
+              "content-type": "text/html; charset=utf-8",
+              "cache-control": "no-store, must-revalidate",
+              "X-Content-Type-Options": "nosniff",
+            },
+          });
+        }
+      }
+
       return json({ error: "not found" }, 404);
     },
   });
