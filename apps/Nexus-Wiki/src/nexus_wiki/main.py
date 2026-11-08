@@ -122,6 +122,12 @@ def what_links_here(slug: str) -> dict:
     return {"slug": slug, "backlinks": [{"slug": s, "title": t} for s, t in links]}
 
 
+@app.get("/api/v1/audit", response_model=dict)
+def audit_wiki() -> dict:
+    """Audit wiki for orphaned pages and broken links."""
+    return store.audit()
+
+
 @app.get("/api/v1/diff/{slug}", response_model=dict)
 def diff_versions(slug: str, v1: int = Query(None), v2: int = Query(None)) -> dict:
     """Compare two versions of an article. Returns unified diff."""

@@ -120,6 +120,14 @@ export class NotesEngine {
       .all(`%${q}%`, `%${q}%`) as Note[];
   }
 
+  getBacklinks(title: string): Note[] {
+    return this.db
+      .prepare(
+        "SELECT id, title, content, notebook, tags, pinned, created_at as createdAt, updated_at as updatedAt FROM notes WHERE content LIKE ? ORDER BY updated_at DESC"
+      )
+      .all(`%[[${title}]]%`) as Note[];
+  }
+
   addNotebook(name: string, description = ""): Notebook {
     const nb: Notebook = {
       id: randomUUID(),

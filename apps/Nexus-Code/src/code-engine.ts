@@ -185,6 +185,29 @@ export class CodeEngine {
       .all(repoId, branch) as CommitRecord[];
   }
 
+  searchCode(repoId: string, query: string, branch = "main"): Array<{ path: string; line: number; text: string }> {
+    const files = this.listFiles(repoId, branch);
+    const results: Array<{ path: string; line: number; text: string }> = [];
+    const q = query.toLowerCase();
+
+    for (const file of files) {
+      if (file.path.toLowerCase().includes(q)) {
+        results.push({ path: file.path, line: 1, text: `[Filename match: ${file.path}]` });
+      }
+      const lines = file.content.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].toLowerCase().includes(q)) {
+          results.push({
+            path: file.path,
+            line: i + 1,
+            text: lines[i].trim(),
+          });
+        }
+      }
+    }
+    return results;
+  }
+
   // ── Snippets ──
 
   createSnippet(title: string, language: string, code: string, tags = ""): Snippet {

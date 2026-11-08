@@ -520,6 +520,32 @@ class WikiStore:
     def get_backlinks(self, slug: str) -> list[tuple[str, str]]:
         return self._backlinks.get_backlinks(slug)
 
+    def audit(self) -> dict:
+        all_pages = {p.slug: p for p in self.list_pages()}
+        orphans = []
+        broken_links = []
+        for slug, summary in all_pages.items():
+            bl = self.get_backlinks(slug)
+            if not bl:
+                orphans.append({"slug": slug, "title": summary.title})
+
+        for source, targets in self._backlinks._links.items():
+            source_page = all_pages.get(source)
+            source_title = source_page.title if source_page else source
+            for target in targets:
+                if target not in all_pages and not target.endswith("/talk"):
+                    broken_links.append({
+                        "source_slug": source,
+                        "source_title": source_title,
+                        "target_slug": target,
+                        "target_title": target.replace("-", " ").title(),
+                    })
+        return {
+            "orphans": orphans,
+            "broken_links": broken_links,
+            "total_pages": len(all_pages),
+        }
+
     def create_user(self, uid: str, username: str, pw_hash: str) -> None:
         self._users.create(uid, username, pw_hash)
 

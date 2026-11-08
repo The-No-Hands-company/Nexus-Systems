@@ -76,8 +76,30 @@ describe("nexus-docs", () => {
     expect(updated.title).toBe("Platform Spec v2");
     expect(updated.pinned).toBe(1);
 
+    // 4b. Revisions & Restore
+    const createRevRes = await fetch(`${base}/api/v1/documents/${doc.id}/revisions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Platform Spec v1 Original", content: "Original version text" }),
+    });
+    expect(createRevRes.status).toBe(201);
+    const createdRev = (await createRevRes.json()) as any;
+
+    const listRevRes = await fetch(`${base}/api/v1/documents/${doc.id}/revisions`);
+    expect(listRevRes.status).toBe(200);
+    const revs = (await listRevRes.json()) as any[];
+    expect(revs.length).toBeGreaterThanOrEqual(1);
+
+    const restoreRes = await fetch(`${base}/api/v1/documents/${doc.id}/revisions/${createdRev.id}/restore`, {
+      method: "POST",
+    });
+    expect(restoreRes.status).toBe(200);
+    const restoredDoc = (await restoreRes.json()) as any;
+    expect(restoredDoc.title).toBe("Platform Spec v1 Original");
+    expect(restoredDoc.content).toBe("Original version text");
+
     // 5. Search Documents
-    const searchRes = await fetch(`${base}/api/v1/documents/search?q=operational`);
+    const searchRes = await fetch(`${base}/api/v1/documents/search?q=Original`);
     expect(searchRes.status).toBe(200);
     const searchDocs = (await searchRes.json()) as any[];
     expect(searchDocs.length).toBeGreaterThanOrEqual(1);

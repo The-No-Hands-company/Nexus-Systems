@@ -22,6 +22,14 @@ export interface Folder {
   createdAt: string;
 }
 
+export interface DocumentRevision {
+  id: string;
+  documentId: string;
+  title: string;
+  content: string;
+  createdAt: string;
+}
+
 // Backwards-compatible alias
 export interface Docs {
   id: string;
@@ -48,6 +56,10 @@ export class DocsEngine {
     // Folders table
     this.db.exec(
       "CREATE TABLE IF NOT EXISTS folders (id TEXT PRIMARY KEY, name TEXT, color TEXT, icon TEXT, created_at TEXT)"
+    );
+    // Document Revisions table
+    this.db.exec(
+      "CREATE TABLE IF NOT EXISTS document_revisions (id TEXT PRIMARY KEY, document_id TEXT, title TEXT, content TEXT, created_at TEXT)"
     );
   }
 
@@ -91,6 +103,9 @@ export class DocsEngine {
 
     // Keep legacy table synced
     this.createDocs(title, folder);
+
+    // Initial revision snapshot
+    this.createRevision(doc.id, doc.title, doc.content);
 
     return doc;
   }
@@ -164,6 +179,56 @@ export class DocsEngine {
         "SELECT id, title, content, folder, icon, cover_url as coverUrl, pinned, starred, created_at as createdAt, updated_at as updatedAt FROM documents WHERE title LIKE ? OR content LIKE ? ORDER BY updated_at DESC"
       )
       .all(`%${query}%`, `%${query}%`) as Document[];
+  }
+
+  // ── Document Revisions ──
+
+  createRevision(
+    documentId: string,
+    title?: string,
+    content?: string
+  ): DocumentRevision {
+    const doc = this.getDocument(documentId);
+    const rev: DocumentRevision = {
+      id: randomUUID(),
+      documentId,
+      title: title !== undefined ? title : (doc?.title || ""),
+      content: content !== undefined ? content : (doc?.content || ""),
+      createdAt: new Date().toISOString(),
+    };
+    this.db
+      .prepare(
+        "INSERT INTO document_revisions VALUES (?,?,?,?,?)"
+      )
+      .run(rev.id, rev.documentId, rev.title, rev.content, rev.createdAt);
+    return rev;
+  }
+
+  listRevisions(documentId: string): DocumentRevision[] {
+    return this.db
+      .prepare(
+        "SELECT id, document_id as documentId, title, content, created_at as createdAt FROM document_revisions WHERE document_id = ? ORDER BY created_at DESC"
+      )
+      .all(documentId) as DocumentRevision[];
+  }
+
+  restoreRevision(documentId: string, revisionId: string): Document | undefined {
+    const rev = this.db
+      .prepare(
+        "SELECT id, document_id as documentId, title, content, created_at as createdAt FROM document_revisions WHERE id = ? AND document_id = ?"
+      )
+      .get(revisionId, documentId) as DocumentRevision | undefined;
+    if (!rev) return undefined;
+
+    const current = this.getDocument(documentId);
+    if (current) {
+      this.createRevision(documentId, current.title, current.content);
+    }
+
+    return this.updateDocument(documentId, {
+      title: rev.title,
+      content: rev.content,
+    });
   }
 
   // ── Folders ──

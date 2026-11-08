@@ -1037,6 +1037,12 @@ cmd_start() {
     start_nexus_photos_service
     start_nexus_video_service
 
+    # 4fe-h. Document, Knowledge & Developer Services
+    start_nexus_notes_service
+    start_nexus_docs_service
+    start_nexus_code_service
+    start_nexus_vault_service
+
     # 4g. Nexus-Email API — the mail store behind app.$DOMAIN/mail.
     #
     # Loopback only, and that is a security control rather than a default: this

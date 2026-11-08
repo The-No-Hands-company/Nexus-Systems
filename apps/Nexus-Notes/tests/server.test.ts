@@ -113,4 +113,23 @@ describe("nexus-notes", () => {
     const getRes = await fetch(`${base}/api/v1/notes/${note.id}`);
     expect(getRes.status).toBe(404);
   });
+
+  it("GET /api/v1/notes/:id/backlinks returns linking notes", async () => {
+    const target = (await (await fetch(`${base}/api/v1/notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "Architecture Plan", content: "Core architecture details" }),
+    })).json()) as any;
+
+    await fetch(`${base}/api/v1/notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "Project Overview", content: "See [[Architecture Plan]] for more" }),
+    });
+
+    const res = await fetch(`${base}/api/v1/notes/${target.id}/backlinks`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any[];
+    expect(body.some((n: any) => n.title === "Project Overview")).toBe(true);
+  });
 });

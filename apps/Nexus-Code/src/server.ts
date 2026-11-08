@@ -111,6 +111,55 @@ export async function createServer() {
         return json(engine.listCommits(repoId, branch));
       }
 
+      // Symbol & Code Search
+      const searchMatch = p.match(/^\/api\/v1\/repos\/([^/]+)\/search$/);
+      if (req.method === "GET" && searchMatch) {
+        const repoId = searchMatch[1]!;
+        const q = url.searchParams.get("q") || "";
+        const branch = url.searchParams.get("branch") || "main";
+        if (!q) return json({ error: "q required" }, 400);
+        return json(engine.searchCode(repoId, q, branch));
+      }
+
+      // Raw File Download
+      const rawMatch = p.match(/^\/api\/v1\/repos\/([^/]+)\/raw\/(.+)$/);
+      if (req.method === "GET" && rawMatch) {
+        const repoId = rawMatch[1]!;
+        const filePath = decodeURIComponent(rawMatch[2]!);
+        const branch = url.searchParams.get("branch") || "main";
+        const f = engine.getFile(repoId, filePath, branch);
+        if (!f) return json({ error: "not found" }, 404);
+        const filename = filePath.split("/").pop() || "file";
+        return new Response(f.content, {
+          headers: {
+            "content-type": "text/plain; charset=utf-8",
+            "content-disposition": `attachment; filename="${filename}"`,
+          },
+        });
+      }
+
+      // Repo Archive
+      const archiveMatch = p.match(/^\/api\/v1\/repos\/([^/]+)\/archive$/);
+      if (req.method === "GET" && archiveMatch) {
+        const repoId = archiveMatch[1]!;
+        const branch = url.searchParams.get("branch") || "main";
+        const repo = engine.getRepo(repoId);
+        if (!repo) return json({ error: "not found" }, 404);
+        const files = engine.listFiles(repo.id, branch);
+        return json(
+          {
+            repository: repo.name,
+            branch,
+            exportedAt: new Date().toISOString(),
+            files: files.map((f) => ({ path: f.path, content: f.content, size: f.size })),
+          },
+          200,
+          {
+            "content-disposition": `attachment; filename="${repo.name}-${branch}.json"`,
+          }
+        );
+      }
+
       // Snippets
       if (req.method === "GET" && p === "/api/v1/snippets") {
         return json(engine.listSnippets());

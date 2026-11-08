@@ -234,3 +234,23 @@ def test_auth_register_and_login() -> None:
     login_bad = client.post("/api/v1/auth/login", json={"username": "alice", "password": "wrongpassword"})
     assert login_bad.status_code == 401
 
+
+def test_audit_wiki() -> None:
+    # Page A links to non-existent Page B
+    client.post(
+        "/api/v1/pages",
+        json={"title": "Audit Source", "content": "Link to [[Ghost Article]]"},
+    )
+    # Page C has no links and no backlinks (orphan)
+    client.post(
+        "/api/v1/pages",
+        json={"title": "Orphan Article", "content": "Standing alone."},
+    )
+
+    res = client.get("/api/v1/audit")
+    assert res.status_code == 200
+    data = res.json()
+    assert any(b["target_slug"] == "ghost-article" for b in data["broken_links"])
+    assert any(o["slug"] == "orphan-article" for o in data["orphans"])
+
+

@@ -85,6 +85,15 @@ export async function createServer() {
         return updated ? json(updated) : json({ error: "not found" }, 404);
       }
 
+      // Backlinks
+      const backlinkMatch = path.match(/^\/api\/v1\/notes\/([^/]+)\/backlinks$/);
+      if (request.method === "GET" && backlinkMatch) {
+        const id = backlinkMatch[1]!;
+        const note = engine.getNote(id);
+        if (!note) return json({ error: "not found" }, 404);
+        return json(engine.getBacklinks(note.title));
+      }
+
       // Note by ID
       const nm = path.match(/^\/api\/v1\/notes\/([^/]+)$/);
       if (nm) {

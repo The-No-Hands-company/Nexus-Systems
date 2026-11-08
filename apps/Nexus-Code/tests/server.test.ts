@@ -69,6 +69,26 @@ describe("nexus-code", () => {
     expect(commits.length).toBeGreaterThanOrEqual(1);
     expect(commits[0].message).toContain("Initial main.ts");
 
+    // 4b. Code Search
+    const searchRes = await fetch(`${base}/api/v1/repos/${repo.id}/search?q=hello`);
+    expect(searchRes.status).toBe(200);
+    const searchHits = (await searchRes.json()) as any[];
+    expect(searchHits.length).toBeGreaterThanOrEqual(1);
+    expect(searchHits[0].path).toBe("main.ts");
+
+    // 4c. Raw File Download
+    const rawRes = await fetch(`${base}/api/v1/repos/${repo.id}/raw/main.ts`);
+    expect(rawRes.status).toBe(200);
+    const rawText = await rawRes.text();
+    expect(rawText).toBe("console.log('hello nexus code');");
+
+    // 4d. Archive Download
+    const archiveRes = await fetch(`${base}/api/v1/repos/${repo.id}/archive`);
+    expect(archiveRes.status).toBe(200);
+    const archiveData = (await archiveRes.json()) as any;
+    expect(archiveData.repository).toBe("my-service");
+    expect(archiveData.files.length).toBeGreaterThanOrEqual(1);
+
     // 5. Snippet Lifecycle
     const snipRes = await fetch(`${base}/api/v1/snippets`, {
       method: "POST",

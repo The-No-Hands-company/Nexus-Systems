@@ -77,6 +77,28 @@ export async function createServer() {
         return json(engine.searchDocuments(q));
       }
 
+      // Document Revisions
+      const revRestoreMatch = p.match(/^\/api\/v1\/documents\/([^/]+)\/revisions\/([^/]+)\/restore$/);
+      if (req.method === "POST" && revRestoreMatch) {
+        const id = revRestoreMatch[1]!;
+        const revId = revRestoreMatch[2]!;
+        const restored = engine.restoreRevision(id, revId);
+        return restored ? json(restored) : json({ error: "not found" }, 404);
+      }
+
+      const revMatch = p.match(/^\/api\/v1\/documents\/([^/]+)\/revisions$/);
+      if (revMatch) {
+        const id = revMatch[1]!;
+        if (req.method === "GET") {
+          return json(engine.listRevisions(id));
+        }
+        if (req.method === "POST") {
+          const b = (await req.json().catch(() => ({}))) as any;
+          const rev = engine.createRevision(id, b.title, b.content);
+          return json(rev, 201);
+        }
+      }
+
       // Single Document by ID
       const docMatch = p.match(/^\/api\/v1\/documents\/([^/]+)$/);
       if (docMatch) {
