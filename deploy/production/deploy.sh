@@ -1040,6 +1040,7 @@ cmd_start() {
     # 4fe-h. Document, Knowledge & Developer Services
     start_nexus_notes_service
     start_nexus_docs_service
+    start_nexus_wiki_service
     start_nexus_code_service
     start_nexus_vault_service
 
