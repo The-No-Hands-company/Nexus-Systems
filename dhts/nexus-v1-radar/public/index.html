@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus Systems — v1.0 Production Maturity Radar</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="fine-grid"></div>
+
+  <header class="header">
+    <div class="header-container">
+      <div class="brand">
+        <span class="brand-tag">TNHC RADAR</span>
+        <h1 class="brand-title">Nexus Systems <span>v1.0 Production Radar</span></h1>
+        <p class="brand-sub">Real-time maturity scorecards, feature checklists & roadmaps for every platform service.</p>
+      </div>
+
+      <div class="header-actions">
+        <button id="rescanBtn" class="btn btn-acid">
+          <span class="icon">↻</span> Rescan Ecosystem
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <!-- Top KPI metrics -->
+    <section class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-label">REGISTERED SERVICES</span>
+        <span id="statTotalApps" class="stat-value">--</span>
+        <span class="stat-sub">Managed under deploy.sh</span>
+      </div>
+      <div class="stat-card stat-card-highlight">
+        <span class="stat-label">AVERAGE V1.0 READINESS</span>
+        <span id="statAvgScore" class="stat-value">--%</span>
+        <span class="stat-sub" id="statAvgStage">Ecosystem Overall</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">STAGE BREAKDOWN</span>
+        <div class="stat-breakdown" id="statBreakdown">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Controls: Filter & Search -->
+    <section class="controls-bar">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Filter apps by name, port, or category...">
+      </div>
+
+      <div class="filter-pills" id="categoryFilter">
+        <button class="pill active" data-category="all">All</button>
+        <button class="pill" data-category="everyday">Everyday</button>
+        <button class="pill" data-category="work">Work</button>
+        <button class="pill" data-category="create">Create</button>
+        <button class="pill" data-category="develop">Develop</button>
+        <button class="pill" data-category="operate">Operate</button>
+      </div>
+    </section>
+
+    <!-- Apps Scoreboard Grid -->
+    <section class="apps-grid" id="appsGrid">
+      <div class="loading-state">Scanning platform services...</div>
+    </section>
+  </main>
+
+  <!-- App Deep-Dive Modal Drawer -->
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal-drawer" id="modalDrawer">
+      <div class="modal-header">
+        <div>
+          <span class="modal-category" id="modalCategory">WORK</span>
+          <h2 class="modal-title" id="modalTitle">Nexus Docs</h2>
+          <p class="modal-sub" id="modalSub">docs.tnhc.dev</p>
+        </div>
+        <button class="modal-close" id="modalClose">✕</button>
+      </div>
+
+      <div class="modal-body" id="modalBody">
+        <!-- Populated dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="footer-container">
+      <span>The No Hands Company • Nexus Systems Autonomous Development</span>
+      <span id="lastScannedAt">Last Scan: Just now</span>
+    </div>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>
