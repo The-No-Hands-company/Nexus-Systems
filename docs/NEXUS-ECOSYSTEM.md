@@ -41,7 +41,7 @@ That gives four honest states:
 
 | Status | Meaning | Count |
 |---|---|---|
-| **Live** | Deployed and reachable on `tnhc.dev` today | 14 |
+| **Live** | Deployed and reachable on `tnhc.dev` today | 17 |
 | **Beta** | Deployed, feature-incomplete, in active use | 1 |
 | **In development** | Substantive code beyond the scaffold; not yet deployed | 25 |
 | **Scaffold** | The six-file `ghost` shape: registers with Systems-API, serves health, no domain logic | 73 |
@@ -81,6 +81,9 @@ scaffold is not a product, and this document will not call one a product.
 | `graphic.tnhc.dev` | Nexus-Graphic | `127.0.0.1:3080` | Vector graphics, illustration canvas, and Phantom SDK |
 | `photos.tnhc.dev` | Nexus-Photos | `127.0.0.1:3096` | Photo library, albums, metadata manager, and image editor |
 | `video.tnhc.dev` | Nexus-Video | `127.0.0.1:3113` | Video streaming, channel playlists, and media catalog |
+| `notes.tnhc.dev` | Nexus-Notes | `127.0.0.1:3093` | Sovereign markdown note-taking with notebooks, tags, and search |
+| `docs-app.tnhc.dev` | Nexus-Docs | `127.0.0.1:3136` | Document workspace, rich text formatting, folders, and covers |
+| `wiki.tnhc.dev` | Nexus-Wiki | `127.0.0.1:3160` | Structured team knowledge base, revision diffs, and backlinks |
 | `hosting.tnhc.dev` | Nexus-Hosting | — | Static-site hosting with presigned upload and deploy |
 | `storage.tnhc.dev` | MinIO | `:9010` | Object storage — infrastructure, not a Nexus app |
 
@@ -219,10 +222,10 @@ Every app in the ecosystem, by category, with measured status.
 
 | App | Role | Status |
 |---|---|---|
-| **Nexus-Docs** | Collaborative documents | Scaffold |
+| **Nexus-Docs** | Collaborative documents; live at docs-app.tnhc.dev | **Live** |
 | **Nexus-Office** | Office suite shell | Scaffold |
-| **Nexus-Notes** | Personal notes | Scaffold |
-| **Nexus-Wiki** | Structured internal wiki | In development |
+| **Nexus-Notes** | Personal sovereign notes; live at notes.tnhc.dev | **Live** |
+| **Nexus-Wiki** | Structured internal wiki; live at wiki.tnhc.dev | **Live** |
 | **Nexus-Tasks** | Task tracking | Scaffold |
 | **Nexus-Planner** | Project planning | Scaffold |
 | **Nexus-Calendar** | Personal/shared calendaring and public read-only links; `/calendar` and calendar.tnhc.dev | **Live** |

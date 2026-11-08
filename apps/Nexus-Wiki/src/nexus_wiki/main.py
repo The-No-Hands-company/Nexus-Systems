@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query, status
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .models import (
     HealthResponse,
@@ -15,6 +18,7 @@ from .models import (
     WikiPageListResponse,
     WikiPageRevisionListResponse,
     WikiPageUpdate,
+    now_utc,
 )
 from .store import WikiStore
 
@@ -166,7 +170,7 @@ def get_talk_page(slug: str) -> WikiPage:
 
 
 # ── User/auth (basic) ──────────────────────────────────────────
-from pydantic import BaseModel as PydanticBase
+from pydantic import BaseModel as PydanticBase, Field
 
 class UserCreate(PydanticBase):
     username: str = Field(min_length=2, max_length=50)
@@ -231,3 +235,21 @@ def register_with_nexus_cloud(payload: NexusCloudRegisterRequest) -> NexusCloudR
         upstream_status_code=response.status_code,
         upstream_body=response_body,
     )
+
+
+# ── Static SPA Serving ─────────────────────────────────────────
+
+_frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+
+if _frontend_dist.is_dir():
+    _assets_dir = _frontend_dist / "assets"
+    if _assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(_assets_dir)), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        target = _frontend_dist / full_path
+        if full_path and target.is_file():
+            return FileResponse(target)
+        return FileResponse(_frontend_dist / "index.html")
+

@@ -20,7 +20,7 @@ from .models import (
 class WikiStoreAdapter(Protocol):
     def list_pages(self) -> list[WikiPageSummary]: ...
 
-    def create_page(self, payload: WikiPageCreate) -> WikiPage: ...
+    def create_page(self, payload: WikiPageCreate, slug_override: str | None = None) -> WikiPage: ...
 
     def get_page(self, slug: str) -> WikiPage | None: ...
 
@@ -79,8 +79,8 @@ class InMemoryWikiStore:
             for page in ordered
         ]
 
-    def create_page(self, payload: WikiPageCreate) -> WikiPage:
-        slug = slugify(payload.title)
+    def create_page(self, payload: WikiPageCreate, slug_override: str | None = None) -> WikiPage:
+        slug = slug_override if slug_override else slugify(payload.title)
         if slug in self._pages:
             raise KeyError("Page already exists")
 
@@ -89,6 +89,8 @@ class InMemoryWikiStore:
             slug=slug,
             title=payload.title,
             content=payload.content,
+            category=payload.category,
+            tags=payload.tags,
             version=1,
             created_at=timestamp,
             updated_at=timestamp,
@@ -120,6 +122,10 @@ class InMemoryWikiStore:
             updated.title = payload.title
         if payload.content is not None:
             updated.content = payload.content
+        if payload.category is not None:
+            updated.category = payload.category
+        if payload.tags is not None:
+            updated.tags = payload.tags
         updated.version = page.version + 1
         updated.updated_at = now_utc()
         self._pages[slug] = updated
@@ -233,8 +239,8 @@ class PostgresWikiStore:
                 for row in rows
             ]
 
-    def create_page(self, payload: WikiPageCreate) -> WikiPage:
-        slug = slugify(payload.title)
+    def create_page(self, payload: WikiPageCreate, slug_override: str | None = None) -> WikiPage:
+        slug = slug_override if slug_override else slugify(payload.title)
         timestamp = now_utc()
 
         with self._engine.begin() as conn:
@@ -421,44 +427,6 @@ class PostgresWikiStore:
             conn.execute(text("TRUNCATE TABLE wiki_page_revisions, wiki_pages RESTART IDENTITY"))
 
 
-class WikiStore:
-    def __init__(self) -> None:
-        backend = os.getenv("NEXUS_WIKI_STORE_BACKEND", "auto").strip().lower()
-        database_url = os.getenv("DATABASE_URL", "").strip()
-
-        if backend == "postgres" or (
-            backend == "auto" and database_url.startswith("postgresql")
-        ):
-            if not database_url:
-                raise RuntimeError("DATABASE_URL is required when using PostgreSQL backend")
-            self._adapter: WikiStoreAdapter = PostgresWikiStore(database_url)
-        else:
-            self._adapter = InMemoryWikiStore()
-
-    def list_pages(self) -> list[WikiPageSummary]:
-        return self._adapter.list_pages()
-
-    def create_page(self, payload: WikiPageCreate) -> WikiPage:
-        return self._adapter.create_page(payload)
-
-    def get_page(self, slug: str) -> WikiPage | None:
-        return self._adapter.get_page(slug)
-
-    def update_page(self, slug: str, payload: WikiPageUpdate) -> WikiPage | None:
-        return self._adapter.update_page(slug, payload)
-
-    def search(self, query: str) -> list[WikiPageSummary]:
-        return self._adapter.search(query)
-
-    def list_revisions(self, slug: str) -> list[WikiPageRevision]:
-        return self._adapter.list_revisions(slug)
-
-    def ensure_ready(self) -> None:
-        self._adapter.ensure_ready()
-
-    def reset_for_tests(self) -> None:
-        self._adapter.reset_for_tests()
-
 # ── Backlink tracking ──────────────────────────────────────────
 
 class BacklinkStore:
@@ -479,7 +447,7 @@ class BacklinkStore:
                 results.append((source, title))
         return results
 
-    def rebuild(self, store: "WikiStoreAdapter"):
+    def rebuild(self, store: WikiStoreAdapter):
         self._links.clear()
         for page in store.list_pages():
             full = store.get_page(page.slug)
@@ -500,22 +468,60 @@ class InMemoryUserStore:
         return self._users.get(uid)
 
 
-# ── Extended WikiStore ─────────────────────────────────────────
+class WikiStore:
+    def __init__(self) -> None:
+        backend = os.getenv("NEXUS_WIKI_STORE_BACKEND", "auto").strip().lower()
+        database_url = os.getenv("DATABASE_URL", "").strip()
 
-_backlinks = BacklinkStore()
-_users = InMemoryUserStore()
+        if backend == "postgres" or (
+            backend == "auto" and database_url.startswith("postgresql")
+        ):
+            if not database_url:
+                raise RuntimeError("DATABASE_URL is required when using PostgreSQL backend")
+            self._adapter: WikiStoreAdapter = PostgresWikiStore(database_url)
+        else:
+            self._adapter = InMemoryWikiStore()
 
-# Monkey-patch new methods onto the WikiStore instance
-def _add_methods(store_instance):
-    def get_backlinks(slug):
-        return _backlinks.get_backlinks(slug)
-    def create_user(uid, username, pw_hash):
-        _users.create(uid, username, pw_hash)
-    def get_user(uid):
-        return _users.get(uid)
-    store_instance.get_backlinks = get_backlinks
-    store_instance.create_user = create_user
-    store_instance.get_user = get_user
-    return store_instance
+        self._backlinks = BacklinkStore()
+        self._users = InMemoryUserStore()
 
-_add_methods(store)
+    def list_pages(self) -> list[WikiPageSummary]:
+        return self._adapter.list_pages()
+
+    def create_page(self, payload: WikiPageCreate, slug_override: str | None = None) -> WikiPage:
+        page = self._adapter.create_page(payload, slug_override=slug_override)
+        self._backlinks.index_links(page.slug, page.content)
+        return page
+
+    def get_page(self, slug: str) -> WikiPage | None:
+        return self._adapter.get_page(slug)
+
+    def update_page(self, slug: str, payload: WikiPageUpdate) -> WikiPage | None:
+        page = self._adapter.update_page(slug, payload)
+        if page:
+            self._backlinks.index_links(page.slug, page.content)
+        return page
+
+    def search(self, query: str) -> list[WikiPageSummary]:
+        return self._adapter.search(query)
+
+    def list_revisions(self, slug: str) -> list[WikiPageRevision]:
+        return self._adapter.list_revisions(slug)
+
+    def ensure_ready(self) -> None:
+        self._adapter.ensure_ready()
+        self._backlinks.rebuild(self._adapter)
+
+    def reset_for_tests(self) -> None:
+        self._adapter.reset_for_tests()
+        self._backlinks = BacklinkStore()
+        self._users = InMemoryUserStore()
+
+    def get_backlinks(self, slug: str) -> list[tuple[str, str]]:
+        return self._backlinks.get_backlinks(slug)
+
+    def create_user(self, uid: str, username: str, pw_hash: str) -> None:
+        self._users.create(uid, username, pw_hash)
+
+    def get_user(self, uid: str) -> dict | None:
+        return self._users.get(uid)

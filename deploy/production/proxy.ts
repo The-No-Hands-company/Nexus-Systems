@@ -92,6 +92,9 @@ const FALLBACK_DESIGN_UPSTREAM = process.env.DESIGN_UPSTREAM || "http://127.0.0.
 const FALLBACK_GRAPHIC_UPSTREAM = process.env.GRAPHIC_UPSTREAM || "http://127.0.0.1:3080";
 const FALLBACK_PHOTOS_UPSTREAM = process.env.PHOTOS_UPSTREAM || "http://127.0.0.1:3096";
 const FALLBACK_VIDEO_UPSTREAM = process.env.VIDEO_UPSTREAM || "http://127.0.0.1:3113";
+const FALLBACK_NOTES_UPSTREAM = process.env.NOTES_UPSTREAM || "http://127.0.0.1:3093";
+const FALLBACK_DOCS_UPSTREAM = process.env.DOCS_UPSTREAM || "http://127.0.0.1:3136";
+const FALLBACK_WIKI_UPSTREAM = process.env.WIKI_UPSTREAM || "http://127.0.0.1:3160";
 // deploy.<DOMAIN> is Nexus Deploy's control plane: its dashboard, its API and the
 // push-to-deploy webhook. The apps it runs are NOT here; they are reached on
 // their own hostnames through Cloud's routes.
@@ -809,6 +812,15 @@ async function handleRequestInner(
         fixedKind = "app";
       } else if (host === `video.${DOMAIN}` || host === `www.video.${DOMAIN}`) {
         upstreamUrl = FALLBACK_VIDEO_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `notes.${DOMAIN}` || host === `www.notes.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_NOTES_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `docs-app.${DOMAIN}` || host === `www.docs-app.${DOMAIN}` || host === `docs.${DOMAIN}` || host === `www.docs.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_DOCS_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `wiki.${DOMAIN}` || host === `www.wiki.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_WIKI_UPSTREAM;
         fixedKind = "app";
       } else if (host === `mail.${DOMAIN}` || host === `www.mail.${DOMAIN}`) {
         upstreamUrl = FALLBACK_DASHBOARD_UPSTREAM;

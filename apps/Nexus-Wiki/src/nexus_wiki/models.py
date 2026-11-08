@@ -25,6 +25,8 @@ class WikiPageUpdate(BaseModel):
     content: str | None = Field(default=None, min_length=1)
     editor_id: str | None = Field(default=None, min_length=1, max_length=120)
     change_summary: str | None = Field(default=None, min_length=1, max_length=500)
+    category: str | None = Field(default=None, max_length=100)
+    tags: list[str] | None = Field(default=None)
 
 
 class WikiPage(BaseModel):

@@ -198,14 +198,14 @@ export default function App() {
                       </ul>
                     </div>
                   )}
-                  <div className="prose max-w-none leading-relaxed" dangerouslySetInnerHTML={{ __html }} />
+                  <div className="prose max-w-none leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
                 </>
               ); })()}
             </div>
           )}
 
           {/* ── EDIT ── */}
-          {view === "edit" && <Editor slug={slug} page={page} user={user} onSave={s => openPage(s)} onCancel={() => slug ? openPage(slug) : goBrowse()} />}
+          {view === "edit" && <Editor slug={slug} page={page} user={user} onSave={(s: string) => openPage(s)} onCancel={() => slug ? openPage(slug) : goBrowse()} />}
 
           {/* ── HISTORY ── */}
           {view === "history" && (

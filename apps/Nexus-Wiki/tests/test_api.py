@@ -159,3 +159,78 @@ def test_register_with_nexus_cloud_upstream_failure(monkeypatch: pytest.MonkeyPa
         },
     )
     assert response.status_code == 502
+
+
+def test_categories_and_backlinks() -> None:
+    # Create page A linking to B
+    client.post(
+        "/api/v1/pages",
+        json={"title": "Page A", "content": "Welcome to [[Page B]] and more info.", "category": "General"},
+    )
+    # Create page B
+    client.post(
+        "/api/v1/pages",
+        json={"title": "Page B", "content": "This is page B content.", "category": "General"},
+    )
+
+    # Check categories
+    cat_res = client.get("/api/v1/categories")
+    assert cat_res.status_code == 200
+    cats = cat_res.json()["categories"]
+    assert any(c["name"] == "General" and c["count"] == 2 for c in cats)
+
+    # Check backlinks for page B
+    links_res = client.get("/api/v1/pages/page-b/links")
+    assert links_res.status_code == 200
+    links = links_res.json()["backlinks"]
+    assert any(l["slug"] == "page-a" for l in links)
+
+
+def test_diff_versions() -> None:
+    client.post(
+        "/api/v1/pages",
+        json={"title": "Diff Target", "content": "Line 1\nLine 2"},
+    )
+    client.patch(
+        "/api/v1/pages/diff-target",
+        json={"content": "Line 1\nLine 2 modified\nLine 3"},
+    )
+
+    diff_res = client.get("/api/v1/diff/diff-target?v1=2&v2=1")
+    assert diff_res.status_code == 200
+    diff = diff_res.json()
+    assert diff["v1"] == 2
+    assert diff["v2"] == 1
+    assert len(diff["diff"]) > 0
+
+
+def test_talk_pages() -> None:
+    # Initial talk page placeholder
+    res = client.get("/api/v1/pages/diff-target/talk")
+    assert res.status_code == 200
+    assert "No discussions yet" in res.json()["content"]
+
+    # Post talk
+    create_res = client.post(
+        "/api/v1/pages/diff-target/talk",
+        json={"title": "diff-target", "content": "Can we improve line 2?"},
+    )
+    assert create_res.status_code == 200
+
+    # Get talk page again
+    res2 = client.get("/api/v1/pages/diff-target/talk")
+    assert res2.status_code == 200
+    assert "Can we improve line 2?" in res2.json()["content"]
+
+
+def test_auth_register_and_login() -> None:
+    reg = client.post("/api/v1/auth/register", json={"username": "alice", "password": "password123"})
+    assert reg.status_code == 200
+    assert reg.json()["username"] == "alice"
+
+    login_ok = client.post("/api/v1/auth/login", json={"username": "alice", "password": "password123"})
+    assert login_ok.status_code == 200
+
+    login_bad = client.post("/api/v1/auth/login", json={"username": "alice", "password": "wrongpassword"})
+    assert login_bad.status_code == 401
+
