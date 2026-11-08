@@ -128,6 +128,16 @@ export default function UserMenu({ user }: UserMenuProps) {
               <span className="text-xs text-zinc-500">Manage</span>
             </Link>
 
+            <Link
+              to="/docs"
+              onClick={() => setOpen(false)}
+              role="menuitem"
+              className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-900 hover:text-white"
+            >
+              <span>Platform Docs</span>
+              <span className="text-xs text-zinc-500">Guides</span>
+            </Link>
+
             {isOperator && (
               <Link
                 to="/admin"

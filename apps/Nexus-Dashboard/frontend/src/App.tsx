@@ -21,6 +21,7 @@ import CalendarView from "./pages/calendar/CalendarView";
 import ReportIssue from "./pages/ReportIssue";
 import TerminalAccess, { type UserState } from "./pages/terminal/TerminalAccess";
 import NodeOperators from "./pages/NodeOperators";
+import Docs from "./pages/Docs";
 
 /**
  * The app list has three states, not two: while it is loading, "not found"
@@ -314,6 +315,14 @@ export default function App() {
           element={
             <ShellView state={appsState} user={user}>
               <NodeOperators />
+            </ShellView>
+          }
+        />
+        <Route
+          path="/docs"
+          element={
+            <ShellView state={appsState} user={user}>
+              <Docs />
             </ShellView>
           }
         />

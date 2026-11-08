@@ -251,6 +251,13 @@ export default function Shell({
             wherever someone hits a problem.
           */}
           <div className="flex flex-row sm:mt-auto sm:w-full sm:flex-col sm:items-center sm:border-t sm:border-zinc-700 sm:pt-2">
+            <Link to="/docs" aria-label="Platform Documentation" title="Platform Documentation" className={railItem}>
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 4a2 2 0 0 1 2-2h11a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V4z" />
+                <path d="M7 6h6M7 10h6M7 14h4" />
+              </svg>
+              Docs
+            </Link>
             <Link to="/report" aria-label="Report a problem" title="Report a problem" className={railItem}>
               <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M4 3v14" />
