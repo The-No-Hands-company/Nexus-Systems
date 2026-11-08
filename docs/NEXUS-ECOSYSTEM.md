@@ -73,6 +73,7 @@ scaffold is not a product, and this document will not call one a product.
 | `chat.tnhc.dev` | Nexus | `127.0.0.1:3109` | Rust chat runtime, served via Caddy on `:8095` |
 | `cloud.tnhc.dev` | Nexus-Cloud | `127.0.0.1:8787` | Control plane and app registry |
 | `deploy.tnhc.dev` | Nexus-Deploy | `127.0.0.1:8096` | Push-to-deploy platform with rootless sandboxing and Railpack builders |
+| `mail.tnhc.dev` | Nexus-Email | `127.0.0.1:3132` | Sovereign mail interface, served as a standalone app |
 | `calendar.tnhc.dev` | Nexus-Calendar | `127.0.0.1:8092` | Shared calendar with events, reminders, and views |
 | `project.tnhc.dev` | Nexus-Project | `127.0.0.1:8093` | Project management boards, WBS, dependencies, and schedules |
 | `draw.tnhc.dev` | Nexus-Draw | `127.0.0.1:8090` | Whiteboard, served as a Nexus-Hosting static site |
