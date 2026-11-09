@@ -1,6 +1,18 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { sendMail, type OutgoingAttachment, type SendOutcome } from "../../api";
+import { sendMail, listUsers, type OutgoingAttachment, type SendOutcome } from "../../api";
+
+interface Contact {
+  name: string;
+  email: string;
+  role?: string;
+}
+
+const DEFAULT_CONTACTS: Contact[] = [
+  { name: "Support Team", email: "support@tnhc.dev" },
+  { name: "Platform Operator", email: "operator@tnhc.dev" },
+  { name: "Platform Founder", email: "founder@tnhc.dev" },
+];
 
 /// Read a file as base64 without the data: prefix the reader adds.
 function readAsBase64(file: File): Promise<OutgoingAttachment> {
@@ -45,6 +57,57 @@ export default function MailCompose() {
   const [error, setError] = useState<string | null>(null);
   const [outcomes, setOutcomes] = useState<SendOutcome[] | null>(null);
   const editorRef = useRef<HTMLDivElement>(null);
+  const [contacts, setContacts] = useState<Contact[]>(DEFAULT_CONTACTS);
+  const [activeSuggestField, setActiveSuggestField] = useState<"to" | "cc" | "bcc" | null>(null);
+
+  useEffect(() => {
+    void listUsers()
+      .then((users) => {
+        const directoryContacts: Contact[] = users
+          .filter((u) => u.email)
+          .map((u) => ({
+            name: u.username,
+            email: u.email,
+            role: u.role,
+          }));
+        setContacts((prev) => {
+          const map = new Map<string, Contact>();
+          for (const c of [...prev, ...directoryContacts]) {
+            map.set(c.email.toLowerCase(), c);
+          }
+          return Array.from(map.values());
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  function getQueryForField(value: string): string {
+    const parts = value.split(",");
+    return (parts[parts.length - 1] || "").trim().toLowerCase();
+  }
+
+  function getFilteredContacts(value: string): Contact[] {
+    const query = getQueryForField(value);
+    if (!query) return [];
+    return contacts
+      .filter((c) => c.email.toLowerCase().includes(query) || c.name.toLowerCase().includes(query))
+      .slice(0, 6);
+  }
+
+  function applyContact(
+    field: "to" | "cc" | "bcc",
+    contactEmail: string,
+    currentValue: string,
+  ) {
+    const parts = currentValue.split(",").map((s) => s.trim()).filter(Boolean);
+    parts.pop();
+    parts.push(contactEmail);
+    const newValue = parts.join(", ") + ", ";
+    if (field === "to") setTo(newValue);
+    if (field === "cc") setCc(newValue);
+    if (field === "bcc") setBcc(newValue);
+    setActiveSuggestField(null);
+  }
 
   // Initialize editor content from reply quote if present
   useEffect(() => {
@@ -163,37 +226,109 @@ export default function MailCompose() {
       </div>
 
       <form onSubmit={submit} className="space-y-4">
-        <label className="block">
-          <span className="text-xs uppercase tracking-wide text-zinc-500">To</span>
-          <input
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            placeholder="someone@tnhc.dev, other@example.com"
-            className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-accent focus:outline-none"
-          />
-        </label>
+        <div className="relative block">
+          <label className="block">
+            <span className="text-xs uppercase tracking-wide text-zinc-500">To</span>
+            <input
+              value={to}
+              onChange={(e) => {
+                setTo(e.target.value);
+                setActiveSuggestField("to");
+              }}
+              onFocus={() => setActiveSuggestField("to")}
+              onBlur={() => setTimeout(() => setActiveSuggestField(null), 200)}
+              placeholder="someone@tnhc.dev, other@example.com"
+              className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-accent focus:outline-none"
+            />
+          </label>
+          {activeSuggestField === "to" && getFilteredContacts(to).length > 0 && (
+            <ul className="absolute z-20 left-0 right-0 mt-1 max-h-48 overflow-auto rounded-md border border-zinc-700 bg-zinc-950 p-1 shadow-xl">
+              {getFilteredContacts(to).map((c) => (
+                <li
+                  key={c.email}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    applyContact("to", c.email, to);
+                  }}
+                  className="cursor-pointer rounded px-2.5 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center justify-between"
+                >
+                  <span className="font-medium">{c.name} &lt;{c.email}&gt;</span>
+                  {c.role && <span className="text-[10px] uppercase text-zinc-500">{c.role}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         {showCcBcc && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="block">
-              <span className="text-xs uppercase tracking-wide text-zinc-500">CC</span>
-              <input
-                value={cc}
-                onChange={(e) => setCc(e.target.value)}
-                placeholder="cc@example.com"
-                className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-accent focus:outline-none"
-              />
-            </label>
+            <div className="relative block">
+              <label className="block">
+                <span className="text-xs uppercase tracking-wide text-zinc-500">CC</span>
+                <input
+                  value={cc}
+                  onChange={(e) => {
+                    setCc(e.target.value);
+                    setActiveSuggestField("cc");
+                  }}
+                  onFocus={() => setActiveSuggestField("cc")}
+                  onBlur={() => setTimeout(() => setActiveSuggestField(null), 200)}
+                  placeholder="cc@example.com"
+                  className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-accent focus:outline-none"
+                />
+              </label>
+              {activeSuggestField === "cc" && getFilteredContacts(cc).length > 0 && (
+                <ul className="absolute z-20 left-0 right-0 mt-1 max-h-48 overflow-auto rounded-md border border-zinc-700 bg-zinc-950 p-1 shadow-xl">
+                  {getFilteredContacts(cc).map((c) => (
+                    <li
+                      key={c.email}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        applyContact("cc", c.email, cc);
+                      }}
+                      className="cursor-pointer rounded px-2.5 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center justify-between"
+                    >
+                      <span className="font-medium">{c.name} &lt;{c.email}&gt;</span>
+                      {c.role && <span className="text-[10px] uppercase text-zinc-500">{c.role}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
-            <label className="block">
-              <span className="text-xs uppercase tracking-wide text-zinc-500">BCC</span>
-              <input
-                value={bcc}
-                onChange={(e) => setBcc(e.target.value)}
-                placeholder="bcc@example.com"
-                className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-accent focus:outline-none"
-              />
-            </label>
+            <div className="relative block">
+              <label className="block">
+                <span className="text-xs uppercase tracking-wide text-zinc-500">BCC</span>
+                <input
+                  value={bcc}
+                  onChange={(e) => {
+                    setBcc(e.target.value);
+                    setActiveSuggestField("bcc");
+                  }}
+                  onFocus={() => setActiveSuggestField("bcc")}
+                  onBlur={() => setTimeout(() => setActiveSuggestField(null), 200)}
+                  placeholder="bcc@example.com"
+                  className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-accent focus:outline-none"
+                />
+              </label>
+              {activeSuggestField === "bcc" && getFilteredContacts(bcc).length > 0 && (
+                <ul className="absolute z-20 left-0 right-0 mt-1 max-h-48 overflow-auto rounded-md border border-zinc-700 bg-zinc-950 p-1 shadow-xl">
+                  {getFilteredContacts(bcc).map((c) => (
+                    <li
+                      key={c.email}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        applyContact("bcc", c.email, bcc);
+                      }}
+                      className="cursor-pointer rounded px-2.5 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center justify-between"
+                    >
+                      <span className="font-medium">{c.name} &lt;{c.email}&gt;</span>
+                      {c.role && <span className="text-[10px] uppercase text-zinc-500">{c.role}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         )}
 

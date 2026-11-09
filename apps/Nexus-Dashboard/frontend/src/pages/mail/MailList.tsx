@@ -332,23 +332,45 @@ export default function MailList() {
             draftQuery.includes("has:attachment") ? "bg-accent text-accent-foreground font-semibold" : "bg-zinc-800/80 text-zinc-400 hover:text-zinc-200"
           }`}
         >
-          📎 Has attachment
+          📎 has:attachment
         </button>
         <button
           type="button"
           onClick={() => {
-            const promptVal = prompt("Enter sender email to filter (e.g. alice@tnhc.dev):");
-            if (promptVal) {
-              const next = new URLSearchParams(params);
-              const token = `from:${promptVal.trim()}`;
-              setDraftQuery(token);
-              next.set("q", token);
-              setParams(next);
-            }
+            const next = new URLSearchParams(params);
+            const token = "from:operator";
+            const currentQ = draftQuery.includes(token)
+              ? draftQuery.replace(token, "").trim()
+              : `${draftQuery} ${token}`.trim();
+            setDraftQuery(currentQ);
+            if (currentQ) next.set("q", currentQ);
+            else next.delete("q");
+            setParams(next);
           }}
-          className="rounded-full bg-zinc-800/80 px-2.5 py-1 text-zinc-400 hover:text-zinc-200 transition-colors"
+          className={`rounded-full px-2.5 py-1 transition-colors ${
+            draftQuery.includes("from:operator") ? "bg-accent text-accent-foreground font-semibold" : "bg-zinc-800/80 text-zinc-400 hover:text-zinc-200"
+          }`}
         >
-          👤 from:
+          👤 from:operator
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const next = new URLSearchParams(params);
+            const token = "from:founder";
+            const currentQ = draftQuery.includes(token)
+              ? draftQuery.replace(token, "").trim()
+              : `${draftQuery} ${token}`.trim();
+            setDraftQuery(currentQ);
+            if (currentQ) next.set("q", currentQ);
+            else next.delete("q");
+            setParams(next);
+          }}
+          className={`rounded-full px-2.5 py-1 transition-colors ${
+            draftQuery.includes("from:founder") ? "bg-accent text-accent-foreground font-semibold" : "bg-zinc-800/80 text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          👑 from:founder
         </button>
         <button
           type="button"

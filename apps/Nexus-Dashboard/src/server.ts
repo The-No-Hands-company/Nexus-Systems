@@ -223,12 +223,46 @@ async function proxyToMail(req: Request, rest: string, search: string): Promise<
     const target = platform
       ? `${platform}/api/v1/mail/${rest}${search}`
       : `${mailUrl()}/api/v1/${rest}${search}`;
-    const res = await fetch(target, {
+    const reqBodyText = method === "POST" ? await req.text() : undefined;
+    let res = await fetch(target, {
       method,
       headers,
-      body: method === "POST" ? await req.text() : undefined,
+      body: reqBodyText,
       signal: AbortSignal.timeout(10000),
     });
+
+    // Auto-heal: if 404 with "no mailbox", trigger internal provision and retry once
+    if (res.status === 404 && who?.subject) {
+      try {
+        const cloned = res.clone();
+        const errJson = (await cloned.json().catch(() => ({}))) as { error?: string };
+        if (errJson.error === "no mailbox for this account") {
+          const sysToken = process.env.NEXUS_EMAIL_SYSTEM_MAIL_TOKEN?.trim();
+          const provHeaders: Record<string, string> = { "content-type": "application/json" };
+          if (sysToken) provHeaders.authorization = `Bearer ${sysToken}`;
+          const provRes = await fetch(`${mailUrl()}/internal/v1/mailboxes/provision`, {
+            method: "POST",
+            headers: provHeaders,
+            body: JSON.stringify({
+              subject: who.subject,
+              username: who.username,
+              email: who.email,
+            }),
+            signal: AbortSignal.timeout(5000),
+          });
+          if (provRes.ok) {
+            res = await fetch(target, {
+              method,
+              headers,
+              body: reqBodyText,
+              signal: AbortSignal.timeout(10000),
+            });
+          }
+        }
+      } catch {
+        // Fall back to original response
+      }
+    }
     // Attachments come back as bytes with headers that matter — the
     // Content-Disposition that forces a download and the nosniff that stops
     // the browser guessing a type. Passing the body through as text would
