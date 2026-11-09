@@ -8,6 +8,7 @@ import { privacyStatusBody } from "./privacy-status";
 import { canaryStatusBody } from "./warrant-canary";
 import { stripAddressHeaders, tagFromRequestHeaders, CLIENT_TAG_HEADER } from "./client-tag";
 import { renderMaintenancePage } from "./maintenance-page";
+import { renderStatusPage } from "./status-page";
 
 // Configuration
 const PORT = Number(process.env.PROXY_PORT || "80");
@@ -608,11 +609,31 @@ async function handleRequestInner(
     // reads it). Answered here, ungated, from a fixed file — no request input
     // reaches the filesystem.
     if (host === `status.${DOMAIN}`) {
-      const allowed = ["/privacy.json", "/canary.json"];
+      const allowed = ["/", "", "/privacy.json", "/canary.json"];
       if (!allowed.includes(url.pathname)) return new Response("Not found", { status: 404 });
       const cors = { "access-control-allow-origin": "https://tnhc.dev", vary: "origin" };
       if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...cors, "access-control-allow-methods": "GET, HEAD" } });
       if (req.method !== "GET" && req.method !== "HEAD") return new Response("Method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
+
+      if (url.pathname === "/" || url.pathname === "") {
+        const canary = await canaryStatusBody();
+        const privacy = await privacyStatusBody();
+        const html = renderStatusPage({
+          domain: DOMAIN,
+          updatedAt: new Date().toISOString().replace("T", " ").replace(/\.\d+Z$/, ""),
+          privacyVerdict: privacy.verdict || "pass",
+          canaryActive: canary.active !== false,
+          canaryExpiresAt: canary.expiresAt,
+        });
+        return new Response(req.method === "HEAD" ? null : html, {
+          status: 200,
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "public, max-age=60",
+          },
+        });
+      }
+
       const isCanary = url.pathname === "/canary.json";
       const payload = isCanary ? await canaryStatusBody() : await privacyStatusBody();
       const body = JSON.stringify(payload);

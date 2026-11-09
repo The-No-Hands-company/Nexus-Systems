@@ -1,6 +1,7 @@
-import { Link, Navigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import type { AppEntry } from "../api";
 import { appById } from "./apps";
+import GuidedTutorial from "./GuidedTutorial";
 
 /**
  * Add the embed flag to an app's URL.
@@ -18,10 +19,14 @@ export function embedUrl(url: string): string {
 /**
  * Mounts an app inside the shell.
  *
- * External apps (Chat, Deploy, Hosting, Draw, Project, Calendar) are standalone
- * SPAs on their own origins. They are launched in independent browser tabs
- * rather than in an iframe to avoid duplicate renderer threads, GPU context
- * exhaustion, and memory spikes on low-end hardware.
+ * When an app is opened, AppFrame presents the comprehensive App Launchpad
+ * and Interactive Guided Tutorial. Users immediately see:
+ * 1. What the app does and why/when to use it
+ * 2. 3-step interactive quick start walkthrough
+ * 3. Key capabilities and architecture badges
+ * 4. Keyboard shortcuts and pro-tips
+ * 5. Direct launch action to open the standalone app in a separate tab
+ * 6. Deep link to complete documentation in the Platform Docs Hub
  */
 export default function AppFrame({ apps, appId }: { apps: AppEntry[]; appId: string }) {
   if (appId === "nexus-docs-hub" || appId === "docs") {
@@ -45,43 +50,16 @@ export default function AppFrame({ apps, appId }: { apps: AppEntry[]; appId: str
     );
   }
 
-  // Any app with a public URL runs on its own origin as a standalone app.
-  // We NEVER embed third-party or sub-apps in iframes to prevent massive CPU/RAM spikes
-  // on low-end hardware.
+  // Apps with a publicUrl open their full Launchpad & Guided Tutorial
   if (app.publicUrl) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-800/80 border border-zinc-700/60 shadow-xl">
-          <span className="text-xl font-bold text-zinc-100">{app.name.slice(0, 2).toUpperCase()}</span>
-        </div>
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-100">{app.name}</h1>
-          {app.description && (
-            <p className="mt-1.5 max-w-md text-sm text-zinc-400">{app.description}</p>
-          )}
-        </div>
-        <div className="mt-2 flex items-center gap-3">
-          <a
-            href={app.publicUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground shadow-md transition-transform hover:scale-105 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            Launch {app.name} ↗
-          </a>
-          <Link
-            to="/"
-            className="rounded-lg border border-zinc-700 px-4 py-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            Dashboard
-          </Link>
-        </div>
+      <div className="h-full overflow-y-auto">
+        <GuidedTutorial app={app} />
       </div>
     );
   }
 
-  // Shell-native apps live as React components inside this SPA, not as
-  // standalone pages. Show a status page if not directly navigated.
+  // Shell-native apps without a dedicated public URL show status badge
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
       <p className="text-lg font-semibold text-zinc-100">{app.name}</p>

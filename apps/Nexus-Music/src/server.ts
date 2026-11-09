@@ -29,7 +29,7 @@ export async function createServer() {
       const path = url.pathname || "";
 
       if (request.method === "GET" && path === "/health") {
-        return json({ service: "nexus-music", status: "ok", version: "v1", uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000), timestamp: new Date().toISOString() }, 200);
+        return json({ service: "nexus-music", status: "ok", version: "v1", uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000), timestamp: new Date().toISOString(), phantom: phantom.status() }, 200);
       }
       if (request.method === "GET" && path === "/api/v1/status") {
         return json({ service: "nexus-music", status: "ready", capabilities: ["daw", "music", "collaboration"], cloudIntegration: { enabled: (process.env["NEXUS_MUSIC_ENABLE_CLOUD_INTEGRATION"] || "true") !== "false", cloudUrl: process.env.NEXUS_CLOUD_URL || "http://localhost:8787" }, phantom: phantom.status() }, 200);

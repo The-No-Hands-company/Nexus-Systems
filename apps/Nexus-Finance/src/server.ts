@@ -21,7 +21,12 @@ export async function createServer() {
     port,
     async fetch(req) {
       const url = new URL(req.url); const p = url.pathname || "";
-      if (req.method === "GET" && p === "/health") return json({ service: "nexus-finance", status: "ok", version: "v1", uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) });
+      if (req.method === "GET" && p === "/health") {
+        return json({ service: "nexus-finance", status: "ok", version: "v1", uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000), phantom: phantom.status() });
+      }
+      if (req.method === "GET" && p === "/api/v1/status") {
+        return json({ service: "nexus-finance", status: "ready", capabilities: ["expenses", "budgets", "accounting"], phantom: phantom.status() });
+      }
       if (req.method === "POST" && p === "/api/v1/finance/expenses") { const b = await req.json().catch(()=>({})) as any; if (!b.userId || !b.amount) return json({ error: "userId and amount required" }, 400); return json(engine.addExpense({ userId: b.userId, amount: b.amount, category: b.category, description: b.description, date: b.date }), 201); }
 if (req.method === "GET" && p === "/api/v1/finance/expenses") { const uid = url.searchParams.get("userId") || "default"; return json({ expenses: engine.listExpenses(uid), summary: engine.getSummary(uid) }); }
       return json({ error: "not found" }, 404);

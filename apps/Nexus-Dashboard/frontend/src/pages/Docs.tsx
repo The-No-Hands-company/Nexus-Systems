@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
+import { APP_GUIDES } from "../shell/appGuides";
 
 type DocSection = {
   id: string;
@@ -14,7 +15,7 @@ type DocSection = {
   links?: { label: string; url: string; external?: boolean }[];
 };
 
-const DOC_SECTIONS: DocSection[] = [
+const BASE_DOC_SECTIONS: DocSection[] = [
   {
     id: "overview",
     category: "Architecture",
@@ -278,6 +279,26 @@ const { user } = await res.json();`
     ]
   }
 ];
+
+const APP_DOC_SECTIONS: DocSection[] = Object.values(APP_GUIDES).map((guide) => ({
+  id: guide.docSectionId,
+  category: guide.category,
+  title: `${guide.name} — Architecture & User Guide`,
+  description: guide.tagline,
+  content: [
+    `What it is: ${guide.whatIsIt}`,
+    `When to use: ${guide.whenToUse}`,
+    `Core Capabilities: ${guide.topCapabilities.map((c) => `${c.title} (${c.desc})`).join(" • ")}.`,
+    `Quick Start Walkthrough: Step 1: ${guide.tutorialSteps[0]?.title} — ${guide.tutorialSteps[0]?.description}. Step 2: ${guide.tutorialSteps[1]?.title} — ${guide.tutorialSteps[1]?.description}. Step 3: ${guide.tutorialSteps[2]?.title} — ${guide.tutorialSteps[2]?.description}.`,
+    ...(guide.proTips.length > 0 ? [`Power User Tips: ${guide.proTips.join(" ")}`] : []),
+  ],
+  links: [
+    { label: `Open ${guide.name} Launchpad & Tutorial`, url: `/${guide.id.replace(/^nexus-/, "")}`, external: false },
+    { label: "Status & Uptime", url: "https://status.tnhc.dev", external: true },
+  ],
+}));
+
+const DOC_SECTIONS: DocSection[] = [...BASE_DOC_SECTIONS, ...APP_DOC_SECTIONS];
 
 export default function Docs() {
   const [activeCategory, setActiveCategory] = useState<string>("All");
