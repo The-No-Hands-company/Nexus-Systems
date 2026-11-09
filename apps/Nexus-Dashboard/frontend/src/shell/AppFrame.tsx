@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import type { AppEntry } from "../api";
 import { appById } from "./apps";
 
@@ -24,7 +24,15 @@ export function embedUrl(url: string): string {
  * exhaustion, and memory spikes on low-end hardware.
  */
 export default function AppFrame({ apps, appId }: { apps: AppEntry[]; appId: string }) {
+  if (appId === "nexus-docs-hub" || appId === "docs") {
+    return <Navigate to="/docs" replace />;
+  }
+
   const app = appById(apps, appId);
+
+  if (app?.path === "/docs") {
+    return <Navigate to="/docs" replace />;
+  }
 
   if (!app) {
     return (

@@ -476,14 +476,9 @@ export const REGISTERED_APPS: AppDefinition[] = [
       { id: "profile-dropdown", name: "Profile Area & Quick Actions", done: true, description: "Avatar button opening profile drawer, active account info, and Logout." },
       { id: "global-search", name: "Global Search (Cmd+K)", done: true, description: "Search across all apps, documents, notes, and tasks in one place." },
       { id: "docs-hub", name: "Platform Documentation Hub", done: true, description: "Built-in guides, architecture diagrams, and API docs accessible in-shell." },
-      { id: "notification-center", name: "Notification Center", done: false, description: "Unified notification bell aggregating alerts from Mail, Chat, Project, and Deploy." },
+      { id: "notification-center", name: "Notification Center", done: true, description: "Unified notification bell aggregating alerts from Mail, Chat, Project, and Deploy." },
     ],
-    roadmap: [
-      "Build profile dropdown with avatar, user info, theme switcher, and Logout button",
-      "Implement Cmd+K global search modal across apps and content",
-      "Add Platform Documentation Hub view in sidebar",
-      "Add notification center drawer with cross-app alert badges",
-    ],
+    roadmap: [],
   },
   {
     id: "nexus-forge",

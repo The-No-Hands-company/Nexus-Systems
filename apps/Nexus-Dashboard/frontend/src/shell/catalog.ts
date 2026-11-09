@@ -71,8 +71,19 @@ function safePublicUrl(value: string): boolean {
   }
 }
 
+const EXCLUDED_LAUNCHER_IDS = new Set([
+  "nexus-portal",
+  "portal",
+  "nexus-guardian",
+  "nexus-edge",
+  "nexus-docs-portal",
+  "nexus-docs-hub",
+]);
+
 /** The same fail-closed projection used by every ordinary app surface. */
 export function isLauncherApp(app: AppEntry): boolean {
+  if (EXCLUDED_LAUNCHER_IDS.has(app.id.toLowerCase())) return false;
+  if (app.path === "/docs" || app.path === "/portal" || app.path === "/guardian" || app.path === "/edge") return false;
   const destinationValid = app.publicUrl === undefined
     ? app.delivery === "shell-native"
     : typeof app.publicUrl === "string" && safePublicUrl(app.publicUrl);

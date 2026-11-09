@@ -255,6 +255,21 @@ export function toAppEntries(payload: unknown, authHost: string, selfHost?: stri
     // that goes where you already are.
     if (parsedPublicUrl?.hostname === authHost) continue;
     if (selfHost && parsedPublicUrl?.hostname === selfHost) continue;
+
+    // Exclude marketing portal and non-workspace internal platform daemons/services from user launcher
+    const EXCLUDED_APP_IDS = new Set([
+      "nexus-portal",
+      "portal",
+      "nexus-guardian",
+      "nexus-edge",
+      "nexus-docs-portal",
+      "nexus-docs-hub",
+    ]);
+    if (EXCLUDED_APP_IDS.has(id.toLowerCase())) continue;
+    if (path === "/docs" || path === "/portal" || path === "/guardian" || path === "/edge") continue;
+    if (parsedPublicUrl?.hostname === "tnhc.dev" && (parsedPublicUrl.pathname === "/" || parsedPublicUrl.pathname === "/portal")) continue;
+    if (parsedPublicUrl?.hostname === "edge.tnhc.dev" || parsedPublicUrl?.hostname === "guardian.tnhc.dev") continue;
+
     // One tile per destination. Several tools can legitimately share a public
     // address — a published site and the backend behind it are two records
     // pointing at one host — and the person looking at the grid does not care

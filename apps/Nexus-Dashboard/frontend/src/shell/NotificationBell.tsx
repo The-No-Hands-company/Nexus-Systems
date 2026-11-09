@@ -28,6 +28,7 @@ export default function NotificationBell() {
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Notification[] | null>(null);
+  const [filter, setFilter] = useState<"all" | "deploy" | "mail" | "system">("all");
   const navigate = useNavigate();
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -96,6 +97,15 @@ export default function NotificationBell() {
 
   const label = unread > 0 ? `Notifications, ${unread} unread` : "Notifications";
 
+  const displayedItems = (items ?? []).filter((item) => {
+    if (filter === "all") return true;
+    const ev = item.event.toLowerCase();
+    if (filter === "deploy") return ev.includes("deploy") || ev.includes("site") || ev.includes("hosting");
+    if (filter === "mail") return ev.includes("mail") || ev.includes("email");
+    if (filter === "system") return !ev.includes("deploy") && !ev.includes("site") && !ev.includes("mail");
+    return true;
+  });
+
   return (
     <div ref={rootRef} className="relative">
       <button
@@ -125,54 +135,106 @@ export default function NotificationBell() {
         <div
           role="dialog"
           aria-label="Notifications"
-          className="absolute right-0 z-20 mt-2 w-96 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl"
+          className="absolute right-0 z-20 mt-2 w-96 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl backdrop-blur-md"
         >
-          <div className="flex items-center justify-between border-b border-zinc-700 px-3 py-2">
-            <span className="text-sm font-medium text-zinc-100">Notifications</span>
+          <div className="flex items-center justify-between border-b border-zinc-700/80 px-3.5 py-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-zinc-100">Notifications</span>
+              {unread > 0 && (
+                <span className="rounded-full bg-emerald-950 border border-emerald-800/60 px-2 py-0.5 text-[0.65rem] font-medium text-emerald-400">
+                  {unread} unread
+                </span>
+              )}
+            </div>
             {unread > 0 && (
               <button
                 type="button"
                 onClick={readAll}
-                className="rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
+                className="rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
               >
                 Mark all read
               </button>
             )}
           </div>
 
-          <ul className="max-h-96 overflow-y-auto">
-            {items === null && <li className="px-3 py-6 text-center text-sm text-zinc-500">Loading…</li>}
-            {items?.length === 0 && (
-              <li className="px-3 py-6 text-center text-sm text-zinc-500">Nothing yet.</li>
-            )}
-            {items?.map((n) => (
-              <li key={n.id} className="border-b border-zinc-800 last:border-b-0">
-                <button
-                  type="button"
-                  onClick={() => openOne(n)}
-                  className="flex w-full gap-2 px-3 py-2 text-left hover:bg-zinc-800"
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.readAt ? "bg-transparent" : "bg-emerald-500"}`}
-                  />
-                  <span className="min-w-0">
-                    <span className={`block text-sm ${n.readAt ? "text-zinc-500" : "text-zinc-100"}`}>
-                      {n.title}
-                    </span>
-                    {n.body && <span className="block truncate text-xs text-zinc-500">{n.body}</span>}
-                    <time dateTime={n.createdAt} className="block text-xs text-zinc-600">
-                      {relative(n.createdAt)}
-                    </time>
-                  </span>
-                </button>
-              </li>
+          {/* Cross-App Filter Tabs */}
+          <div className="flex items-center gap-1 border-b border-zinc-800 bg-zinc-950/40 px-3 py-1.5 text-xs">
+            {(["all", "deploy", "mail", "system"] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setFilter(tab)}
+                className={`rounded px-2.5 py-1 capitalize transition-colors ${
+                  filter === tab
+                    ? "bg-zinc-800 text-zinc-100 font-medium"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                {tab}
+              </button>
             ))}
+          </div>
+
+          <ul className="max-h-96 overflow-y-auto divide-y divide-zinc-800/60">
+            {items === null && <li className="px-3 py-6 text-center text-sm text-zinc-500">Loading…</li>}
+            {items !== null && displayedItems.length === 0 && (
+              <li className="px-3 py-8 text-center text-sm text-zinc-500">
+                {filter === "all" ? "Nothing yet." : `No ${filter} notifications.`}
+              </li>
+            )}
+            {displayedItems.map((n) => {
+              const badge = eventBadge(n.event);
+              return (
+                <li key={n.id}>
+                  <button
+                    type="button"
+                    onClick={() => openOne(n)}
+                    className="flex w-full gap-2.5 px-3.5 py-2.5 text-left hover:bg-zinc-800/70 transition-colors"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.readAt ? "bg-transparent" : "bg-emerald-500 shadow-sm shadow-emerald-500/50"}`}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className={`block truncate text-sm font-medium ${n.readAt ? "text-zinc-400" : "text-zinc-100"}`}>
+                          {n.title}
+                        </span>
+                        <span className={`shrink-0 rounded border px-1.5 py-0.2 text-[0.65rem] font-medium ${badge.color}`}>
+                          {badge.label}
+                        </span>
+                      </div>
+                      {n.body && <span className="block truncate text-xs text-zinc-400 mt-0.5">{n.body}</span>}
+                      <time dateTime={n.createdAt} className="block text-[0.7rem] text-zinc-500 mt-1">
+                        {relative(n.createdAt)}
+                      </time>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
     </div>
   );
+}
+
+function eventBadge(event: string): { label: string; color: string } {
+  const ev = (event || "").toLowerCase();
+  if (ev.includes("deploy") || ev.includes("site") || ev.includes("hosting")) {
+    return { label: "Deploy", color: "bg-sky-950 text-sky-400 border-sky-800/60" };
+  }
+  if (ev.includes("mail") || ev.includes("email")) {
+    return { label: "Mail", color: "bg-violet-950 text-violet-400 border-violet-800/60" };
+  }
+  if (ev.includes("project") || ev.includes("task")) {
+    return { label: "Project", color: "bg-amber-950 text-amber-400 border-amber-800/60" };
+  }
+  if (ev.includes("auth") || ev.includes("security")) {
+    return { label: "Security", color: "bg-rose-950 text-rose-400 border-rose-800/60" };
+  }
+  return { label: "System", color: "bg-zinc-800 text-zinc-400 border-zinc-700/60" };
 }
 
 /** "4m ago" rather than an ISO string, which nobody reads as a time. */
