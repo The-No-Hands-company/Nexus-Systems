@@ -6,6 +6,7 @@ import {
   authenticateUser,
   findUserByUsername,
   getUser,
+  getRawUser,
   listUsers,
   updateUser,
   changePassword,
@@ -21,14 +22,21 @@ import {
   setUserStatus,
   MIN_PASSWORD_LENGTH,
   resetPassword,
+  setTotpSecret,
+  enableTotp,
+  disableTotp,
+  updateProfile,
 } from "./users";
 import { consumeRecoveryCode, countRemainingRecoveryCodes, issueRecoveryCodes } from "./recovery";
 import { createInvite, redeemInvite } from "./invites";
 import { isPlausibleEmail, sendSystemMail, provisionMailbox } from "./system-mail";
 import { checkRateLimit, recordFailure, clearFailures } from "./ratelimit";
+import { generateTotpSecret, generateTotpCode, verifyTotpCode, buildTotpUri } from "./totp";
+import { renderAccountPage } from "./account-page";
 import {
   ONBOARDING_HEADERS,
   ONBOARDING_LIMITS,
+  escapeHtml,
   renderClaimPage,
   renderJoinPage,
   renderRecoveredPage,
@@ -751,11 +759,61 @@ export async function handleRequest(request: Request): Promise<Response> {
           { status: 401, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
         );
       }
+
+      if (user.totpEnabled) {
+        const totpCode = String(form?.get("totpCode") ?? "").trim();
+        if (!totpCode) {
+          const twoFactorHtml = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Two-Factor Authentication — Nexus Systems</title>
+<style>
+  :root { --bg: #0b0d12; --surface: #141821; --fg: #e8eaf0; --muted: #8b93a7; --border: #2b3145; --input-bg: #0e1119; --accent: #4c7dff; }
+  body { background: var(--bg); color: var(--fg); font-family: -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 2rem; width: 100%; max-width: 400px; }
+  h1 { font-size: 1.3rem; margin-bottom: 0.5rem; }
+  p { font-size: 0.9rem; color: var(--muted); margin-bottom: 1.5rem; }
+  input { width: 100%; padding: 0.75rem; background: var(--input-bg); border: 1px solid var(--border); border-radius: 6px; color: var(--fg); font-size: 1.2rem; text-align: center; letter-spacing: 4px; box-sizing: border-box; }
+  button { width: 100%; margin-top: 1rem; padding: 0.75rem; background: var(--accent); color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Two-Factor Authentication</h1>
+    <p>Enter the 6-digit code from your authenticator app.</p>
+    <form method="post" action="/login">
+      <input type="hidden" name="username" value="${escapeHtml(username)}" />
+      <input type="hidden" name="password" value="${escapeHtml(password)}" />
+      <input type="hidden" name="redirect" value="${escapeHtml(target ?? "")}" />
+      <input type="text" name="totpCode" pattern="\\d{6}" maxlength="6" autofocus required placeholder="000000" autocomplete="one-time-code" />
+      <button type="submit">Verify &amp; Sign In</button>
+    </form>
+  </div>
+</body>
+</html>`;
+          return new Response(twoFactorHtml, {
+            status: 200,
+            headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+          });
+        }
+        const rawUser = getRawUser(user.id);
+        if (!rawUser?.totpSecret || !verifyTotpCode(rawUser.totpSecret, totpCode)) {
+          recordFailure("login", `${tag}:${username}`);
+          return new Response(
+            renderLoginPage({ redirect: target, error: "Invalid authenticator code." }),
+            { status: 401, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
+          );
+        }
+      }
+
       clearFailures("login", `${tag}:${username}`);
 
       const session = createSession({
         userId: user.id,
       });
+      void provisionMailbox({ subject: user.id, username: user.username, email: user.email });
       const maxAge = Math.max(
         60,
         Math.floor((new Date(session.expiresAt).getTime() - Date.now()) / 1000),
@@ -768,6 +826,192 @@ export async function handleRequest(request: Request): Promise<Response> {
           "set-cookie": sessionCookie(session.token, maxAge),
           "cache-control": "no-store",
         },
+      });
+    }
+
+    // ── Explicit Logout (top-level /logout and /api/v1/auth/logout) ──
+    if ((request.method === "GET" || request.method === "POST") && (path === "/logout" || path === "/api/v1/auth/logout")) {
+      if (auth?.session) {
+        revokeSession(auth.session.id);
+        audit({ event: "logout", userId: auth.userId, deviceId: auth.session.deviceId });
+      }
+
+      if (request.method === "POST" && (!request.headers.get("content-type")?.includes("application/x-www-form-urlencoded") && request.headers.get("accept")?.includes("application/json") || path === "/api/v1/auth/logout")) {
+        return jsonResponse(
+          { success: true },
+          { headers: { "set-cookie": clearedSessionCookie() } },
+        );
+      }
+
+      const redirectParam = url.searchParams.get("redirect") ?? url.searchParams.get("post_logout_redirect_uri");
+      const redirectTarget = safeRedirect(redirectParam, cookieDomain()) || "/login";
+      return new Response(null, {
+        status: 303,
+        headers: {
+          location: redirectTarget,
+          "set-cookie": clearedSessionCookie(),
+          "cache-control": "no-store",
+        },
+      });
+    }
+
+    // ── User Account & Profile Settings UI ──
+    if (request.method === "GET" && (path === "/account" || path === "/profile")) {
+      if (!auth) {
+        return new Response(null, {
+          status: 303,
+          headers: { location: `/login?redirect=${encodeURIComponent(path)}` },
+        });
+      }
+      const user = getUser(auth.userId);
+      if (!user) {
+        return new Response(null, { status: 303, headers: { location: "/login" } });
+      }
+      const allSessions = listSessions(auth.userId);
+      const remainingCodes = countRemainingRecoveryCodes(auth.userId);
+      const noticeKind = url.searchParams.get("noticeKind") as "success" | "error" | null;
+      const noticeMessage = url.searchParams.get("notice");
+      const notice = noticeKind && noticeMessage ? { kind: noticeKind, message: noticeMessage } : undefined;
+      const rawUser = getRawUser(auth.userId);
+      const candidateSecret = url.searchParams.get("setup2fa") ? rawUser?.totpSecret : undefined;
+      const totpUri = candidateSecret ? buildTotpUri(user.username, candidateSecret) : undefined;
+
+      const html = renderAccountPage({
+        user,
+        sessions: allSessions,
+        currentSessionId: auth.session?.id,
+        remainingRecoveryCodes: remainingCodes,
+        totpSecretCandidate: candidateSecret,
+        totpUri,
+        notice,
+        dashboardUrl: defaultPostLogin(),
+      });
+      return new Response(html, { headers: ONBOARDING_HEADERS });
+    }
+
+    if (request.method === "POST" && path === "/account/profile") {
+      if (!auth) return new Response(null, { status: 303, headers: { location: "/login" } });
+      const form = await request.formData().catch(() => null);
+      const displayName = String(form?.get("displayName") ?? "");
+      const email = String(form?.get("email") ?? "");
+      updateUser(auth.userId, { displayName: displayName || undefined, email: email || undefined });
+      return new Response(null, {
+        status: 303,
+        headers: { location: "/account?noticeKind=success&notice=Profile+updated" },
+      });
+    }
+
+    if (request.method === "POST" && path === "/account/password") {
+      if (!auth) return new Response(null, { status: 303, headers: { location: "/login" } });
+      const form = await request.formData().catch(() => null);
+      const currentPassword = String(form?.get("currentPassword") ?? "");
+      const newPassword = String(form?.get("newPassword") ?? "");
+      if (newPassword.length < MIN_PASSWORD_LENGTH) {
+        return new Response(null, {
+          status: 303,
+          headers: { location: `/account?noticeKind=error&notice=Password+must+be+at+least+${MIN_PASSWORD_LENGTH}+characters` },
+        });
+      }
+      const ok = changePassword(auth.userId, currentPassword, newPassword);
+      if (!ok) {
+        return new Response(null, {
+          status: 303,
+          headers: { location: "/account?noticeKind=error&notice=Current+password+incorrect" },
+        });
+      }
+      audit({ event: "password_change", userId: auth.userId, deviceId: auth.session?.deviceId });
+      return new Response(null, {
+        status: 303,
+        headers: { location: "/account?noticeKind=success&notice=Password+changed+successfully" },
+      });
+    }
+
+    if (request.method === "POST" && path === "/account/2fa/setup") {
+      if (!auth) return new Response(null, { status: 303, headers: { location: "/login" } });
+      const secret = generateTotpSecret();
+      setTotpSecret(auth.userId, secret);
+      return new Response(null, {
+        status: 303,
+        headers: { location: "/account?setup2fa=1" },
+      });
+    }
+
+    if (request.method === "POST" && path === "/account/2fa/verify") {
+      if (!auth) return new Response(null, { status: 303, headers: { location: "/login" } });
+      const form = await request.formData().catch(() => null);
+      const code = String(form?.get("code") ?? "");
+      const rawUser = getRawUser(auth.userId);
+      if (!rawUser?.totpSecret || !verifyTotpCode(rawUser.totpSecret, code)) {
+        return new Response(null, {
+          status: 303,
+          headers: { location: "/account?setup2fa=1&noticeKind=error&notice=Invalid+6-digit+code.+Please+try+again." },
+        });
+      }
+      enableTotp(auth.userId);
+      audit({ event: "totp_enabled", userId: auth.userId, deviceId: auth.session?.deviceId });
+      return new Response(null, {
+        status: 303,
+        headers: { location: "/account?noticeKind=success&notice=Two-factor+authentication+enabled" },
+      });
+    }
+
+    if (request.method === "POST" && path === "/account/2fa/disable") {
+      if (!auth) return new Response(null, { status: 303, headers: { location: "/login" } });
+      disableTotp(auth.userId);
+      audit({ event: "totp_disabled", userId: auth.userId, deviceId: auth.session?.deviceId });
+      return new Response(null, {
+        status: 303,
+        headers: { location: "/account?noticeKind=success&notice=Two-factor+authentication+disabled" },
+      });
+    }
+
+    if (request.method === "POST" && path === "/account/recovery-codes/regenerate") {
+      if (!auth) return new Response(null, { status: 303, headers: { location: "/login" } });
+      const newCodes = issueRecoveryCodes(auth.userId);
+      const user = getUser(auth.userId)!;
+      const html = renderAccountPage({
+        user,
+        sessions: listSessions(auth.userId),
+        currentSessionId: auth.session?.id,
+        remainingRecoveryCodes: newCodes.length,
+        newRecoveryCodes: newCodes,
+        notice: { kind: "success", message: "New recovery codes generated. Store them safely." },
+        dashboardUrl: defaultPostLogin(),
+      });
+      return new Response(html, { headers: ONBOARDING_HEADERS });
+    }
+
+    const sessionRevokeMatch = path.match(/^\/account\/sessions\/([^/]+)\/revoke$/);
+    if (request.method === "POST" && sessionRevokeMatch) {
+      if (!auth) return new Response(null, { status: 303, headers: { location: "/login" } });
+      const [, targetSessionId] = sessionRevokeMatch;
+      const targetSession = getSession(targetSessionId);
+      if (targetSession && targetSession.userId === auth.userId) {
+        revokeSession(targetSessionId);
+        audit({ event: "session_revoked", userId: auth.userId, deviceId: targetSession.deviceId });
+      }
+      if (targetSessionId === auth.session?.id) {
+        return new Response(null, {
+          status: 303,
+          headers: { location: "/login", "set-cookie": clearedSessionCookie() },
+        });
+      }
+      return new Response(null, {
+        status: 303,
+        headers: { location: "/account?noticeKind=success&notice=Device+session+signed+out" },
+      });
+    }
+
+    if (request.method === "POST" && path === "/account/sessions/revoke-others") {
+      if (!auth) return new Response(null, { status: 303, headers: { location: "/login" } });
+      for (const s of listSessions(auth.userId)) {
+        if (s.id !== auth.session?.id && !s.revoked) {
+          revokeSession(s.id);
+        }
+      }
+      return new Response(null, {
+        status: 303,
+        headers: { location: "/account?noticeKind=success&notice=Signed+out+of+all+other+devices" },
       });
     }
 
@@ -1014,11 +1258,26 @@ export async function handleRequest(request: Request): Promise<Response> {
         auditLoginFailure(username);
         return jsonResponse({ success: false, reason: "invalid credentials" } as LoginResult, { status: 401 });
       }
+
+      if (user.totpEnabled) {
+        const totpToken = typeof body.totpToken === "string" ? body.totpToken.trim() : typeof body.totpCode === "string" ? body.totpCode.trim() : typeof body.code === "string" ? body.code.trim() : "";
+        if (!totpToken) {
+          return jsonResponse({ error: "totp_required", requires2fa: true, userId: user.id }, { status: 403 });
+        }
+        const rawUser = getRawUser(user.id);
+        if (!rawUser?.totpSecret || !verifyTotpCode(rawUser.totpSecret, totpToken)) {
+          recordFailure("login", `${apiTag}:${username}`);
+          auditLoginFailure(username);
+          return jsonResponse({ success: false, reason: "invalid totp code" } as LoginResult, { status: 401 });
+        }
+      }
+
       clearFailures("login", `${apiTag}:${username}`);
 
       const session = createSession({
         userId: user.id,
       });
+      void provisionMailbox({ subject: user.id, username: user.username, email: user.email });
       audit({ event: "login_success", userId: user.id, deviceId: session.deviceId });
 
       // Body keeps the token for API clients; the cookie is what gives a
@@ -1053,6 +1312,68 @@ export async function handleRequest(request: Request): Promise<Response> {
         { success: true },
         { headers: { "set-cookie": clearedSessionCookie() } },
       );
+    }
+
+    // ── Profile Management API ──
+    if (request.method === "GET" && path === "/api/v1/auth/profile") {
+      if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
+      const user = getUser(auth.userId);
+      if (!user) return jsonResponse({ error: "not_found" }, { status: 404 });
+      return jsonResponse({ user });
+    }
+
+    if (request.method === "PATCH" && path === "/api/v1/auth/profile") {
+      if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
+      const body = await parseBody(request);
+      const updated = updateUser(auth.userId, {
+        displayName: typeof body.displayName === "string" ? body.displayName : undefined,
+        avatar: typeof body.avatar === "string" ? body.avatar : undefined,
+        email: typeof body.email === "string" ? body.email : undefined,
+      });
+      return jsonResponse({ user: updated });
+    }
+
+    // ── 2FA TOTP API ──
+    if (request.method === "POST" && path === "/api/v1/auth/2fa/setup") {
+      if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
+      const user = getUser(auth.userId);
+      if (!user) return jsonResponse({ error: "not_found" }, { status: 404 });
+      const secret = generateTotpSecret();
+      setTotpSecret(auth.userId, secret);
+      const uri = buildTotpUri(user.username, secret);
+      return jsonResponse({ secret, manualKey: secret, uri });
+    }
+
+    if (request.method === "POST" && path === "/api/v1/auth/2fa/verify") {
+      if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
+      const body = await parseBody(request);
+      const code = typeof body.code === "string" ? body.code : typeof body.token === "string" ? body.token : "";
+      const rawUser = getRawUser(auth.userId);
+      if (!rawUser?.totpSecret || !verifyTotpCode(rawUser.totpSecret, code)) {
+        return jsonResponse({ error: "invalid_totp_code" }, { status: 400 });
+      }
+      enableTotp(auth.userId);
+      audit({ event: "totp_enabled", userId: auth.userId, deviceId: auth.session?.deviceId });
+      return jsonResponse({ success: true, enabled: true });
+    }
+
+    if (request.method === "POST" && path === "/api/v1/auth/2fa/disable") {
+      if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
+      disableTotp(auth.userId);
+      audit({ event: "totp_disabled", userId: auth.userId, deviceId: auth.session?.deviceId });
+      return jsonResponse({ success: true, enabled: false });
+    }
+
+    if (request.method === "POST" && path === "/api/v1/auth/sessions/revoke-others") {
+      if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
+      let count = 0;
+      for (const s of listSessions(auth.userId)) {
+        if (s.id !== auth.session?.id && !s.revoked) {
+          revokeSession(s.id);
+          count++;
+        }
+      }
+      return jsonResponse({ success: true, revokedCount: count });
     }
 
     // ── OIDC End-Session (GET — browser redirect from OIDC clients) ──

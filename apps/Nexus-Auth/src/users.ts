@@ -259,6 +259,10 @@ export function getUser(userId: string): SafeUser | undefined {
   return user ? sanitizeUser(user) : undefined;
 }
 
+export function getRawUser(userId: string): User | undefined {
+  return users.get(userId);
+}
+
 export function listUsers(): SafeUser[] {
   return Array.from(users.values()).map(sanitizeUser);
 }
@@ -268,6 +272,8 @@ export function updateUser(userId: string, patch: {
   role?: IdentityRole;
   status?: AccountStatus;
   phantom_did?: string | null;
+  displayName?: string;
+  avatar?: string;
 }): SafeUser | undefined {
   const user = users.get(userId);
   if (!user) return undefined;
@@ -276,11 +282,51 @@ export function updateUser(userId: string, patch: {
   if (patch.role !== undefined) user.role = patch.role;
   if (patch.status !== undefined) user.status = patch.status;
   if (patch.phantom_did !== undefined) user.phantom_did = patch.phantom_did ?? undefined;
+  if (patch.displayName !== undefined) user.displayName = patch.displayName.trim();
+  if (patch.avatar !== undefined) user.avatar = patch.avatar.trim();
   user.updatedAt = new Date().toISOString();
 
   users.set(user.id, user);
   persistUsers();
   return sanitizeUser(user);
+}
+
+export function setTotpSecret(userId: string, secret: string): boolean {
+  const user = users.get(userId);
+  if (!user) return false;
+  user.totpSecret = secret;
+  user.updatedAt = new Date().toISOString();
+  users.set(user.id, user);
+  persistUsers();
+  return true;
+}
+
+export function enableTotp(userId: string): boolean {
+  const user = users.get(userId);
+  if (!user || !user.totpSecret) return false;
+  user.totpEnabled = true;
+  user.updatedAt = new Date().toISOString();
+  users.set(user.id, user);
+  persistUsers();
+  return true;
+}
+
+export function disableTotp(userId: string): boolean {
+  const user = users.get(userId);
+  if (!user) return false;
+  user.totpEnabled = false;
+  user.totpSecret = undefined;
+  user.updatedAt = new Date().toISOString();
+  users.set(user.id, user);
+  persistUsers();
+  return true;
+}
+
+export function updateProfile(
+  userId: string,
+  patch: { displayName?: string; avatar?: string; email?: string }
+): SafeUser | undefined {
+  return updateUser(userId, patch);
 }
 
 /**

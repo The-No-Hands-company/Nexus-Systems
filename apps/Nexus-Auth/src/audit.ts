@@ -14,6 +14,7 @@ export type AuditEvent =
   | "role_change" | "status_change"
   | "session_revoked"
   | "recovery_codes_regenerated" | "recovery_code_used"
+  | "totp_enabled" | "totp_disabled"
   | "api_key_created" | "api_key_revoked";
 
 export interface AuditEntry {

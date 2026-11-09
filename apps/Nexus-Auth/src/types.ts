@@ -41,6 +41,8 @@ export interface User {
   id: string;
   username: string;
   email: string;
+  displayName?: string;
+  avatar?: string;
   role: IdentityRole;
   passwordHash: string;
   totpSecret?: string;
@@ -59,6 +61,8 @@ export interface User {
   /** DID metadata (optional). */
   did_metadata?: any | null;
 }
+
+export type SafeUser = Omit<User, "passwordHash" | "totpSecret" | "claimCodeHash">;
 
 export interface ApiKey {
   id: string;
