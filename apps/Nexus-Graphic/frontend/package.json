@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "bun node_modules/typescript/bin/tsc && ESBUILD_BINARY_PATH=/tmp/esbuild bun node_modules/vite/bin/vite.js build",
     "preview": "vite preview",
-    "check": "tsc --noEmit"
+    "check": "bun node_modules/typescript/bin/tsc --noEmit"
   },
   "dependencies": {
     "lucide-react": "^0.460",

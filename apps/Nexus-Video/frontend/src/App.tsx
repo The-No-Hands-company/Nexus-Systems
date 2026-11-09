@@ -5,6 +5,7 @@ import VideoGrid from "./components/VideoGrid";
 import VideoPlayer from "./components/VideoPlayer";
 import ChannelPage from "./components/ChannelPage";
 import Canvas from "./components/Canvas/Canvas";
+import UploadModal from "./components/UploadModal";
 import { useEditorStore } from "./stores/useEditorStore";
 
 export default function App() {
@@ -25,7 +26,7 @@ export default function App() {
   }, [currentlyPlaying, selectedChannelId, selectedPlaylistId]);
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col bg-zinc-950 text-zinc-100">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:left-2 focus:top-2 focus:rounded focus:bg-zinc-800 focus:px-4 focus:py-2 focus:text-zinc-100 focus:ring-2 focus:ring-accent focus:outline-none"
@@ -68,6 +69,8 @@ export default function App() {
           </div>
         </aside>
       </div>
+
+      <UploadModal />
     </div>
   );
 }

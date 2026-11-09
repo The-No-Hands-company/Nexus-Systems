@@ -7,4 +7,5 @@ echo "$(basename "$PWD")..."
 # report the run's summary line and nothing else — no test name, no assertion,
 # no stack. A gate that goes red without saying why costs more than it saves.
 bun test --max-concurrency=1
+cd frontend && bun run build && cd ..
 echo "PASS"

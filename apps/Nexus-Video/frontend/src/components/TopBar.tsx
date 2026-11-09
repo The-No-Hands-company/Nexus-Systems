@@ -10,6 +10,7 @@ export default function TopBar() {
   const setViewMode = useEditorStore((s) => s.setViewMode);
   const showSidebar = useEditorStore((s) => s.showSidebar);
   const setShowSidebar = useEditorStore((s) => s.setShowSidebar);
+  const setShowUploadModal = useEditorStore((s) => s.setShowUploadModal);
 
   return (
     <header role="banner" className="flex items-center justify-between gap-2 min-h-12 px-4 py-1 bg-zinc-900 border-b border-zinc-800 shrink-0">
@@ -46,7 +47,12 @@ export default function TopBar() {
         >
           {viewMode === "grid" ? <List size={18} /> : <Grid3X3 size={18} />}
         </button>
-        <button type="button" aria-label="Upload video" className="flex items-center gap-1.5 min-h-[44px] px-3 py-1.5 bg-accent hover:bg-accent-hover text-zinc-900 text-sm font-medium rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        <button
+          type="button"
+          aria-label="Upload video"
+          onClick={() => setShowUploadModal(true)}
+          className="flex items-center gap-1.5 min-h-[44px] px-3 py-1.5 bg-accent hover:bg-accent-hover text-zinc-900 text-sm font-medium rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
           <Upload size={16} aria-hidden="true" />
           Upload
         </button>
