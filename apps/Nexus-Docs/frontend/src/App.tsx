@@ -31,6 +31,16 @@ import {
   FileDown,
   X,
   Camera,
+  Image,
+  Palette,
+  Users,
+  Wifi,
+  WifiOff,
+  Copy,
+  Minus,
+  Info,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 
 interface Document {
@@ -62,9 +72,50 @@ interface FolderItem {
   createdAt: string;
 }
 
-const EMOJI_OPTIONS = ["📄", "📘", "💡", "⚡", "🚀", "🔥", "🎯", "🛠️", "📚", "📊", "🔒", "🌐"];
+interface PeerPresence {
+  peerId: string;
+  name: string;
+  color: string;
+}
 
-// Fast document formatter with table support
+const PEER_COLORS = [
+  "#6366f1", // Indigo
+  "#10b981", // Emerald
+  "#f59e0b", // Amber
+  "#ec4899", // Pink
+  "#06b6d4", // Cyan
+  "#8b5cf6", // Purple
+];
+
+const COVER_PRESETS = [
+  { name: "Obsidian Slate", style: "linear-gradient(135deg, #09090b 0%, #18181b 50%, #27272a 100%)" },
+  { name: "Cosmic Indigo", style: "linear-gradient(135deg, #1e1b4b 0%, #4c1d95 50%, #701a75 100%)" },
+  { name: "Emerald Aurora", style: "linear-gradient(135deg, #022c22 0%, #065f46 50%, #047857 100%)" },
+  { name: "Midnight Oceanic", style: "linear-gradient(135deg, #082f49 0%, #0369a1 50%, #1d4ed8 100%)" },
+  { name: "Sunset Horizon", style: "linear-gradient(135deg, #4c0519 0%, #9f1239 50%, #ea580c 100%)" },
+  { name: "Cyber Teal", style: "linear-gradient(135deg, #042f2e 0%, #0d9488 50%, #0369a1 100%)" },
+];
+
+const EMOJI_CATEGORIES = [
+  {
+    name: "Documents & Work",
+    emojis: ["📄", "📝", "📋", "📁", "📂", "📊", "📈", "📅", "📌", "📎", "🏷️", "💼", "🏢", "📑"],
+  },
+  {
+    name: "Technology & Code",
+    emojis: ["🚀", "⚡", "🔥", "💡", "🛠️", "⚙️", "🔒", "🌐", "💻", "🤖", "📦", "🧠", "🔌", "📡"],
+  },
+  {
+    name: "Creative & Design",
+    emojis: ["🎨", "✨", "🎯", "💎", "🔮", "🌈", "⭐", "🏆", "🌟", "🎪", "🎭", "🖌️", "📷", "🪄"],
+  },
+  {
+    name: "Knowledge & Notes",
+    emojis: ["📚", "📖", "🔬", "🧪", "🧬", "🔭", "📐", "📜", "🎓", "☕", "🌿", "🌱", "🌊", "🌙"],
+  },
+];
+
+// Markdown table generator & parser
 function renderTableHtml(rows: string[][]): string {
   if (rows.length === 0) return "";
   const header = rows[0];
@@ -122,9 +173,9 @@ function parseMarkdownTables(text: string): string {
 
 function renderDocHtml(content: string): string {
   if (!content) return '<p class="text-zinc-600 italic">Empty document. Type or use the toolbar above...</p>';
-  
-  // First extract & render tables
-  let processed = parseMarkdownTables(content);
+
+  // Extract & render tables
+  const processed = parseMarkdownTables(content);
 
   let html = processed
     .replace(/&/g, "&amp;")
@@ -139,13 +190,28 @@ function renderDocHtml(content: string): string {
       .replace(/&quot;/g, '"');
   });
 
-  // Callouts
-  html = html.replace(/^:::callout\s*(.*)\n([\s\S]*?):::/gm, (_, title, text) => {
-    return `<div class="bg-indigo-950/40 border border-indigo-500/30 rounded-xl p-4 my-4 flex gap-3 text-indigo-200"><span class="text-xl">💡</span><div><div class="font-semibold text-indigo-300 mb-1">${title}</div><div class="text-sm text-indigo-200/90 leading-relaxed">${text}</div></div></div>`;
+  // Callouts: :::tip, :::warning, :::danger, :::info, :::callout
+  html = html.replace(/^:::tip\s*(.*)\n([\s\S]*?):::/gm, (_, title, text) => {
+    return `<div class="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-4 my-4 flex gap-3 text-emerald-200"><span class="text-xl">💡</span><div><div class="font-semibold text-emerald-300 mb-1">${title || "Tip"}</div><div class="text-sm text-emerald-200/90 leading-relaxed">${text}</div></div></div>`;
   });
 
+  html = html.replace(/^:::warning\s*(.*)\n([\s\S]*?):::/gm, (_, title, text) => {
+    return `<div class="bg-amber-950/40 border border-amber-500/30 rounded-xl p-4 my-4 flex gap-3 text-amber-200"><span class="text-xl">⚠️</span><div><div class="font-semibold text-amber-300 mb-1">${title || "Warning"}</div><div class="text-sm text-amber-200/90 leading-relaxed">${text}</div></div></div>`;
+  });
+
+  html = html.replace(/^:::danger\s*(.*)\n([\s\S]*?):::/gm, (_, title, text) => {
+    return `<div class="bg-rose-950/40 border border-rose-500/30 rounded-xl p-4 my-4 flex gap-3 text-rose-200"><span class="text-xl">🛑</span><div><div class="font-semibold text-rose-300 mb-1">${title || "Caution"}</div><div class="text-sm text-rose-200/90 leading-relaxed">${text}</div></div></div>`;
+  });
+
+  html = html.replace(/^:::(?:info|callout)\s*(.*)\n([\s\S]*?):::/gm, (_, title, text) => {
+    return `<div class="bg-indigo-950/40 border border-indigo-500/30 rounded-xl p-4 my-4 flex gap-3 text-indigo-200"><span class="text-xl">ℹ️</span><div><div class="font-semibold text-indigo-300 mb-1">${title || "Note"}</div><div class="text-sm text-indigo-200/90 leading-relaxed">${text}</div></div></div>`;
+  });
+
+  // Dividers
+  html = html.replace(/^(?:---|___|\*\*\*)\s*$/gm, '<hr class="my-6 border-zinc-800" />');
+
   // Code blocks
-  html = html.replace(/```([a-z0-9_-]*)\n([\s\S]*?)```/g, (_, lang, code) => {
+  html = html.replace(/```([a-z0-9_-]*)\n([\s\S]*?)```/g, (_, _lang, code) => {
     return `<pre class="bg-zinc-900 border border-zinc-800 p-4 rounded-xl overflow-x-auto text-sm my-4 font-mono text-indigo-300"><code>${code}</code></pre>`;
   });
 
@@ -164,9 +230,13 @@ function renderDocHtml(content: string): string {
   html = html.replace(/^- \[ \] (.*$)/gim, '<div class="flex items-center gap-2.5 my-1.5"><input type="checkbox" disabled class="w-4 h-4 rounded border-zinc-700 text-indigo-600"><span class="text-zinc-200 text-sm">$1</span></div>');
   html = html.replace(/^- \[x\] (.*$)/gim, '<div class="flex items-center gap-2.5 my-1.5"><input type="checkbox" checked disabled class="w-4 h-4 rounded border-zinc-700 text-indigo-600"><span class="text-zinc-500 line-through text-sm">$1</span></div>');
 
+  // Strikethrough
+  html = html.replace(/~~([^~]+)~~/g, '<del class="line-through text-zinc-500">$1</del>');
+
   // Lists
   html = html.replace(/^\* (.*$)/gim, '<li class="ml-5 list-disc text-zinc-300 my-1">$1</li>');
   html = html.replace(/^- (.*$)/gim, '<li class="ml-5 list-disc text-zinc-300 my-1">$1</li>');
+  html = html.replace(/^\d+\. (.*$)/gim, '<li class="ml-5 list-decimal text-zinc-300 my-1">$1</li>');
 
   // Bold & Italic
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-bold text-zinc-100">$1</strong>');
@@ -190,8 +260,18 @@ export default function App() {
   const [docContent, setDocContent] = useState("");
   const [docIcon, setDocIcon] = useState("📄");
   const [docFolder, setDocFolder] = useState("General");
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [docCover, setDocCover] = useState("");
+  const [customCoverUrl, setCustomCoverUrl] = useState("");
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
+
+  // Modals & Panels
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [emojiSearch, setEmojiSearch] = useState("");
+  const [showCoverPicker, setShowCoverPicker] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [slashMenuFilter, setSlashMenuFilter] = useState("");
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Revisions & History Drawer
   const [showRevisions, setShowRevisions] = useState(false);
@@ -199,8 +279,12 @@ export default function App() {
   const [loadingRevisions, setLoadingRevisions] = useState(false);
   const [selectedRevision, setSelectedRevision] = useState<DocumentRevision | null>(null);
 
-  // Export Dropdown
-  const [showExportMenu, setShowExportMenu] = useState(false);
+  // Collaboration state
+  const [connectedPeers, setConnectedPeers] = useState<PeerPresence[]>([]);
+  const [isCollabConnected, setIsCollabConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const myPeerId = useMemo(() => Math.random().toString(36).slice(2, 9), []);
+  const myPeerName = useMemo(() => `User-${myPeerId.slice(0, 4)}`, [myPeerId]);
 
   // New folder input
   const [isAddingFolder, setIsAddingFolder] = useState(false);
@@ -220,6 +304,11 @@ export default function App() {
     const readTimeMinutes = Math.max(1, Math.ceil(words / 200));
     return { words, chars, readTimeMinutes };
   }, [docContent]);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   const loadFolders = useCallback(async () => {
     try {
@@ -262,6 +351,68 @@ export default function App() {
     loadDocuments();
   }, [loadDocuments]);
 
+  // Real-time Collaborative Sync via WebSockets
+  useEffect(() => {
+    if (!activeDocId) {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      setIsCollabConnected(false);
+      setConnectedPeers([]);
+      return;
+    }
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = window.location.host;
+    const wsUrl = `${protocol}//${host}/api/v1/sync?docId=${encodeURIComponent(activeDocId)}&name=${encodeURIComponent(myPeerName)}`;
+
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setIsCollabConnected(true);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "presence") {
+            if (data.action === "join" && data.peerId !== myPeerId) {
+              setConnectedPeers((prev) => {
+                if (prev.some((p) => p.peerId === data.peerId)) return prev;
+                const color = PEER_COLORS[Math.abs(data.peerId.split("").reduce((a: number, c: string) => a + c.charCodeAt(0), 0)) % PEER_COLORS.length] || "#6366f1";
+                return [...prev, { peerId: data.peerId, name: data.name || "Peer", color }];
+              });
+            } else if (data.action === "leave") {
+              setConnectedPeers((prev) => prev.filter((p) => p.peerId !== data.peerId));
+            }
+          } else if (data.type === "edit" && data.peerId !== myPeerId && data.docId === activeDocIdRef.current) {
+            if (data.title !== undefined) setDocTitle(data.title);
+            if (data.content !== undefined) setDocContent(data.content);
+            if (data.icon !== undefined) setDocIcon(data.icon);
+            if (data.coverUrl !== undefined) setDocCover(data.coverUrl);
+          }
+        } catch (e) {
+          console.error("WS error parsing message", e);
+        }
+      };
+
+      ws.onclose = () => {
+        setIsCollabConnected(false);
+      };
+    } catch (e) {
+      console.warn("Collab WS not available", e);
+    }
+
+    return () => {
+      if (ws) ws.close();
+      wsRef.current = null;
+    };
+  }, [activeDocId, myPeerId, myPeerName]);
+
   const loadRevisions = useCallback(async (docId: string) => {
     setLoadingRevisions(true);
     try {
@@ -288,7 +439,11 @@ export default function App() {
     setDocContent(doc.content);
     setDocIcon(doc.icon || "📄");
     setDocFolder(doc.folder || "General");
+    setDocCover(doc.coverUrl || "");
     setSaveStatus("saved");
+    setShowCoverPicker(false);
+    setShowEmojiPicker(false);
+    setShowSlashMenu(false);
     if (showRevisions) {
       loadRevisions(doc.id);
     }
@@ -301,9 +456,10 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: "Untitled Document",
-          content: "# Untitled Document\n\nStart typing your document...",
+          content: "# Untitled Document\n\nStart typing your document or type '/' for blocks...",
           folder: selectedFolder || "General",
           icon: "📄",
+          coverUrl: "",
         }),
       });
       if (res.ok) {
@@ -338,19 +494,34 @@ export default function App() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const saveDocument = useCallback(
-    async (title: string, content: string, folder: string, icon: string) => {
+    async (title: string, content: string, folder: string, icon: string, coverUrl: string) => {
       if (!activeDocId) return;
       setSaveStatus("saving");
       try {
         const res = await fetch(`/api/v1/documents/${activeDocId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, content, folder, icon }),
+          body: JSON.stringify({ title, content, folder, icon, coverUrl }),
         });
         if (res.ok) {
           const updated: Document = await res.json();
           setDocuments((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
           setSaveStatus("saved");
+
+          // Broadcast to connected peers via WebSocket
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(
+              JSON.stringify({
+                type: "edit",
+                docId: activeDocId,
+                peerId: myPeerId,
+                title,
+                content,
+                icon,
+                coverUrl,
+              })
+            );
+          }
         } else {
           setSaveStatus("unsaved");
         }
@@ -358,7 +529,7 @@ export default function App() {
         setSaveStatus("unsaved");
       }
     },
-    [activeDocId]
+    [activeDocId, myPeerId]
   );
 
   const onDocChange = (updates: {
@@ -366,22 +537,25 @@ export default function App() {
     content?: string;
     folder?: string;
     icon?: string;
+    coverUrl?: string;
   }) => {
     const nextTitle = updates.title !== undefined ? updates.title : docTitle;
     const nextContent = updates.content !== undefined ? updates.content : docContent;
     const nextFolder = updates.folder !== undefined ? updates.folder : docFolder;
     const nextIcon = updates.icon !== undefined ? updates.icon : docIcon;
+    const nextCover = updates.coverUrl !== undefined ? updates.coverUrl : docCover;
 
     if (updates.title !== undefined) setDocTitle(nextTitle);
     if (updates.content !== undefined) setDocContent(nextContent);
     if (updates.folder !== undefined) setDocFolder(nextFolder);
     if (updates.icon !== undefined) setDocIcon(nextIcon);
+    if (updates.coverUrl !== undefined) setDocCover(nextCover);
 
     setSaveStatus("unsaved");
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      saveDocument(nextTitle, nextContent, nextFolder, nextIcon);
+      saveDocument(nextTitle, nextContent, nextFolder, nextIcon, nextCover);
     }, 800);
   };
 
@@ -395,6 +569,7 @@ export default function App() {
       });
       if (res.ok) {
         loadRevisions(activeDocId);
+        showToast("Snapshot created successfully!");
       }
     } catch (err) {
       console.error("Failed to create snapshot", err);
@@ -414,6 +589,7 @@ export default function App() {
         setDocContent(restored.content);
         setDocuments((prev) => prev.map((d) => (d.id === restored.id ? restored : d)));
         loadRevisions(activeDocId);
+        showToast("Revision restored!");
       }
     } catch (err) {
       console.error("Failed to restore revision", err);
@@ -449,12 +625,14 @@ export default function App() {
           if (remaining.length > 0) selectDocument(remaining[0]);
           else setActiveDocId(null);
         }
+        showToast("Document deleted");
       }
     } catch (err) {
       console.error("Failed to delete document", err);
     }
   };
 
+  // Block & formatting inserters
   const insertFormatting = (prefix: string, suffix = "") => {
     const textarea = document.getElementById("doc-textarea") as HTMLTextAreaElement;
     if (!textarea) return;
@@ -476,6 +654,84 @@ export default function App() {
     insertFormatting(tableTemplate, "");
   };
 
+  const addTableRow = () => {
+    const textarea = document.getElementById("doc-textarea") as HTMLTextAreaElement;
+    if (!textarea) return;
+    const text = textarea.value;
+    const newRow = "| New Cell 1 | New Cell 2 | New Cell 3 |\n";
+    onDocChange({ content: text + (text.endsWith("\n") ? "" : "\n") + newRow });
+    showToast("Added table row");
+  };
+
+  const addTableCol = () => {
+    const textarea = document.getElementById("doc-textarea") as HTMLTextAreaElement;
+    if (!textarea) return;
+    const text = textarea.value;
+    const lines = text.split("\n");
+    const updated = lines.map((line) => {
+      if (line.trim().startsWith("|") && line.trim().endsWith("|")) {
+        if (/^\|(?:\s*:?-+:?\s*\|)+$/.test(line.trim())) {
+          return `${line.trim().slice(0, -1)} --- |`;
+        }
+        return `${line.trim().slice(0, -1)} Extra |`;
+      }
+      return line;
+    });
+    onDocChange({ content: updated.join("\n") });
+    showToast("Added table column");
+  };
+
+  const insertCallout = (type: "tip" | "warning" | "danger" | "info") => {
+    const title = type.charAt(0).toUpperCase() + type.slice(1);
+    const template = `\n:::${type} ${title}\nAdd your callout note or warning description here.\n:::\n\n`;
+    insertFormatting(template, "");
+  };
+
+  // Slash commands
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "/" && !showSlashMenu) {
+      setShowSlashMenu(true);
+      setSlashMenuFilter("");
+    } else if (e.key === "Escape" && showSlashMenu) {
+      setShowSlashMenu(false);
+    }
+  };
+
+  const applySlashCommand = (cmd: string) => {
+    const textarea = document.getElementById("doc-textarea") as HTMLTextAreaElement;
+    if (!textarea) return;
+    const cursor = textarea.selectionStart;
+    const text = textarea.value;
+    // Remove the trailing slash before cursor if present
+    const sliceStart = cursor > 0 && text[cursor - 1] === "/" ? cursor - 1 : cursor;
+    const before = text.substring(0, sliceStart);
+    const after = text.substring(cursor);
+
+    let insertion = "";
+    switch (cmd) {
+      case "h1": insertion = "# Heading 1\n\n"; break;
+      case "h2": insertion = "## Heading 2\n\n"; break;
+      case "h3": insertion = "### Heading 3\n\n"; break;
+      case "bullet": insertion = "- List item\n"; break;
+      case "number": insertion = "1. First item\n"; break;
+      case "todo": insertion = "- [ ] Task item\n"; break;
+      case "table": insertion = "| Header 1 | Header 2 | Header 3 |\n| --- | --- | --- |\n| Cell 1 | Cell 2 | Cell 3 |\n\n"; break;
+      case "quote": insertion = "> Important quote or citation\n\n"; break;
+      case "code": insertion = "```ts\n// Enter code snippet here\n```\n\n"; break;
+      case "tip": insertion = ":::tip Quick Tip\nKey insight or recommended practice.\n:::\n\n"; break;
+      case "warning": insertion = ":::warning Warning\nCritical alert or compatibility note.\n:::\n\n"; break;
+      case "divider": insertion = "---\n\n"; break;
+      default: break;
+    }
+
+    onDocChange({ content: before + insertion + after });
+    setShowSlashMenu(false);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(before.length + insertion.length, before.length + insertion.length);
+    }, 10);
+  };
+
   // Export actions
   const exportMarkdown = () => {
     const blob = new Blob([`# ${docTitle}\n\n${docContent}`], { type: "text/markdown;charset=utf-8" });
@@ -486,6 +742,7 @@ export default function App() {
     a.click();
     URL.revokeObjectURL(url);
     setShowExportMenu(false);
+    showToast("Downloaded Markdown file");
   };
 
   const exportHtml = () => {
@@ -504,6 +761,7 @@ export default function App() {
     pre { background: #18181b; color: #a5b4fc; padding: 16px; border-radius: 8px; overflow-x: auto; }
     code { font-family: monospace; }
     blockquote { border-left: 4px solid #6366f1; margin: 16px 0; padding-left: 16px; color: #52525b; font-style: italic; }
+    hr { border: none; border-top: 1px solid #e4e4e7; margin: 24px 0; }
   </style>
 </head>
 <body>
@@ -519,6 +777,31 @@ export default function App() {
     a.click();
     URL.revokeObjectURL(url);
     setShowExportMenu(false);
+    showToast("Downloaded HTML file");
+  };
+
+  const copyHtmlToClipboard = async () => {
+    try {
+      const rendered = renderDocHtml(docContent);
+      await navigator.clipboard.writeText(rendered);
+      setShowExportMenu(false);
+      showToast("Rendered HTML copied to clipboard!");
+    } catch {
+      showToast("Failed to copy HTML");
+    }
+  };
+
+  const exportPlainText = () => {
+    const plain = docContent.replace(/[#*`_>\[\]]/g, "");
+    const blob = new Blob([`${docTitle}\n\n${plain}`], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(docTitle || "document").toLowerCase().replace(/\s+/g, "-")}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+    showToast("Downloaded Plain Text file");
   };
 
   const printDocument = () => {
@@ -536,6 +819,14 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen bg-nexus-950 font-sans text-zinc-100 antialiased overflow-hidden select-none">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-5 right-5 bg-indigo-600 text-white text-xs px-4 py-2.5 rounded-xl shadow-2xl z-50 flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2">
+          <CheckCircle2 className="w-4 h-4 text-white" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* ── Left Sidebar: Folders & Workspaces ── */}
       <aside className="w-64 flex-shrink-0 bg-nexus-900 border-r border-nexus-800 flex flex-col justify-between print:hidden">
         <div className="p-4 flex flex-col gap-4">
@@ -760,30 +1051,148 @@ export default function App() {
         {activeDoc ? (
           <>
             {/* Header Toolbar */}
-            <header className="h-14 border-b border-nexus-800 px-6 flex items-center justify-between bg-nexus-950 print:hidden">
+            <header className="h-14 border-b border-nexus-800 px-6 flex items-center justify-between bg-nexus-950 print:hidden z-20">
               <div className="flex items-center gap-3">
                 {/* Icon selector */}
                 <div className="relative">
                   <button
-                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    onClick={() => {
+                      setShowEmojiPicker(!showEmojiPicker);
+                      setShowCoverPicker(false);
+                    }}
                     className="w-8 h-8 rounded-lg bg-nexus-900 border border-nexus-800 flex items-center justify-center text-lg hover:bg-nexus-800 transition-colors"
+                    title="Change icon"
                   >
                     {docIcon}
                   </button>
                   {showEmojiPicker && (
-                    <div className="absolute top-10 left-0 bg-nexus-900 border border-nexus-800 rounded-xl p-2 shadow-2xl grid grid-cols-4 gap-1 z-50">
-                      {EMOJI_OPTIONS.map((emoji) => (
+                    <div className="absolute top-10 left-0 bg-nexus-900 border border-nexus-800 rounded-xl p-3 shadow-2xl w-72 z-50 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between mb-2 pb-2 border-b border-nexus-800">
+                        <span className="text-xs font-semibold text-zinc-200">Select Icon</span>
                         <button
-                          key={emoji}
                           onClick={() => {
-                            onDocChange({ icon: emoji });
+                            onDocChange({ icon: "📄" });
                             setShowEmojiPicker(false);
                           }}
-                          className="w-7 h-7 flex items-center justify-center rounded hover:bg-nexus-800 text-sm"
+                          className="text-[10px] text-zinc-400 hover:text-white"
                         >
-                          {emoji}
+                          Reset
                         </button>
-                      ))}
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Search icons..."
+                        value={emojiSearch}
+                        onChange={(e) => setEmojiSearch(e.target.value)}
+                        className="w-full bg-nexus-950 border border-nexus-800 rounded-lg px-2.5 py-1 text-xs text-zinc-200 placeholder-zinc-600 mb-2 focus:outline-none"
+                      />
+                      <div className="max-h-56 overflow-y-auto space-y-2">
+                        {EMOJI_CATEGORIES.map((cat) => {
+                          const filtered = cat.emojis.filter((e) => !emojiSearch || e.includes(emojiSearch));
+                          if (filtered.length === 0) return null;
+                          return (
+                            <div key={cat.name}>
+                              <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider mb-1 px-1">
+                                {cat.name}
+                              </div>
+                              <div className="grid grid-cols-7 gap-1">
+                                {filtered.map((emoji) => (
+                                  <button
+                                    key={emoji}
+                                    onClick={() => {
+                                      onDocChange({ icon: emoji });
+                                      setShowEmojiPicker(false);
+                                    }}
+                                    className="w-7 h-7 flex items-center justify-center rounded hover:bg-nexus-800 text-base transition-transform active:scale-90"
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Cover Picker Trigger Button */}
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      setShowCoverPicker(!showCoverPicker);
+                      setShowEmojiPicker(false);
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs transition-colors ${
+                      docCover
+                        ? "bg-indigo-600/20 border-indigo-500/40 text-indigo-300"
+                        : "bg-nexus-900 border-nexus-800 text-zinc-400 hover:text-white hover:bg-nexus-850"
+                    }`}
+                    title="Change document cover"
+                  >
+                    <Image className="w-3.5 h-3.5" />
+                    <span>{docCover ? "Cover" : "Add Cover"}</span>
+                  </button>
+
+                  {showCoverPicker && (
+                    <div className="absolute top-10 left-0 bg-nexus-900 border border-nexus-800 rounded-xl p-3 shadow-2xl w-80 z-50 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between mb-2 pb-2 border-b border-nexus-800">
+                        <span className="text-xs font-semibold text-zinc-200">Document Cover</span>
+                        {docCover && (
+                          <button
+                            onClick={() => {
+                              onDocChange({ coverUrl: "" });
+                              setShowCoverPicker(false);
+                            }}
+                            className="text-[10px] text-red-400 hover:underline"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="text-[11px] font-medium text-zinc-400 mb-1.5">Preset Themes</div>
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        {COVER_PRESETS.map((preset) => (
+                          <button
+                            key={preset.name}
+                            onClick={() => {
+                              onDocChange({ coverUrl: preset.style });
+                              setShowCoverPicker(false);
+                            }}
+                            className="h-12 rounded-lg border border-nexus-700/60 p-2 flex items-end justify-start text-[10px] font-medium text-white shadow-sm hover:ring-2 hover:ring-indigo-500 transition-all text-left"
+                            style={{ background: preset.style }}
+                          >
+                            <span className="bg-black/50 px-1.5 py-0.5 rounded backdrop-blur-sm">
+                              {preset.name}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="text-[11px] font-medium text-zinc-400 mb-1.5">Custom Image URL</div>
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          placeholder="https://images.unsplash.com/..."
+                          value={customCoverUrl}
+                          onChange={(e) => setCustomCoverUrl(e.target.value)}
+                          className="flex-1 bg-nexus-950 border border-nexus-800 rounded-lg px-2.5 py-1 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none"
+                        />
+                        <button
+                          onClick={() => {
+                            if (customCoverUrl.trim()) {
+                              onDocChange({ coverUrl: customCoverUrl.trim() });
+                              setCustomCoverUrl("");
+                              setShowCoverPicker(false);
+                            }
+                          }}
+                          className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-2.5 py-1 rounded-lg transition-colors"
+                        >
+                          Apply
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -846,6 +1255,13 @@ export default function App() {
                   I
                 </button>
                 <button
+                  onClick={() => insertFormatting("~~", "~~")}
+                  className="p-1 hover:text-white rounded hover:bg-nexus-800 line-through text-xs px-1.5"
+                  title="Strikethrough"
+                >
+                  S
+                </button>
+                <button
                   onClick={() => insertFormatting("- ")}
                   className="p-1 hover:text-white rounded hover:bg-nexus-800"
                   title="Bullet List"
@@ -853,11 +1269,34 @@ export default function App() {
                   <List className="w-3.5 h-3.5" />
                 </button>
                 <button
+                  onClick={() => insertFormatting("1. ")}
+                  className="p-1 hover:text-white rounded hover:bg-nexus-800"
+                  title="Numbered List"
+                >
+                  <ListOrdered className="w-3.5 h-3.5" />
+                </button>
+                <button
                   onClick={() => insertFormatting("- [ ] ")}
                   className="p-1 hover:text-white rounded hover:bg-nexus-800"
                   title="Task Checklist"
                 >
                   <CheckSquare className="w-3.5 h-3.5" />
+                </button>
+                <div className="w-[1px] h-4 bg-nexus-800 mx-1" />
+                {/* Callout Quick Select */}
+                <button
+                  onClick={() => insertCallout("tip")}
+                  className="p-1 hover:text-emerald-400 rounded hover:bg-nexus-800"
+                  title="Tip Callout"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                </button>
+                <button
+                  onClick={() => insertCallout("warning")}
+                  className="p-1 hover:text-amber-400 rounded hover:bg-nexus-800"
+                  title="Warning Callout"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
                 </button>
                 <button
                   onClick={() => insertFormatting("> ")}
@@ -874,17 +1313,62 @@ export default function App() {
                   <Code className="w-3.5 h-3.5" />
                 </button>
                 <div className="w-[1px] h-4 bg-nexus-800 mx-1" />
+                {/* Table & Structure */}
                 <button
                   onClick={insertTable}
                   className="p-1 hover:text-indigo-400 rounded hover:bg-nexus-800 flex items-center gap-1"
-                  title="Insert Table"
+                  title="Insert 3x3 Table"
                 >
                   <Table className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={addTableRow}
+                  className="px-1 py-0.5 text-[10px] hover:text-indigo-300 rounded hover:bg-nexus-800 font-mono"
+                  title="Add Row to Table"
+                >
+                  +Row
+                </button>
+                <button
+                  onClick={addTableCol}
+                  className="px-1 py-0.5 text-[10px] hover:text-indigo-300 rounded hover:bg-nexus-800 font-mono"
+                  title="Add Column to Table"
+                >
+                  +Col
+                </button>
+                <button
+                  onClick={() => insertFormatting("\n---\n\n")}
+                  className="p-1 hover:text-white rounded hover:bg-nexus-800"
+                  title="Divider Rule"
+                >
+                  <Minus className="w-3.5 h-3.5" />
                 </button>
               </div>
 
               {/* Status and Action Buttons */}
               <div className="flex items-center gap-2">
+                {/* Collaborative Sync & Presence indicator */}
+                <div className="flex items-center gap-1.5 mr-2">
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      isCollabConnected ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"
+                    }`}
+                    title={isCollabConnected ? "Real-time sync active" : "Offline sync"}
+                  />
+                  {connectedPeers.length > 0 && (
+                    <div className="flex items-center -space-x-1.5" title={`${connectedPeers.length + 1} users editing`}>
+                      {connectedPeers.map((p) => (
+                        <div
+                          key={p.peerId}
+                          className="w-5 h-5 rounded-full border border-nexus-900 flex items-center justify-center text-[9px] font-bold text-white shadow-sm"
+                          style={{ backgroundColor: p.color }}
+                        >
+                          {p.name.charAt(0)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <span className="text-[11px] text-zinc-500 flex items-center gap-1 font-mono mr-2">
                   {saveStatus === "saving" && "Saving..."}
                   {saveStatus === "saved" && (
@@ -926,7 +1410,7 @@ export default function App() {
                   </button>
 
                   {showExportMenu && (
-                    <div className="absolute right-0 top-9 w-44 bg-nexus-900 border border-nexus-800 rounded-xl p-1.5 shadow-2xl z-50 flex flex-col gap-0.5">
+                    <div className="absolute right-0 top-9 w-48 bg-nexus-900 border border-nexus-800 rounded-xl p-1.5 shadow-2xl z-50 flex flex-col gap-0.5">
                       <button
                         onClick={exportMarkdown}
                         className="flex items-center gap-2 px-3 py-2 text-xs text-zinc-300 hover:text-white hover:bg-nexus-800 rounded-lg text-left transition-colors"
@@ -942,11 +1426,25 @@ export default function App() {
                         <span>HTML Document</span>
                       </button>
                       <button
+                        onClick={copyHtmlToClipboard}
+                        className="flex items-center gap-2 px-3 py-2 text-xs text-zinc-300 hover:text-white hover:bg-nexus-800 rounded-lg text-left transition-colors"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Copy Clean HTML</span>
+                      </button>
+                      <button
+                        onClick={exportPlainText}
+                        className="flex items-center gap-2 px-3 py-2 text-xs text-zinc-300 hover:text-white hover:bg-nexus-800 rounded-lg text-left transition-colors"
+                      >
+                        <Layers className="w-3.5 h-3.5 text-purple-400" />
+                        <span>Plain Text (.txt)</span>
+                      </button>
+                      <button
                         onClick={printDocument}
                         className="flex items-center gap-2 px-3 py-2 text-xs text-zinc-300 hover:text-white hover:bg-nexus-800 rounded-lg text-left transition-colors"
                       >
                         <Printer className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Print / PDF</span>
+                        <span>Print / Save as PDF</span>
                       </button>
                     </div>
                   )}
@@ -954,10 +1452,40 @@ export default function App() {
               </div>
             </header>
 
+            {/* Document Cover Banner */}
+            {docCover && (
+              <div
+                className="w-full h-32 flex-shrink-0 relative group transition-all"
+                style={{
+                  background: docCover.startsWith("http")
+                    ? `url("${docCover}") center/cover no-repeat`
+                    : docCover,
+                }}
+              >
+                <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors" />
+                <div className="absolute right-4 bottom-3 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
+                  <button
+                    onClick={() => setShowCoverPicker(true)}
+                    className="bg-black/60 hover:bg-black/80 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-md flex items-center gap-1.5 transition-colors border border-white/10"
+                  >
+                    <Palette className="w-3 h-3" />
+                    <span>Change Cover</span>
+                  </button>
+                  <button
+                    onClick={() => onDocChange({ coverUrl: "" })}
+                    className="bg-black/60 hover:bg-red-950/80 backdrop-blur-md text-red-300 text-xs px-2.5 py-1 rounded-md flex items-center gap-1 transition-colors border border-white/10"
+                  >
+                    <X className="w-3 h-3" />
+                    <span>Remove</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Document Body: Split Editor & Preview Canvas */}
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex overflow-hidden relative">
               {/* Left Edit Pane */}
-              <div className="flex-1 flex flex-col border-r border-nexus-800/80 p-8 overflow-y-auto print:hidden">
+              <div className="flex-1 flex flex-col border-r border-nexus-800/80 p-8 overflow-y-auto print:hidden relative">
                 <input
                   type="text"
                   placeholder="Document Title"
@@ -970,14 +1498,108 @@ export default function App() {
                   id="doc-textarea"
                   value={docContent}
                   onChange={(e) => onDocChange({ content: e.target.value })}
-                  placeholder="Type your markdown document..."
+                  onKeyDown={handleTextareaKeyDown}
+                  placeholder="Type your markdown document or type '/' for blocks..."
                   className="w-full flex-1 bg-transparent resize-none font-mono text-sm leading-relaxed text-zinc-200 placeholder-zinc-700 focus:outline-none"
                 />
+
+                {/* Slash Command Palette */}
+                {showSlashMenu && (
+                  <div className="absolute top-24 left-8 w-64 bg-nexus-900 border border-nexus-800 rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-0.5 animate-in fade-in duration-100">
+                    <div className="px-2 py-1 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider flex justify-between items-center">
+                      <span>Insert Block</span>
+                      <span className="font-mono text-zinc-600">Esc to close</span>
+                    </div>
+                    <button
+                      onClick={() => applySlashCommand("h1")}
+                      className="flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-nexus-800 rounded-lg text-left transition-colors"
+                    >
+                      <Heading1 className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Heading 1</span>
+                    </button>
+                    <button
+                      onClick={() => applySlashCommand("h2")}
+                      className="flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-nexus-800 rounded-lg text-left transition-colors"
+                    >
+                      <Heading2 className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Heading 2</span>
+                    </button>
+                    <button
+                      onClick={() => applySlashCommand("h3")}
+                      className="flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-nexus-800 rounded-lg text-left transition-colors"
+                    >
+                      <Heading3 className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Heading 3</span>
+                    </button>
+                    <button
+                      onClick={() => applySlashCommand("bullet")}
+                      className="flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-nexus-800 rounded-lg text-left transition-colors"
+                    >
+                      <List className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>Bullet List</span>
+                    </button>
+                    <button
+                      onClick={() => applySlashCommand("todo")}
+                      className="flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-nexus-800 rounded-lg text-left transition-colors"
+                    >
+                      <CheckSquare className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>Todo Checklist</span>
+                    </button>
+                    <button
+                      onClick={() => applySlashCommand("table")}
+                      className="flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-nexus-800 rounded-lg text-left transition-colors"
+                    >
+                      <Table className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Data Table (3x3)</span>
+                    </button>
+                    <button
+                      onClick={() => applySlashCommand("tip")}
+                      className="flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-nexus-800 rounded-lg text-left transition-colors"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Tip Callout</span>
+                    </button>
+                    <button
+                      onClick={() => applySlashCommand("warning")}
+                      className="flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-nexus-800 rounded-lg text-left transition-colors"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Warning Callout</span>
+                    </button>
+                    <button
+                      onClick={() => applySlashCommand("code")}
+                      className="flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-nexus-800 rounded-lg text-left transition-colors"
+                    >
+                      <Code className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Code Block</span>
+                    </button>
+                    <button
+                      onClick={() => applySlashCommand("quote")}
+                      className="flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-nexus-800 rounded-lg text-left transition-colors"
+                    >
+                      <Quote className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>Blockquote</span>
+                    </button>
+                    <button
+                      onClick={() => applySlashCommand("divider")}
+                      className="flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-nexus-800 rounded-lg text-left transition-colors"
+                    >
+                      <Minus className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>Divider</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Right Live Rendered Pane */}
               <div className="flex-1 p-8 overflow-y-auto bg-nexus-950/40 print:p-0 print:bg-white print:text-black">
                 <div className="max-w-2xl mx-auto">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">{docIcon}</span>
+                    <span className="text-xs uppercase font-semibold text-zinc-500 tracking-wider">
+                      {docFolder}
+                    </span>
+                  </div>
                   <h1 className="text-3xl font-extrabold text-white print:text-black mb-6 pb-2 border-b border-nexus-800 print:border-black">
                     {docTitle || "Untitled Document"}
                   </h1>
@@ -1000,8 +1622,13 @@ export default function App() {
                 <span>•</span>
                 <span>~{metrics.readTimeMinutes} min read</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span>Markdown & Tables Supported</span>
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${isCollabConnected ? "bg-emerald-400" : "bg-zinc-600"}`} />
+                  <span>{isCollabConnected ? "Live Peer Collab" : "Local Sync"}</span>
+                </span>
+                <span>•</span>
+                <span>Markdown, Tables & Callouts</span>
               </div>
             </footer>
 

@@ -16,6 +16,12 @@ function json(p: unknown, s = 200, headers?: Record<string, string>): Response {
   });
 }
 
+interface WsData {
+  docId: string;
+  peerId: string;
+  name: string;
+}
+
 export async function createServer() {
   const port = process.env.PORT !== undefined ? Number(process.env.PORT) : 3136;
   const baseUrl = process.env.NEXUS_DOCS_BASE_URL || `http://localhost:${port}`;
@@ -31,11 +37,23 @@ export async function createServer() {
     ttlMs: 30000,
   });
 
-  const server = Bun.serve({
+  const server = Bun.serve<WsData>({
     port,
-    async fetch(req) {
+    async fetch(req, srv) {
       const url = new URL(req.url);
       const p = url.pathname || "";
+
+      // Real-time Collaborative Sync WebSocket
+      if (p === "/api/v1/sync" || p === "/ws") {
+        const docId = url.searchParams.get("docId") || "global";
+        const peerId = randomUUID().slice(0, 8);
+        const name = url.searchParams.get("name") || `User-${peerId}`;
+        const upgraded = srv.upgrade(req, {
+          data: { docId, peerId, name },
+        });
+        if (upgraded) return undefined as any;
+        return new Response("WebSocket upgrade failed", { status: 400 });
+      }
 
       if (req.method === "GET" && p === "/health") {
         return json({
@@ -172,6 +190,44 @@ export async function createServer() {
       }
 
       return json({ error: "not found" }, 404);
+    },
+    websocket: {
+      open(ws) {
+        const data = ws.data;
+        const topic = `doc:${data.docId}`;
+        ws.subscribe(topic);
+        server.publish(
+          topic,
+          JSON.stringify({
+            type: "presence",
+            action: "join",
+            peerId: data.peerId,
+            name: data.name,
+            timestamp: Date.now(),
+          })
+        );
+      },
+      message(ws, msg) {
+        const data = ws.data;
+        const topic = `doc:${data.docId}`;
+        const str = typeof msg === "string" ? msg : new TextDecoder().decode(msg);
+        server.publish(topic, str);
+      },
+      close(ws) {
+        const data = ws.data;
+        const topic = `doc:${data.docId}`;
+        server.publish(
+          topic,
+          JSON.stringify({
+            type: "presence",
+            action: "leave",
+            peerId: data.peerId,
+            name: data.name,
+            timestamp: Date.now(),
+          })
+        );
+        ws.unsubscribe(topic);
+      },
     },
   });
 

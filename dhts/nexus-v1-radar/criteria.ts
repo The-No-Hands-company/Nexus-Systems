@@ -167,14 +167,9 @@ export const REGISTERED_APPS: AppDefinition[] = [
       { id: "revision-history", name: "Version & Revision History", done: true, description: "Browse past revisions and restore previous document states." },
       { id: "table-support", name: "Table Insertion & Editing", done: true, description: "Insert, resize, and edit data tables within documents." },
       { id: "document-export", name: "Export to PDF / Word / Markdown", done: true, description: "High-fidelity document compilation and export." },
-      { id: "collaborative-sync", name: "Collaborative Real-time Sync", done: false, description: "Multi-user cursor and editing synchronization." },
+      { id: "collaborative-sync", name: "Collaborative Real-time Sync", done: true, description: "Multi-user cursor and editing synchronization." },
     ],
-    roadmap: [
-      "Implement document revision history drawer with diff preview",
-      "Add table insertion and row/column controls to editor",
-      "Add clean PDF and Markdown export actions",
-      "Add word count, reading time, and outline sidebar",
-    ],
+    roadmap: [],
   },
   {
     id: "nexus-wiki",

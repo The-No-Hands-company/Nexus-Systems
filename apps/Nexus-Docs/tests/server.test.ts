@@ -104,7 +104,21 @@ describe("nexus-docs", () => {
     const searchDocs = (await searchRes.json()) as any[];
     expect(searchDocs.length).toBeGreaterThanOrEqual(1);
 
-    // 6. Delete Document
+    // 6. Cover and Icon update
+    const coverRes = await fetch(`${base}/api/v1/documents/${doc.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        coverUrl: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)",
+        icon: "🚀",
+      }),
+    });
+    expect(coverRes.status).toBe(200);
+    const coverDoc = (await coverRes.json()) as any;
+    expect(coverDoc.coverUrl).toBe("linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)");
+    expect(coverDoc.icon).toBe("🚀");
+
+    // 7. Delete Document
     const delRes = await fetch(`${base}/api/v1/documents/${doc.id}`, {
       method: "DELETE",
     });
@@ -112,5 +126,53 @@ describe("nexus-docs", () => {
 
     const checkRes = await fetch(`${base}/api/v1/documents/${doc.id}`);
     expect(checkRes.status).toBe(404);
+  });
+
+  it("WebSocket /api/v1/sync supports real-time collaboration and presence", async () => {
+    const wsUrl = base.replace(/^http/, "ws") + "/api/v1/sync?docId=doc-collab-123&name=Alice";
+    const wsUrl2 = base.replace(/^http/, "ws") + "/api/v1/sync?docId=doc-collab-123&name=Bob";
+
+    const client1 = new WebSocket(wsUrl);
+    const client2 = new WebSocket(wsUrl2);
+
+    const received: any[] = [];
+
+    await new Promise<void>((resolve, reject) => {
+      let openCount = 0;
+      const onOpen = () => {
+        openCount++;
+        if (openCount === 2) resolve();
+      };
+      client1.onopen = onOpen;
+      client2.onopen = onOpen;
+      client1.onerror = reject;
+      client2.onerror = reject;
+      setTimeout(() => reject(new Error("WS connection timed out")), 2000);
+    });
+
+    client1.onmessage = (event) => {
+      try {
+        received.push(JSON.parse(String(event.data)));
+      } catch {
+        received.push(event.data);
+      }
+    };
+
+    // Client 2 broadcasts an edit event
+    client2.send(
+      JSON.stringify({
+        type: "edit",
+        docId: "doc-collab-123",
+        delta: { title: "Collaborative Update" },
+      })
+    );
+
+    // Wait briefly for client 1 to receive the message
+    await new Promise((r) => setTimeout(r, 200));
+
+    expect(received.some((m) => m.type === "edit" && m.delta?.title === "Collaborative Update")).toBe(true);
+
+    client1.close();
+    client2.close();
   });
 });
