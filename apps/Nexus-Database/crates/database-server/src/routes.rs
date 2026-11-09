@@ -1,4 +1,4 @@
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use database_core::{
     DatabaseConfig, DatabaseEngine, DatabaseError, DatabaseInfo, DatabaseStatus,
     HealthResponse, ProvisionDatabaseRequest, QueryRequest, QueryResponse,
@@ -6,6 +6,75 @@ use database_core::{
 use uuid::Uuid;
 
 use crate::state::AppState;
+
+/// GET /
+pub async fn root(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> axum::response::Response {
+    let accept = headers
+        .get(axum::http::header::ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    if accept.contains("text/html") {
+        let uptime = state.start_time.elapsed().as_secs();
+        let db_count = state.database_count().await;
+        let html = format!(
+            r#"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Nexus Database Engine Studio</title>
+  <style>
+    :root {{ --bg: #090a0f; --card: #12151f; --line: #1e2436; --text: #e2e8f0; --muted: #798399; --accent: #f59e0b; }}
+    body {{ margin: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }}
+    .card {{ background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 36px; max-width: 580px; width: 100%; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }}
+    .badge {{ display: inline-flex; align-items: center; gap: 8px; font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: 999px; padding: 4px 12px; margin-bottom: 20px; }}
+    .dot {{ width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }}
+    h1 {{ margin: 0 0 10px; font-size: 24px; font-weight: 700; color: #fff; }}
+    p {{ margin: 0 0 24px; color: var(--muted); font-size: 14px; line-height: 1.6; }}
+    .meta {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; font-size: 13px; font-family: ui-monospace, monospace; }}
+    .meta-box {{ background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }}
+    .meta-box .k {{ color: var(--muted); font-size: 11px; margin-bottom: 4px; text-transform: uppercase; }}
+    .meta-box .v {{ color: #fff; font-weight: 600; }}
+    .btn {{ display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; background: #d97706; color: #fff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600; font-size: 14px; transition: background 0.2s; }}
+    .btn:hover {{ background: #b45309; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge"><span class="dot"></span> Engine Online</div>
+    <h1>Nexus Database Engine</h1>
+    <p>Consistency-tiered sovereign database engine, multi-tenant persistence manager, and high-performance Postgres wire protocol provider for Nexus Systems.</p>
+    <div class="meta">
+      <div class="meta-box"><div class="k">Version</div><div class="v">{}</div></div>
+      <div class="meta-box"><div class="k">Managed DBs</div><div class="v">{}</div></div>
+      <div class="meta-box"><div class="k">Uptime</div><div class="v">{}s</div></div>
+      <div class="meta-box"><div class="k">Wire Protocol</div><div class="v">Postgres 5432</div></div>
+    </div>
+    <a href="https://app.tnhc.dev/" class="btn">Return to Platform Dashboard →</a>
+  </div>
+</body>
+</html>"#,
+            env!("CARGO_PKG_VERSION"),
+            db_count,
+            uptime
+        );
+        axum::response::Html(html).into_response()
+    } else {
+        Json(HealthResponse {
+            status: "ok",
+            version: env!("CARGO_PKG_VERSION"),
+            managed_databases: state.database_count().await,
+            uptime_seconds: state.start_time.elapsed().as_secs_f64(),
+            persistence: state.persistence.is_active(),
+            cloud_system_id: state.cloud_system_id.clone(),
+        })
+        .into_response()
+    }
+}
 
 /// GET /health
 pub async fn health(State(state): State<AppState>) -> Json<HealthResponse> {

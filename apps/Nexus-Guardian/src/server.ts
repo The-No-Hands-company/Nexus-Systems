@@ -227,10 +227,55 @@ const server = Bun.serve({
       const url = new URL(request.url);
       const path = url.pathname;
 
-      if (request.method === "GET" && path === "/health") {
+      if (request.method === "GET" && (path === "/" || path === "/health")) {
+        const accept = request.headers.get("accept") || "";
+        if (accept.includes("text/html") && path === "/") {
+          const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Nexus Guardian — Security & Threat Policy Daemon</title>
+  <style>
+    :root { --bg: #090a0f; --card: #12151f; --line: #1e2436; --text: #e2e8f0; --muted: #798399; --accent: #10b981; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 36px; max-width: 580px; width: 100%; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
+    .badge { display: inline-flex; align-items: center; gap: 8px; font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); border-radius: 999px; padding: 4px 12px; margin-bottom: 20px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+    h1 { margin: 0 0 10px; font-size: 24px; font-weight: 700; color: #fff; }
+    p { margin: 0 0 24px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; font-size: 13px; font-family: ui-monospace, monospace; }
+    .meta-box { background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+    .meta-box .k { color: var(--muted); font-size: 11px; margin-bottom: 4px; text-transform: uppercase; }
+    .meta-box .v { color: #fff; font-weight: 600; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; background: #2563eb; color: #fff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600; font-size: 14px; transition: background 0.2s; }
+    .btn:hover { background: #1d4ed8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge"><span class="dot"></span> Platform Service Active</div>
+    <h1>Nexus Guardian</h1>
+    <p>Runtime threat monitoring, dynamic policy enforcement, rate anomaly detection, and abuse response daemon for the Nexus Systems ecosystem.</p>
+    <div class="meta">
+      <div class="meta-box"><div class="k">Role</div><div class="v">Security Daemon</div></div>
+      <div class="meta-box"><div class="k">Status</div><div class="v">Operational</div></div>
+      <div class="meta-box"><div class="k">Health Check</div><div class="v"><a href="/health" style="color:var(--accent);text-decoration:none;">/health → 200 OK</a></div></div>
+      <div class="meta-box"><div class="k">API Protocol</div><div class="v">Systems API v1</div></div>
+    </div>
+    <a href="https://app.tnhc.dev/" class="btn">Return to Platform Dashboard →</a>
+  </div>
+</body>
+</html>`;
+          return new Response(html, {
+            headers: { "content-type": "text/html; charset=utf-8" },
+          });
+        }
+
         return jsonResponse({
           status: "ok",
           service: "nexus-guardian",
+          role: "platform_security_daemon",
           timestamp: new Date().toISOString(),
           phantom: phantomApp.status(),
         });

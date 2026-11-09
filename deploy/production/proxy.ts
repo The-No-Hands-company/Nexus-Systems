@@ -97,6 +97,10 @@ const FALLBACK_DOCS_UPSTREAM = process.env.DOCS_UPSTREAM || "http://127.0.0.1:31
 const FALLBACK_WIKI_UPSTREAM = process.env.WIKI_UPSTREAM || "http://127.0.0.1:3160";
 const FALLBACK_CODE_UPSTREAM = process.env.CODE_UPSTREAM || "http://127.0.0.1:3126";
 const FALLBACK_VAULT_UPSTREAM = process.env.VAULT_UPSTREAM || "http://127.0.0.1:3900";
+const FALLBACK_AI_UPSTREAM = process.env.AI_UPSTREAM || "http://127.0.0.1:3400";
+const FALLBACK_DATABASE_UPSTREAM = process.env.DATABASE_UPSTREAM || "http://127.0.0.1:3088";
+const FALLBACK_GUARDIAN_UPSTREAM = process.env.GUARDIAN_UPSTREAM || "http://127.0.0.1:4320";
+const FALLBACK_EDGE_UPSTREAM = process.env.EDGE_UPSTREAM || "http://127.0.0.1:4340";
 // deploy.<DOMAIN> is Nexus Deploy's control plane: its dashboard, its API and the
 // push-to-deploy webhook. The apps it runs are NOT here; they are reached on
 // their own hostnames through Cloud's routes.
@@ -830,6 +834,18 @@ async function handleRequestInner(
       } else if (host === `vault.${DOMAIN}` || host === `www.vault.${DOMAIN}`) {
         upstreamUrl = FALLBACK_VAULT_UPSTREAM;
         fixedKind = "app";
+      } else if (host === `ai.${DOMAIN}` || host === `www.ai.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_AI_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `database.${DOMAIN}` || host === `www.database.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_DATABASE_UPSTREAM;
+        fixedKind = "site";
+      } else if (host === `guardian.${DOMAIN}` || host === `www.guardian.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_GUARDIAN_UPSTREAM;
+        fixedKind = "site";
+      } else if (host === `edge.${DOMAIN}` || host === `www.edge.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_EDGE_UPSTREAM;
+        fixedKind = "site";
       } else if (host === `mail.${DOMAIN}` || host === `www.mail.${DOMAIN}`) {
         upstreamUrl = FALLBACK_DASHBOARD_UPSTREAM;
         fixedKind = "app";

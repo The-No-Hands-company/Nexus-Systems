@@ -19,6 +19,7 @@ fi
 CLOUD_ENV_FILE="${NEXUS_CLOUD_ENV_FILE:-$ROOT/apps/Nexus-Cloud/.env}"
 NEXUS_CHAT_ENV_FILE="${NEXUS_CHAT_ENV_FILE:-$ROOT/deploy/production/nexus-chat.env}"
 NEXUS_CHAT_BINARY_PATH="${NEXUS_CHAT_BINARY_PATH:-$HOME/.cache/cargo-target/debug/nexus}"
+NEXUS_DATABASE_BINARY_PATH="${NEXUS_DATABASE_BINARY_PATH:-$HOME/.cache/cargo-target/debug/nexus-database}"
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
 # shellcheck source=processes.sh
@@ -73,6 +74,10 @@ service_identity() {
         nexus-wiki|wiki) SERVICE_DIR="$ROOT/apps/Nexus-Wiki"; SERVICE_EXEC_PATTERN="uvicorn nexus_wiki.main:app" ;;
         nexus-code|code) SERVICE_DIR="$ROOT/apps/Nexus-Code"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-vault|vault) SERVICE_DIR="$ROOT/apps/Nexus-Vault"; SERVICE_EXEC_PATTERN="bun src/index.ts" ;;
+        ai|nexus-ai)    SERVICE_DIR="$ROOT/apps/Nexus-AI"; SERVICE_EXEC_PATTERN="python main.py" ;;
+        database|nexus-database) SERVICE_DIR="$ROOT/apps/Nexus-Database"; SERVICE_EXEC_PATTERN="nexus-database" ;;
+        guardian|nexus-guardian) SERVICE_DIR="$ROOT/apps/Nexus-Guardian"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        edge|nexus-edge) SERVICE_DIR="$ROOT/apps/Nexus-Edge"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         terminal)       SERVICE_DIR="$ROOT/apps/Nexus-Terminal"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         mailapi)        SERVICE_DIR="$ROOT/apps/Nexus-Email"; SERVICE_EXEC_PATTERN="/nexus-mailapi" ;;
         mailsmtpd)      SERVICE_DIR="$ROOT/apps/Nexus-Email"; SERVICE_EXEC_PATTERN="/nexus-mailsmtpd" ;;
@@ -106,6 +111,10 @@ service_port() {
         nexus-wiki|wiki) printf '%s\n' 3160 ;;
         nexus-code|code) printf '%s\n' 3126 ;;
         nexus-vault|vault) printf '%s\n' 3900 ;;
+        ai|nexus-ai) printf '%s\n' 3400 ;;
+        database|nexus-database) printf '%s\n' 3088 ;;
+        guardian|nexus-guardian) printf '%s\n' 4320 ;;
+        edge|nexus-edge) printf '%s\n' 4340 ;;
         terminal) printf '%s\n' 3110 ;;
         mailapi) printf '%s\n' 3140 ;;
         mailsmtpd) printf '%s\n' "${NEXUS_EMAIL_MX_PORT:-2525}" ;;
@@ -489,7 +498,7 @@ preflight_service_start() {
         nexus-chat-web) validate_nexus_chat_caddy ;;
         nexus-deploy|deploy) adopt_cloud_registration_environment_for_dependents ;;
         proxy) adopt_cloud_registration_environment_for_dependents ;;
-        nexus-design|design|nexus-graphic|graphic|nexus-photos|photos|nexus-video|video|nexus-notes|notes|nexus-docs|docs|nexus-wiki|wiki|nexus-code|code|nexus-vault|vault|mailapi|nexus-project|nexus-project-web) : ;;
+        nexus-design|design|nexus-graphic|graphic|nexus-photos|photos|nexus-video|video|nexus-notes|notes|nexus-docs|docs|nexus-wiki|wiki|nexus-code|code|nexus-vault|vault|mailapi|nexus-project|nexus-project-web|ai|nexus-ai|database|nexus-database|guardian|nexus-guardian|edge|nexus-edge) : ;;
         *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, proxy, creative, document, and developer suites"; return 1 ;;
     esac
 }
@@ -564,6 +573,46 @@ start_nexus_vault_service() {
         NODE_ENV=production \
         VAULT_DATA_DIR="$ROOT/apps/Nexus-Vault/data" \
         bun src/index.ts
+}
+
+start_nexus_ai_service() {
+    start_service "ai" "$ROOT/apps/Nexus-AI" 3400 \
+        PORT=3400 \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_BIND_HOST=127.0.0.1 \
+        python main.py
+}
+
+start_nexus_database_service() {
+    local db_bin="${NEXUS_DATABASE_BINARY_PATH:-$HOME/.cache/cargo-target/debug/nexus-database}"
+    if [ ! -x "$db_bin" ] && [ -x "$ROOT/apps/Nexus-Database/target/debug/nexus-database" ]; then
+        db_bin="$ROOT/apps/Nexus-Database/target/debug/nexus-database"
+    fi
+    if [ -x "$db_bin" ]; then
+        start_service "database" "$ROOT/apps/Nexus-Database" 3088 \
+            NEXUS_DB_HOST=127.0.0.1 \
+            NEXUS_DB_PORT=3088 \
+            "$db_bin"
+    else
+        warn "nexus-database binary missing at $db_bin"
+        return 1
+    fi
+}
+
+start_nexus_guardian_service() {
+    start_service "guardian" "$ROOT/apps/Nexus-Guardian" 4320 \
+        PORT=4320 \
+        NEXUS_BIND_HOST=127.0.0.1 \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        bun run src/index.ts
+}
+
+start_nexus_edge_service() {
+    start_service "edge" "$ROOT/apps/Nexus-Edge" 4340 \
+        PORT=4340 \
+        NEXUS_BIND_HOST=127.0.0.1 \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        bun run src/index.ts
 }
 
 start_proxy_service() {
@@ -652,6 +701,10 @@ start_named_service() {
         nexus-wiki|wiki) start_nexus_wiki_service ;;
         nexus-code|code) start_nexus_code_service ;;
         nexus-vault|vault) start_nexus_vault_service ;;
+        ai|nexus-ai) start_nexus_ai_service ;;
+        database|nexus-database) start_nexus_database_service ;;
+        guardian|nexus-guardian) start_nexus_guardian_service ;;
+        edge|nexus-edge) start_nexus_edge_service ;;
         nexus-project) start_nexus_project_service ;;
         nexus-project-web) start_nexus_project_web_service ;;
         proxy) start_proxy_service ;;
@@ -1110,6 +1163,12 @@ cmd_start() {
     start_nexus_code_service
     start_nexus_vault_service
 
+    # 4fe-i. Core Intelligence & Infrastructure Services
+    start_nexus_ai_service
+    start_nexus_database_service
+    start_nexus_guardian_service
+    start_nexus_edge_service
+
     # 4g. Nexus-Email API — the mail store behind app.$DOMAIN/mail.
     #
     # Loopback only, and that is a security control rather than a default: this
@@ -1338,7 +1397,7 @@ cmd_stop() {
     local svc
 
     log "Stopping all Nexus services..."
-    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-vault nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-vault ai database guardian edge nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
         stop_service "$svc" || true
     done
     cd "$ROOT"
@@ -1348,7 +1407,7 @@ cmd_stop() {
 
 cmd_service_status() {
     echo "Service Status:"
-    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-vault nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-vault ai database guardian edge nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
         service_identity "$svc" || continue
         local pid port
         port="$(service_port "$svc")"
@@ -1380,7 +1439,7 @@ cmd_status() {
     # reaches, so a healthy API behind a dead front door still reads as down.
     # nexus-draw-web is similar: the Draw API is on 3075, but the front door
     # on 8091 joins the SPA + API + WebSocket, so probe the front door.
-    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:3068/health" "http://localhost:8092/health" "http://localhost:8095/api/v1/health" "http://localhost:8091/health" "http://localhost:8096/api/health" "http://127.0.0.1:3110/health" "http://localhost:3132/health" "http://localhost:3075/health" "http://localhost:8080/health"; do
+    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:3068/health" "http://localhost:8092/health" "http://localhost:8095/api/v1/health" "http://localhost:8091/health" "http://localhost:8096/api/health" "http://127.0.0.1:3110/health" "http://localhost:3132/health" "http://localhost:3075/health" "http://localhost:3400/health" "http://localhost:3088/health" "http://localhost:4320/health" "http://localhost:4340/health" "http://localhost:8080/health"; do
         if http_endpoint_healthy "$endpoint"; then
             echo -e "  ${G}●${R} $endpoint"
         else

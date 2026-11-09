@@ -70,6 +70,7 @@ async fn main() -> anyhow::Result<()> {
         .route_layer(middleware::from_fn(auth::require_admin));
 
     let app = Router::new()
+        .route("/", get(routes::root))
         .route("/health", get(routes::health))
         .merge(read_routes)
         .merge(write_routes)
