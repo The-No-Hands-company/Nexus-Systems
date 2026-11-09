@@ -382,11 +382,7 @@ export const REGISTERED_APPS: AppDefinition[] = [
       { id: "access-audit", name: "Audit Trail of Secret Access", done: true, description: "Log who accessed which secret key with timestamp and IP." },
       { id: "secret-rotation", name: "Rotation Warnings & Expiration", done: true, description: "Set expiration dates on credentials with automatic alerts." },
     ],
-    roadmap: [
-      "Add one-time secret sharing link generator with burn-on-read",
-      "Build secret access audit history log table",
-      "Add secret expiration dates and renewal notifications",
-    ],
+    roadmap: [],
   },
   {
     id: "nexus-terminal",
