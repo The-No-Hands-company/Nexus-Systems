@@ -50,3 +50,14 @@ export interface ScheduleResult {
   projectFinish: string | null;
   criticalPath: string[];
 }
+
+export interface TaskActivity {
+  id: string;
+  taskId: string;
+  projectId: string;
+  kind: "comment" | "status_change" | "assignment" | "update" | "subtask" | "created";
+  authorSubject: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}

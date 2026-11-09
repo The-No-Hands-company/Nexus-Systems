@@ -489,7 +489,7 @@ preflight_service_start() {
         nexus-chat-web) validate_nexus_chat_caddy ;;
         nexus-deploy|deploy) adopt_cloud_registration_environment_for_dependents ;;
         proxy) adopt_cloud_registration_environment_for_dependents ;;
-        nexus-design|design|nexus-graphic|graphic|nexus-photos|photos|nexus-video|video|nexus-notes|notes|nexus-docs|docs|nexus-wiki|wiki|nexus-code|code|nexus-vault|vault|mailapi) : ;;
+        nexus-design|design|nexus-graphic|graphic|nexus-photos|photos|nexus-video|video|nexus-notes|notes|nexus-docs|docs|nexus-wiki|wiki|nexus-code|code|nexus-vault|vault|mailapi|nexus-project|nexus-project-web) : ;;
         *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, proxy, creative, document, and developer suites"; return 1 ;;
     esac
 }
@@ -611,6 +611,29 @@ start_mailapi_service() {
     fi
 }
 
+start_nexus_project_service() {
+    local project_db="${NEXUS_PROJECT_DB:-$ROOT/data/project.sqlite}"
+    local project_jwt_audience="${NEXUS_PROJECT_JWT_AUDIENCE:-project.$DOMAIN}"
+    start_service "nexus-project" "$ROOT/apps/Nexus-Project" 3152 \
+        PORT=3152 \
+        NEXUS_BIND_HOST=127.0.0.1 \
+        NEXUS_PROJECT_DB="$project_db" \
+        NEXUS_PROJECT_JWT_AUDIENCE="$project_jwt_audience" \
+        NEXUS_PROJECT_BASE_URL=http://127.0.0.1:8093 \
+        NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        bun run src/index.ts
+}
+
+start_nexus_project_web_service() {
+    local project_web_root="${NEXUS_PROJECT_WEB_ROOT:-$ROOT/apps/Nexus-Project/frontend/dist}"
+    if command -v "$CADDY_BIN" >/dev/null 2>&1 && [ -f "$project_web_root/index.html" ]; then
+        NEXUS_PROJECT_WEB_ROOT="$project_web_root" \
+            start_service "nexus-project-web" "$ROOT" 8093 \
+            "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-project.Caddyfile"
+    fi
+}
+
 start_named_service() {
     case "$1" in
         auth) start_auth_service ;;
@@ -629,6 +652,8 @@ start_named_service() {
         nexus-wiki|wiki) start_nexus_wiki_service ;;
         nexus-code|code) start_nexus_code_service ;;
         nexus-vault|vault) start_nexus_vault_service ;;
+        nexus-project) start_nexus_project_service ;;
+        nexus-project-web) start_nexus_project_web_service ;;
         proxy) start_proxy_service ;;
         mailapi) start_mailapi_service ;;
         *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, proxy, creative, document, and developer suites"; return 1 ;;

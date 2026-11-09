@@ -99,6 +99,19 @@ const MIGRATIONS: readonly string[] = [
   CREATE INDEX dependencies_project ON dependencies (project_id);
   CREATE INDEX dependencies_successor ON dependencies (successor_id);
   `,
+  `
+  CREATE TABLE task_activities (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('comment', 'status_change', 'assignment', 'update', 'subtask', 'created')),
+    author_subject TEXT NOT NULL,
+    message TEXT NOT NULL,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX task_activities_task ON task_activities (task_id, created_at DESC);
+  `,
 ];
 
 export function openDatabase(path: string): Database {

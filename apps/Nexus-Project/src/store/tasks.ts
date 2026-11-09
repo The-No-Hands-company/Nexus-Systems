@@ -4,6 +4,7 @@ import { canSeeProject, projectAccess, requireRole, taskAccess, workspaceRole } 
 import { badRequest, conflict, unprocessable } from "../http";
 import { rankAfter, rankBefore, rankBetween } from "../rank";
 import type { WorkingCalendar } from "../schedule/calendar";
+import { logActivity } from "./activities";
 import { now, transaction } from "./db";
 import { hasChildren, hasLinks, statusInProject, taskKey } from "./queries";
 import type { ProjectRow, TaskRow } from "./rows";
@@ -408,6 +409,7 @@ export function createTask(
       subject,
       subject,
     );
+    logActivity(db, id, project.id, subject, "created", `Task #${number} created`);
     const touched = reschedule(db, project.id, subject);
     if (promoted) touched.push(parentId as string);
     return {
@@ -463,6 +465,40 @@ export function updateTask(
       subject,
       id,
     );
+    if (patch.statusId && patch.statusId !== task.status_id) {
+      const oldStatus = db.query("SELECT name FROM statuses WHERE id = ?").get(task.status_id) as {
+        name: string;
+      } | null;
+      const newStatus = db.query("SELECT name FROM statuses WHERE id = ?").get(patch.statusId) as {
+        name: string;
+      } | null;
+      logActivity(
+        db,
+        id,
+        project.id,
+        subject,
+        "status_change",
+        `Changed status from ${oldStatus?.name ?? "previous"} to ${newStatus?.name ?? "new"}`,
+        { from: task.status_id, to: patch.statusId },
+      );
+    }
+    if (patch.assigneeSubject !== undefined && patch.assigneeSubject !== task.assignee_subject) {
+      logActivity(
+        db,
+        id,
+        project.id,
+        subject,
+        "assignment",
+        patch.assigneeSubject ? `Assigned task to ${patch.assigneeSubject}` : "Unassigned task",
+        { assignee: patch.assigneeSubject },
+      );
+    }
+    if (patch.title && patch.title !== task.title) {
+      logActivity(db, id, project.id, subject, "update", `Updated title to "${patch.title}"`);
+    }
+    if (patch.progress !== undefined && patch.progress !== task.progress) {
+      logActivity(db, id, project.id, subject, "update", `Progress updated to ${patch.progress}%`);
+    }
     const touched = reschedule(db, project.id, subject);
     return {
       ...toTask(taskRow(db, id), project.key),
@@ -517,6 +553,23 @@ export function moveTask(
     db.query(
       "UPDATE tasks SET parent_id = ?, status_id = ?, rank = ?, version = version + 1, updated_at = ?, updated_by = ? WHERE id = ?",
     ).run(parentId, move.statusId ?? task.status_id, rank, now(), subject, id);
+    if (move.statusId && move.statusId !== task.status_id) {
+      const oldStatus = db.query("SELECT name FROM statuses WHERE id = ?").get(task.status_id) as {
+        name: string;
+      } | null;
+      const newStatus = db.query("SELECT name FROM statuses WHERE id = ?").get(move.statusId) as {
+        name: string;
+      } | null;
+      logActivity(
+        db,
+        id,
+        project.id,
+        subject,
+        "status_change",
+        `Moved status from ${oldStatus?.name ?? "previous"} to ${newStatus?.name ?? "new"}`,
+        { from: task.status_id, to: move.statusId },
+      );
+    }
     const demoted = reparented && demoteIfChildless(db, task.parent_id, subject);
     const touched = reschedule(db, project.id, subject);
     if (promoted) touched.push(parentId as string);

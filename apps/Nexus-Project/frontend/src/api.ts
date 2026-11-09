@@ -1,4 +1,4 @@
-import type { Dependency, Project, Role, ScheduleResult, Status, Task, Workspace } from "./types";
+import type { Dependency, Project, Role, ScheduleResult, Status, Task, TaskActivity, Workspace } from "./types";
 import type { LinkType } from "./types";
 
 export class ProjectApiError extends Error {
@@ -91,6 +91,17 @@ export function projectApi(base: string) {
     // My tasks — backend returns { tasks: [...] }
     myTasks: () =>
       r<{ tasks: Task[] }>("/api/v1/project/me/tasks").then(d => d.tasks),
+
+    // Task Activities & Comments
+    listTaskActivities: (taskId: string) =>
+      r<{ activities: TaskActivity[] }>(`/api/v1/project/tasks/${taskId}/activities`)
+        .then(d => d.activities)
+        .catch(() => []),
+    addComment: (taskId: string, message: string) =>
+      r<{ activity: TaskActivity }>(`/api/v1/project/tasks/${taskId}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      }).then(d => d.activity),
   };
 }
 

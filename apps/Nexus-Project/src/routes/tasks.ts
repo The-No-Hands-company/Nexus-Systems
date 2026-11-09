@@ -1,6 +1,7 @@
 import { HttpError, badRequest, json, readJson } from "../http";
 import { type Router, param } from "../router";
 import type { Context } from "../server";
+import * as activities from "../store/activities";
 import * as tasks from "../store/tasks";
 import {
   type Body,
@@ -124,5 +125,18 @@ export function registerTaskRoutes(router: Router<Context>): void {
 
   router.add("DELETE", "/tasks/:id", ({ db, subject }, params) => {
     return json({ deleted: true, rescheduled: tasks.deleteTask(db, subject, param(params, "id")) });
+  });
+
+  router.add("GET", "/tasks/:id/activities", ({ db, subject }, params) => {
+    return json({ activities: activities.listActivities(db, subject, param(params, "id")) });
+  });
+
+  router.add("POST", "/tasks/:id/comments", async ({ db, subject, req }, params) => {
+    const body = object(await readJson(req), ["message"]);
+    const message = requiredText(body, "message", 5000);
+    return json(
+      { activity: activities.addComment(db, subject, param(params, "id"), message) },
+      201,
+    );
   });
 }

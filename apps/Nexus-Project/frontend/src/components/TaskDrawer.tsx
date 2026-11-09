@@ -5,6 +5,7 @@ import { StatusBadge } from "./StatusBadge";
 import { PriorityIcon } from "./PriorityIcon";
 import { AssigneeBadge } from "./AssigneeBadge";
 import { SubtaskChecklist } from "./SubtaskChecklist";
+import { TaskActivityLog } from "./TaskActivityLog";
 
 interface Props {
   task: Task;
@@ -324,6 +325,9 @@ export function TaskDrawer({
               </span>
             </div>
           </div>
+
+          {/* Activity & Comment Log */}
+          <TaskActivityLog task={task} />
         </div>
 
         <div className="px-5 py-4 border-t border-zinc-700 flex gap-3">

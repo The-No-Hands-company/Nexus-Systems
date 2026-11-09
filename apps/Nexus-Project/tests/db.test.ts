@@ -10,16 +10,17 @@ const TABLES = [
   "project_members",
   "projects",
   "statuses",
+  "task_activities",
   "tasks",
   "workspace_members",
   "workspaces",
 ];
 
 describe("database", () => {
-  it("creates every table at schema version 1 with foreign keys enforced", () => {
+  it("creates every table at schema version 2 with foreign keys enforced", () => {
     const db = openDatabase(":memory:");
     expect((db.query("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(
-      1,
+      2,
     );
     expect((db.query("PRAGMA foreign_keys").get() as { foreign_keys: number }).foreign_keys).toBe(
       1,
@@ -77,7 +78,7 @@ describe("database", () => {
       first.exec("PRAGMA user_version = 99");
       first.close();
       expect(() => openDatabase(path)).toThrow(
-        /schema version 99 is newer than this code knows \(1\)/,
+        /schema version 99 is newer than this code knows \(2\)/,
       );
     } finally {
       rmSync(dir, { recursive: true, force: true });

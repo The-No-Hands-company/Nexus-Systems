@@ -120,14 +120,9 @@ export const REGISTERED_APPS: AppDefinition[] = [
       { id: "subtasks", name: "Checklists & Subtasks", done: true, description: "Break tasks into actionable subtasks with progress tracking." },
       { id: "milestone-timeline", name: "Milestones & Gantt Timeline", done: true, description: "Visual timeline and milestone deadlines for project phases." },
       { id: "auth-assignees", name: "User Assignment", done: true, description: "Assign tasks to team members with avatar badges from Nexus-Auth." },
-      { id: "audit-activity", name: "Task Activity Log", done: false, description: "Historical audit trail of comments, status shifts, and updates." },
+      { id: "audit-activity", name: "Task Activity Log", done: true, description: "Historical audit trail of comments, status shifts, and updates." },
     ],
-    roadmap: [
-      "Add subtasks checklist component in task drawer",
-      "Connect assignees dropdown to Nexus-Auth member list",
-      "Add timeline/Gantt view tab",
-      "Build task activity and comment log",
-    ],
+    roadmap: [],
   },
   {
     id: "nexus-notes",
