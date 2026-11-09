@@ -9,17 +9,28 @@ export default function TopBar({ embedded = false }: { embedded?: boolean }) {
   const zoom = useEditorStore((s) => s.zoom);
   const setZoom = useEditorStore((s) => s.setZoom);
   const setPan = useEditorStore((s) => s.setPan);
+  const updateBoard = useEditorStore((s) => s.updateBoard);
   const undo = useEditorStore((s) => s.undo);
   const redo = useEditorStore((s) => s.redo);
   const undoStack = useEditorStore((s) => s.undoStack);
   const redoStack = useEditorStore((s) => s.redoStack);
 
-  const doExport = (kind: "png" | "svg") => {
+  const doExport = (kind: "png" | "svg" | "json") => {
     const b = useEditorStore.getState().board;
     if (!b) return;
     const els = useEditorStore.getState().elements.filter((el) => !el.data.hidden);
     if (kind === "png") downloadPNG(b, els);
-    else downloadSVG(b, els);
+    else if (kind === "svg") downloadSVG(b, els);
+    else {
+      const data = JSON.stringify({ board: b, elements: els }, null, 2);
+      const blob = new Blob([data], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${(b.name || "board").replace(/[^\w-]+/g, "_")}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
   };
 
   const save = async () => {
@@ -49,6 +60,19 @@ export default function TopBar({ embedded = false }: { embedded?: boolean }) {
         <span className="text-zinc-700 hidden sm:inline" aria-hidden="true">|</span>
         <button onClick={() => doExport("png")} disabled={!board} aria-label="Export PNG" className="hidden sm:inline-block px-1.5 py-1 rounded hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent">⇩ PNG</button>
         <button onClick={() => doExport("svg")} disabled={!board} aria-label="Export SVG" className="hidden sm:inline-block px-1.5 py-1 rounded hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent">⇩ SVG</button>
+        <button onClick={() => doExport("json")} disabled={!board} aria-label="Export JSON" className="hidden sm:inline-block px-1.5 py-1 rounded hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent">⇩ JSON</button>
+        <span className="text-zinc-700 hidden sm:inline" aria-hidden="true">|</span>
+        <button
+          onClick={() => {
+            if (board) updateBoard({ gridSnap: !board.gridSnap });
+          }}
+          disabled={!board}
+          aria-label="Toggle grid snap"
+          className={`px-1.5 py-1 rounded text-xs transition-colors ${board?.gridSnap ? "bg-accent/20 text-accent font-semibold" : "hover:text-zinc-200 hover:bg-zinc-800 text-zinc-500"}`}
+          title="Toggle alignment grid snap"
+        >
+          Snap: {board?.gridSnap ? "On" : "Off"}
+        </button>
         <span className="text-zinc-700" aria-hidden="true">|</span>
         <button onClick={() => setZoom(zoom - 0.1)} aria-label="Zoom out" className="px-1.5 py-1 rounded hover:text-zinc-200 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent">−</button>
         <span aria-live="polite" aria-label={`Zoom ${Math.round(zoom * 100)} percent`}>{Math.round(zoom * 100)}%</span>

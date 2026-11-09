@@ -33,6 +33,20 @@ export default function LayerPanel() {
     reorderElements([...below.map((e) => e.id), swapWith.id, id, ...above.filter((e) => e.id !== swapWith.id).map((e) => e.id)]);
   };
 
+  const bringToFront = (id: string) => {
+    const cur = elements.find((e) => e.id === id);
+    if (!cur) return;
+    const others = elements.filter((e) => e.id !== id).sort((a, b) => a.order - b.order);
+    reorderElements([...others.map((e) => e.id), id]);
+  };
+
+  const sendToBack = (id: string) => {
+    const cur = elements.find((e) => e.id === id);
+    if (!cur) return;
+    const others = elements.filter((e) => e.id !== id).sort((a, b) => a.order - b.order);
+    reorderElements([id, ...others.map((e) => e.id)]);
+  };
+
   return (
     <div className="flex flex-col h-full">
       <h2 className="p-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800">
@@ -87,20 +101,34 @@ export default function LayerPanel() {
         })}
       </div>
       <div className="p-2 border-t border-zinc-800 space-y-1">
-        <div className="flex gap-1">
+        <div className="grid grid-cols-2 gap-1">
           <button
             onClick={() => { const sel = [...selectedElementIds]; if (sel.length === 1) oneUp(sel[0]); }}
-            className="flex-1 px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded"
+            className="px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded"
             disabled={selectedElementIds.size !== 1}
           >
-            ↑
+            Move Up ↑
           </button>
           <button
             onClick={() => { const sel = [...selectedElementIds]; if (sel.length === 1) oneDown(sel[0]); }}
-            className="flex-1 px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded"
+            className="px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded"
             disabled={selectedElementIds.size !== 1}
           >
-            ↓
+            Move Down ↓
+          </button>
+          <button
+            onClick={() => { const sel = [...selectedElementIds]; if (sel.length === 1) bringToFront(sel[0]); }}
+            className="px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded"
+            disabled={selectedElementIds.size !== 1}
+          >
+            To Front ⤊
+          </button>
+          <button
+            onClick={() => { const sel = [...selectedElementIds]; if (sel.length === 1) sendToBack(sel[0]); }}
+            className="px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded"
+            disabled={selectedElementIds.size !== 1}
+          >
+            To Back ⤋
           </button>
         </div>
         <button

@@ -4,11 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "cd ../../../packages/nexus-design && bun run build && cd - && vite",
-    "build": "cd ../../../packages/nexus-design && bun run build && cd - && tsc && vite build",
-    "preview": "vite preview",
+    "dev": "cd ../../../packages/nexus-design && bun run build && cd - && node node_modules/vite/bin/vite.js",
+    "build": "cd ../../../packages/nexus-design && bun run build && cd - && tsc && node node_modules/vite/bin/vite.js build",
+    "preview": "node node_modules/vite/bin/vite.js preview",
     "check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "node node_modules/vitest/vitest.mjs run"
   },
   "dependencies": {
     "lucide-react": "^0.460",
