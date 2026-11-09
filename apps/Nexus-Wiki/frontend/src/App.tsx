@@ -16,6 +16,7 @@ interface PageSummary {
   slug: string;
   title: string;
   updated_at: string;
+  category?: string | null;
 }
 
 interface Revision {
@@ -355,7 +356,23 @@ export default function App() {
     }
   };
 
+  const handleRollback = async (pageSlug: string, version: number) => {
+    if (!confirm(`Are you sure you want to rollback this article to version ${version}?`)) return;
+    try {
+      const restored = await fj(`${API}/pages/${pageSlug}/rollback/${version}?editor_id=${encodeURIComponent(user?.username || "anonymous")}`, {
+        method: "POST",
+      });
+      setPage(restored);
+      setView("read");
+      loadPages();
+      loadCategories();
+    } catch {
+      alert("Failed to rollback revision");
+    }
+  };
+
   const filtered = pages.filter((p) => {
+    if (selectedCat && (p.category || "General").toLowerCase() !== selectedCat.toLowerCase()) return false;
     if (search && !p.title.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
@@ -564,9 +581,14 @@ export default function App() {
                     className="p-3.5 rounded-xl border border-slate-800 hover:border-slate-700 bg-[#0f172a]/80 hover:bg-[#131b2e] cursor-pointer transition-colors group flex flex-col justify-between"
                   >
                     <div>
-                      <h4 className="text-sm font-semibold text-slate-200 group-hover:text-indigo-400 transition-colors">
-                        {p.title}
-                      </h4>
+                      <div className="flex items-start justify-between gap-2">
+                        <h4 className="text-sm font-semibold text-slate-200 group-hover:text-indigo-400 transition-colors">
+                          {p.title}
+                        </h4>
+                        <span className="text-[10px] bg-slate-800/80 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/60 font-mono flex-shrink-0">
+                          {p.category || "General"}
+                        </span>
+                      </div>
                       <p className="text-[11px] text-slate-500 font-mono mt-1">
                         slug: /{p.slug}
                       </p>
@@ -703,14 +725,25 @@ export default function App() {
                         — {r.editor_id}: {r.change_summary}
                       </span>
                     </div>
-                    {i < revisions.length - 1 && (
-                      <button
-                        onClick={() => openDiff(slug, r.version, revisions[i + 1].version)}
-                        className="text-xs px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 text-slate-300"
-                      >
-                        Diff with v{revisions[i + 1].version}
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {i > 0 && (
+                        <button
+                          onClick={() => handleRollback(slug, r.version)}
+                          className="text-xs px-2.5 py-1 bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 rounded-lg border border-amber-500/30 font-medium transition-colors"
+                          title={`Rollback article to v${r.version}`}
+                        >
+                          Rollback to v{r.version}
+                        </button>
+                      )}
+                      {i < revisions.length - 1 && (
+                        <button
+                          onClick={() => openDiff(slug, r.version, revisions[i + 1].version)}
+                          className="text-xs px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 text-slate-300"
+                        >
+                          Diff with v{revisions[i + 1].version}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

@@ -44,6 +44,7 @@ class WikiPageSummary(BaseModel):
     slug: str
     title: str
     updated_at: datetime
+    category: str | None = None
 
 
 class WikiPageListResponse(BaseModel):

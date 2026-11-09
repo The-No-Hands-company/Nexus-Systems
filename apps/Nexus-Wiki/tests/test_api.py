@@ -254,3 +254,38 @@ def test_audit_wiki() -> None:
     assert any(o["slug"] == "orphan-article" for o in data["orphans"])
 
 
+def test_rollback_revision() -> None:
+    client.post("/api/v1/pages", json={"title": "Rollback Test", "content": "Original content v1"})
+    client.patch("/api/v1/pages/rollback-test", json={"content": "Modified content v2"})
+    
+    res = client.post("/api/v1/pages/rollback-test/rollback/1?editor_id=bob")
+    assert res.status_code == 200
+    page = res.json()
+    assert page["version"] == 3
+    assert page["content"] == "Original content v1"
+
+    revs = client.get("/api/v1/pages/rollback-test/revisions").json()
+    assert revs["items"][0]["change_summary"] == "Reverted to revision v1"
+    assert revs["items"][0]["editor_id"] == "bob"
+
+    bad = client.post("/api/v1/pages/rollback-test/rollback/999")
+    assert bad.status_code == 404
+
+
+def test_category_index_endpoints() -> None:
+    client.post("/api/v1/pages", json={"title": "Dev Docs 1", "content": "Intro", "category": "Engineering"})
+    client.post("/api/v1/pages", json={"title": "Dev Docs 2", "content": "API", "category": "Engineering"})
+    client.post("/api/v1/pages", json={"title": "Design 1", "content": "Style guide", "category": "Creative"})
+
+    res = client.get("/api/v1/categories/Engineering/pages")
+    assert res.status_code == 200
+    assert res.json()["total"] >= 2
+    assert all(p["category"] == "Engineering" for p in res.json()["items"])
+
+    idx_res = client.get("/api/v1/categories/index")
+    assert idx_res.status_code == 200
+    cats = {c["name"]: c for c in idx_res.json()["categories"]}
+    assert "Engineering" in cats
+    assert cats["Engineering"]["count"] >= 2
+
+

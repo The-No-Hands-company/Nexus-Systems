@@ -83,6 +83,14 @@ def list_revisions(slug: str) -> WikiPageRevisionListResponse:
     return WikiPageRevisionListResponse(items=items, total=len(items))
 
 
+@app.post("/api/v1/pages/{slug}/rollback/{version}", response_model=WikiPage)
+def rollback_page(slug: str, version: int, editor_id: str = Query("system")) -> WikiPage:
+    page = store.rollback_revision(slug, version, editor_id=editor_id)
+    if page is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page or revision version not found")
+    return page
+
+
 @app.get("/api/v1/search", response_model=WikiPageListResponse)
 def search_pages(q: str = Query(min_length=1, description="Search query")) -> WikiPageListResponse:
     items = store.search(q)
@@ -113,6 +121,35 @@ def list_categories() -> dict:
         if page and page.category:
             cats[page.category] = cats.get(page.category, 0) + 1
     return {"categories": [{"name": k, "count": v} for k, v in sorted(cats.items())]}
+
+
+@app.get("/api/v1/categories/index", response_model=dict)
+def get_categories_index() -> dict:
+    idx = store.get_categories_index()
+    return {
+        "categories": [
+            {
+                "name": cat,
+                "count": len(pages),
+                "pages": [
+                    {
+                        "slug": p.slug,
+                        "title": p.title,
+                        "updated_at": p.updated_at.isoformat() if hasattr(p.updated_at, "isoformat") else str(p.updated_at),
+                        "category": p.category,
+                    }
+                    for p in pages
+                ],
+            }
+            for cat, pages in sorted(idx.items())
+        ]
+    }
+
+
+@app.get("/api/v1/categories/{category}/pages", response_model=WikiPageListResponse)
+def get_category_pages(category: str) -> WikiPageListResponse:
+    items = store.get_category_pages(category)
+    return WikiPageListResponse(items=items, total=len(items))
 
 
 @app.get("/api/v1/pages/{slug}/links", response_model=dict)

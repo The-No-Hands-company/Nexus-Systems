@@ -26,6 +26,8 @@ class WikiStoreAdapter(Protocol):
 
     def update_page(self, slug: str, payload: WikiPageUpdate) -> WikiPage | None: ...
 
+    def rollback_revision(self, slug: str, version: int, editor_id: str = "system") -> WikiPage | None: ...
+
     def search(self, query: str) -> list[WikiPageSummary]: ...
 
     def list_revisions(self, slug: str) -> list[WikiPageRevision]: ...
@@ -75,7 +77,7 @@ class InMemoryWikiStore:
     def list_pages(self) -> list[WikiPageSummary]:
         ordered = sorted(self._pages.values(), key=lambda p: p.updated_at, reverse=True)
         return [
-            WikiPageSummary(slug=page.slug, title=page.title, updated_at=page.updated_at)
+            WikiPageSummary(slug=page.slug, title=page.title, updated_at=page.updated_at, category=page.category)
             for page in ordered
         ]
 
@@ -156,10 +158,29 @@ class InMemoryWikiStore:
                         slug=page.slug,
                         title=page.title,
                         updated_at=page.updated_at,
+                        category=page.category,
                     )
                 )
 
         return sorted(results, key=lambda p: p.updated_at, reverse=True)
+
+    def rollback_revision(self, slug: str, version: int, editor_id: str = "system") -> WikiPage | None:
+        page = self._pages.get(slug)
+        if not page:
+            return None
+        revs = self._revisions.get(slug, [])
+        target_rev = next((r for r in revs if r.version == version), None)
+        if not target_rev:
+            return None
+        return self.update_page(
+            slug,
+            WikiPageUpdate(
+                title=target_rev.title,
+                content=target_rev.content,
+                editor_id=editor_id,
+                change_summary=f"Reverted to revision v{version}",
+            ),
+        )
 
     def list_revisions(self, slug: str) -> list[WikiPageRevision]:
         return sorted(self._revisions.get(slug, []), key=lambda r: r.version, reverse=True)
@@ -422,6 +443,21 @@ class PostgresWikiStore:
             ).mappings()
             return [_to_revision(row) for row in rows]
 
+    def rollback_revision(self, slug: str, version: int, editor_id: str = "system") -> WikiPage | None:
+        revs = self.list_revisions(slug)
+        target_rev = next((r for r in revs if r.version == version), None)
+        if not target_rev:
+            return None
+        return self.update_page(
+            slug,
+            WikiPageUpdate(
+                title=target_rev.title,
+                content=target_rev.content,
+                editor_id=editor_id,
+                change_summary=f"Reverted to revision v{version}",
+            ),
+        )
+
     def reset_for_tests(self) -> None:
         with self._engine.begin() as conn:
             conn.execute(text("TRUNCATE TABLE wiki_page_revisions, wiki_pages RESTART IDENTITY"))
@@ -507,6 +543,28 @@ class WikiStore:
 
     def list_revisions(self, slug: str) -> list[WikiPageRevision]:
         return self._adapter.list_revisions(slug)
+
+    def rollback_revision(self, slug: str, version: int, editor_id: str = "system") -> WikiPage | None:
+        page = self._adapter.rollback_revision(slug, version, editor_id=editor_id)
+        if page:
+            self._backlinks.index_links(page.slug, page.content)
+        return page
+
+    def get_category_pages(self, category: str) -> list[WikiPageSummary]:
+        results: list[WikiPageSummary] = []
+        for p in self.list_pages():
+            full = self.get_page(p.slug)
+            if full and full.category and full.category.lower() == category.lower():
+                results.append(p)
+        return results
+
+    def get_categories_index(self) -> dict[str, list[WikiPageSummary]]:
+        index: dict[str, list[WikiPageSummary]] = {}
+        for p in self.list_pages():
+            full = self.get_page(p.slug)
+            cat = full.category if full and full.category else "General"
+            index.setdefault(cat, []).append(p)
+        return index
 
     def ensure_ready(self) -> None:
         self._adapter.ensure_ready()

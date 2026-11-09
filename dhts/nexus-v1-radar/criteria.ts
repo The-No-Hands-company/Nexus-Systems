@@ -189,11 +189,7 @@ export const REGISTERED_APPS: AppDefinition[] = [
       { id: "drag-reorder", name: "Drag-and-Drop Tree Reorder", done: true, description: "Reorganize page hierarchy by dragging nodes in the tree." },
       { id: "internal-crossref", name: "Broken Link & Orphan Detection", done: true, description: "Audit wiki links to detect dead cross-references." },
     ],
-    roadmap: [
-      "Add auto-generated Table of Contents sticky sidebar",
-      "Implement instant Cmd+K fuzzy search modal",
-      "Add drag-and-drop page hierarchy reordering",
-    ],
+    roadmap: [],
   },
   {
     id: "nexus-code",
