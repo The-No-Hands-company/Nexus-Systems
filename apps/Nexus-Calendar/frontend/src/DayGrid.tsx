@@ -1,4 +1,5 @@
 import type { CalEvent } from "./calendar-api";
+import { parseCategory, CATEGORIES } from "./categories";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
@@ -73,15 +74,17 @@ export default function DayGrid({
 
                 {/* Event Area */}
                 <div className="flex-1 p-1.5 space-y-1.5">
-                  {hourEvents.map((ev) => (
-                    <div
-                      key={ev.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectEvent(ev);
-                      }}
-                      className="rounded-lg border border-accent/40 bg-accent/15 p-2.5 text-accent hover:bg-accent/25 transition-colors cursor-pointer shadow-sm"
-                    >
+                  {hourEvents.map((ev) => {
+                    const cat = CATEGORIES[parseCategory(ev.description)];
+                    return (
+                      <div
+                        key={ev.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectEvent(ev);
+                        }}
+                        className={`rounded-lg p-2.5 ${cat.chipBg} ${cat.chipText} hover:opacity-85 transition-colors cursor-pointer shadow-sm`}
+                      >
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-semibold text-sm text-zinc-100">{ev.title}</span>
                         <span className="font-mono text-xs text-accent">
@@ -105,7 +108,8 @@ export default function DayGrid({
                         </p>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );

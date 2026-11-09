@@ -1,5 +1,6 @@
 import { Badge, type BadgeVariant } from "../../../../packages/nexus-design/src/components/ui/badge";
 import type { CalEvent } from "./calendar-api";
+import { parseCategory, cleanDescription, parseReminder, CATEGORIES } from "./categories";
 
 const ACCESS_VARIANT: Record<string, BadgeVariant> = {
   owner: "accent",
@@ -39,8 +40,22 @@ export default function EventDetails({
         {event.allDay ? "All day" : `${event.startTime.slice(11, 16)} – ${event.endTime.slice(11, 16)}`}
       </p>
       {event.location && <p className="text-sm text-zinc-400">{event.location}</p>}
-      {event.description && <p className="mt-2 text-sm text-zinc-300">{event.description}</p>}
-      <div className="mt-2"><Badge variant={ACCESS_VARIANT[event.access] ?? "default"}>{event.access}</Badge></div>
+      {cleanDescription(event.description) && (
+        <p className="mt-2 text-sm text-zinc-300 leading-relaxed">{cleanDescription(event.description)}</p>
+      )}
+      <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+        <Badge variant={ACCESS_VARIANT[event.access] ?? "default"}>{event.access}</Badge>
+        {parseCategory(event.description) !== "general" && (
+          <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${CATEGORIES[parseCategory(event.description)].badgeBg} ${CATEGORIES[parseCategory(event.description)].badgeText}`}>
+            {CATEGORIES[parseCategory(event.description)].label}
+          </span>
+        )}
+        {parseReminder(event.description) !== "none" && (
+          <span className="rounded bg-zinc-800 border border-zinc-700/80 px-1.5 py-0.5 text-xs text-zinc-400">
+            🔔 {parseReminder(event.description)}
+          </span>
+        )}
+      </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
         {canEdit && onEdit && (

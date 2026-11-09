@@ -15,6 +15,18 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
+const TIMEZONES = [
+  { id: "local", label: "Local Time" },
+  { id: "UTC", label: "UTC" },
+  { id: "Europe/London", label: "London (GMT/BST)" },
+  { id: "Europe/Berlin", label: "Berlin / Stockholm (CET)" },
+  { id: "America/New_York", label: "New York (EST/EDT)" },
+  { id: "America/Chicago", label: "Chicago (CST/CDT)" },
+  { id: "America/Los_Angeles", label: "San Francisco / LA (PST)" },
+  { id: "Asia/Tokyo", label: "Tokyo (JST)" },
+  { id: "Asia/Jakarta", label: "Jakarta (WIB)" },
+];
+
 const datePart = (date: Date) => date.toISOString().slice(0, 10);
 
 const rangeFor = (year: number, month: number) => ({
@@ -57,6 +69,10 @@ export default function CalendarApp({
   const [editingEvent, setEditingEvent] = useState<CalEvent | null>(null);
   const [sharingOpen, setSharingOpen] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [selectedTz, setSelectedTz] = useState<string>("local");
+  const [currentTimeStr, setCurrentTimeStr] = useState<string>("");
+  const [activeAlert, setActiveAlert] = useState<{ title: string; time: string; location?: string } | null>(null);
+  const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const todayText = datePart(today);
@@ -79,6 +95,46 @@ export default function CalendarApp({
   useEffect(() => {
     document.title = `${MONTHS[month]} ${year} — Calendar`;
   }, [month, year]);
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      const options: Intl.DateTimeFormatOptions = {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+        timeZone: selectedTz === "local" ? undefined : selectedTz,
+      };
+      setCurrentTimeStr(now.toLocaleTimeString(undefined, options));
+    };
+    updateTime();
+    const t = setInterval(updateTime, 1000);
+    return () => clearInterval(t);
+  }, [selectedTz]);
+
+  useEffect(() => {
+    const checkUpcoming = () => {
+      const now = Date.now();
+      for (const ev of events) {
+        const evStart = Date.parse(ev.startTime);
+        const diffMs = evStart - now;
+        if (diffMs > 0 && diffMs <= 15 * 60 * 1000 && !dismissedAlerts.has(ev.id)) {
+          const mins = Math.max(1, Math.round(diffMs / 60000));
+          setActiveAlert({
+            title: ev.title,
+            time: `in ${mins} minute${mins !== 1 ? "s" : ""}`,
+            location: ev.location,
+          });
+          return;
+        }
+      }
+      setActiveAlert(null);
+    };
+    checkUpcoming();
+    const interval = setInterval(checkUpcoming, 30_000);
+    return () => clearInterval(interval);
+  }, [events, dismissedAlerts]);
 
   const changeMonth = (offset: number) => {
     const next = new Date(Date.UTC(year, month + offset, 1));
@@ -233,6 +289,29 @@ export default function CalendarApp({
         </button>
       </div>
 
+      {/* Timezone Selector & Clock */}
+      <div className="hidden lg:flex items-center gap-1.5 border-l border-zinc-700/60 pl-2">
+        <label htmlFor="tz-select" className="text-xs text-zinc-400">🌐</label>
+        <select
+          id="tz-select"
+          aria-label="Timezone"
+          value={selectedTz}
+          onChange={(e) => setSelectedTz(e.target.value)}
+          className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 focus:outline-none"
+        >
+          {TIMEZONES.map((tz) => (
+            <option key={tz.id} value={tz.id}>
+              {tz.label}
+            </option>
+          ))}
+        </select>
+        {currentTimeStr && (
+          <span className="font-mono text-xs text-zinc-400 bg-zinc-800 px-2 py-1 rounded border border-zinc-700/60">
+            {currentTimeStr}
+          </span>
+        )}
+      </div>
+
       {/* Export & Import .ics */}
       <div className="hidden sm:inline-flex items-center gap-1 ml-auto">
         <button
@@ -287,6 +366,24 @@ export default function CalendarApp({
       >
         {navSlot}
       </div>
+
+      {activeAlert && (
+        <div role="alert" className="flex items-center justify-between bg-amber-950/70 border-b border-amber-800/80 px-4 py-2 text-xs text-amber-200">
+          <div className="flex items-center gap-2">
+            <span className="text-base">🔔</span>
+            <span className="font-semibold">Event Reminder:</span>
+            <span>"{activeAlert.title}" starts {activeAlert.time}</span>
+            {activeAlert.location && <span className="text-amber-400/80">({activeAlert.location})</span>}
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveAlert(null)}
+            className="rounded px-2 py-1 text-amber-300 hover:bg-amber-900/50 transition-colors"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <main className="flex min-h-0 flex-1 flex-col md:flex-row overflow-hidden">
         {/* Calendar grid according to viewMode */}

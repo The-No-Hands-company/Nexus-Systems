@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import type { CalEvent } from "./calendar-api";
+import { parseCategory, CATEGORIES } from "./categories";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAY_FULL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -70,17 +71,20 @@ export default function MonthGrid({ year, month, events, selectedDay, today, onS
           <span className={`text-xs ${isToday ? "text-accent font-semibold" : "text-zinc-400"}`}>{day}</span>
           <span className="sr-only">{isoDate(new Date(`${date}T00:00:00.000Z`))}</span>
         </button>
-        {eventList.slice(0, 3).map((event) => (
-          <button
-            key={event.id}
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onSelectEvent(event); }}
-            aria-label={event.title}
-            className="mt-0.5 hidden sm:flex w-full truncate rounded-sm bg-accent/20 px-1 text-left text-xs text-accent hover:bg-accent/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent transition-colors"
-          >
-            <span className="truncate">{event.title}</span>
-          </button>
-        ))}
+        {eventList.slice(0, 3).map((event) => {
+          const cat = CATEGORIES[parseCategory(event.description)];
+          return (
+            <button
+              key={event.id}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onSelectEvent(event); }}
+              aria-label={event.title}
+              className={`mt-0.5 hidden sm:flex w-full truncate rounded-sm px-1 text-left text-xs ${cat.chipBg} ${cat.chipText} hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent transition-colors`}
+            >
+              <span className="truncate">{event.title}</span>
+            </button>
+          );
+        })}
         {eventList.length > 0 && (
           <span className="sm:hidden mt-0.5 block h-1 w-1 rounded-full bg-accent" aria-hidden="true" />
         )}

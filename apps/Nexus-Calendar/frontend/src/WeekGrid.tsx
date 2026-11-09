@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { CalEvent } from "./calendar-api";
+import { parseCategory, CATEGORIES } from "./categories";
 
 const DAYS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -98,21 +99,24 @@ export default function WeekGrid({
                     onClick={() => onSelectDay(wd.iso)}
                     className="h-14 border-b border-r border-white/5 p-0.5 relative group hover:bg-white/[0.02] transition-colors cursor-pointer"
                   >
-                    {dayEvents.map((ev) => (
-                      <button
-                        key={ev.id}
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectEvent(ev);
-                        }}
-                        className="w-full truncate rounded bg-accent/20 border border-accent/40 px-1.5 py-0.5 text-left text-xs text-accent hover:bg-accent/30 transition-colors shadow-sm block mb-1"
-                        title={`${ev.title} (${ev.startTime.slice(11, 16)} - ${ev.endTime.slice(11, 16)})`}
-                      >
-                        <span className="font-semibold mr-1">{ev.startTime.slice(11, 16)}</span>
-                        <span>{ev.title}</span>
-                      </button>
-                    ))}
+                    {dayEvents.map((ev) => {
+                      const cat = CATEGORIES[parseCategory(ev.description)];
+                      return (
+                        <button
+                          key={ev.id}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectEvent(ev);
+                          }}
+                          className={`w-full truncate rounded ${cat.chipBg} px-1.5 py-0.5 text-left text-xs ${cat.chipText} hover:opacity-85 transition-colors shadow-sm block mb-1`}
+                          title={`${ev.title} (${ev.startTime.slice(11, 16)} - ${ev.endTime.slice(11, 16)})`}
+                        >
+                          <span className="font-semibold mr-1">{ev.startTime.slice(11, 16)}</span>
+                          <span>{ev.title}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 );
               })}

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import type { CalEvent, EventInput } from "./calendar-api";
+import { parseCategory, cleanDescription, parseReminder, CATEGORIES, type EventCategory } from "./categories";
 
 const inputClass =
   "mt-1 w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-800";
@@ -21,8 +22,10 @@ export default function EventEditor({
   const [allDay, setAllDay] = useState(event?.allDay ?? false);
   const [recurrence, setRecurrence] = useState(event?.recurrence ?? "none");
   const [recurrenceScope, setRecurrenceScope] = useState<"this" | "series">("series");
+  const [category, setCategory] = useState<EventCategory>(parseCategory(event?.description));
+  const [reminder, setReminder] = useState(parseReminder(event?.description));
   const [location, setLocation] = useState(event?.location ?? "");
-  const [description, setDescription] = useState(event?.description ?? "");
+  const [description, setDescription] = useState(cleanDescription(event?.description));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -43,10 +46,14 @@ export default function EventEditor({
             ? undefined
             : recurrence;
 
+      let finalDesc = description.trim();
+      if (category !== "general") finalDesc = `${finalDesc} [category:${category}]`.trim();
+      if (reminder !== "none") finalDesc = `${finalDesc} [reminder:${reminder}]`.trim();
+
       await onSave({
         title,
         location: location || undefined,
-        description: description || undefined,
+        description: finalDesc || undefined,
         startTime,
         endTime,
         allDay,
@@ -161,6 +168,42 @@ export default function EventEditor({
           </div>
         </div>
       )}
+
+      {/* Category & Reminder Controls */}
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block text-sm text-zinc-300">
+          Category
+          <select
+            aria-label="Category"
+            value={category}
+            onChange={(e) => setCategory(e.target.value as EventCategory)}
+            className={inputClass}
+          >
+            {Object.values(CATEGORIES).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block text-sm text-zinc-300">
+          Reminder
+          <select
+            aria-label="Reminder"
+            value={reminder}
+            onChange={(e) => setReminder(e.target.value)}
+            className={inputClass}
+          >
+            <option value="none">No reminder</option>
+            <option value="5m">5 minutes before</option>
+            <option value="15m">15 minutes before</option>
+            <option value="30m">30 minutes before</option>
+            <option value="1h">1 hour before</option>
+            <option value="1d">1 day before</option>
+          </select>
+        </label>
+      </div>
 
       <label className="block text-sm text-zinc-300">
         Location
