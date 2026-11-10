@@ -239,6 +239,10 @@ export function toAppEntries(payload: unknown, authHost: string, selfHost?: stri
         publicUrl = raw.url;
       }
     }
+    if (!publicUrl && id.startsWith("nexus-") && explicitDelivery !== "shell-native") {
+      const slug = id.replace(/^nexus-/, "");
+      publicUrl = `https://${slug}.tnhc.dev`;
+    }
     const parsedPublicUrl = publicUrl ? safePublicUrl(publicUrl) : null;
     if (publicUrl && !parsedPublicUrl) continue;
     if (!publicUrl && explicitDelivery !== "shell-native") continue;

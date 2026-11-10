@@ -506,7 +506,7 @@ preflight_service_start() {
         nexus-chat-web) validate_nexus_chat_caddy ;;
         nexus-deploy|deploy) adopt_cloud_registration_environment_for_dependents ;;
         proxy) adopt_cloud_registration_environment_for_dependents ;;
-        nexus-design|design|nexus-graphic|graphic|nexus-photos|photos|nexus-video|video|nexus-notes|notes|nexus-docs|docs|nexus-wiki|wiki|nexus-code|code|nexus-vault|vault|mailapi|nexus-project|nexus-project-web|ai|nexus-ai|database|nexus-database|guardian|nexus-guardian|edge|nexus-edge) : ;;
+        nexus-design|design|nexus-graphic|graphic|nexus-photos|photos|nexus-video|video|nexus-notes|notes|nexus-docs|docs|nexus-wiki|wiki|nexus-code|code|nexus-vault|vault|nexus-files|files|nexus-finance|finance|nexus-tasks|tasks|nexus-music|music|mailapi|nexus-project|nexus-project-web|ai|nexus-ai|database|nexus-database|guardian|nexus-guardian|edge|nexus-edge) : ;;
         *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, proxy, creative, document, and developer suites"; return 1 ;;
     esac
 }
