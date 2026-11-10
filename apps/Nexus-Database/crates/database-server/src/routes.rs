@@ -7,6 +7,8 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 
+const STUDIO_HTML: &str = include_str!("../static/index.html");
+
 /// GET /
 pub async fn root(
     State(state): State<AppState>,
@@ -18,51 +20,7 @@ pub async fn root(
         .unwrap_or("");
 
     if accept.contains("text/html") {
-        let uptime = state.start_time.elapsed().as_secs();
-        let db_count = state.database_count().await;
-        let html = format!(
-            r#"<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Nexus Database Engine Studio</title>
-  <style>
-    :root {{ --bg: #090a0f; --card: #12151f; --line: #1e2436; --text: #e2e8f0; --muted: #798399; --accent: #f59e0b; }}
-    body {{ margin: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }}
-    .card {{ background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 36px; max-width: 580px; width: 100%; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }}
-    .badge {{ display: inline-flex; align-items: center; gap: 8px; font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: 999px; padding: 4px 12px; margin-bottom: 20px; }}
-    .dot {{ width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }}
-    h1 {{ margin: 0 0 10px; font-size: 24px; font-weight: 700; color: #fff; }}
-    p {{ margin: 0 0 24px; color: var(--muted); font-size: 14px; line-height: 1.6; }}
-    .meta {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; font-size: 13px; font-family: ui-monospace, monospace; }}
-    .meta-box {{ background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }}
-    .meta-box .k {{ color: var(--muted); font-size: 11px; margin-bottom: 4px; text-transform: uppercase; }}
-    .meta-box .v {{ color: #fff; font-weight: 600; }}
-    .btn {{ display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; background: #d97706; color: #fff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600; font-size: 14px; transition: background 0.2s; }}
-    .btn:hover {{ background: #b45309; }}
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="badge"><span class="dot"></span> Engine Online</div>
-    <h1>Nexus Database Engine</h1>
-    <p>Consistency-tiered sovereign database engine, multi-tenant persistence manager, and high-performance Postgres wire protocol provider for Nexus Systems.</p>
-    <div class="meta">
-      <div class="meta-box"><div class="k">Version</div><div class="v">{}</div></div>
-      <div class="meta-box"><div class="k">Managed DBs</div><div class="v">{}</div></div>
-      <div class="meta-box"><div class="k">Uptime</div><div class="v">{}s</div></div>
-      <div class="meta-box"><div class="k">Wire Protocol</div><div class="v">Postgres 5432</div></div>
-    </div>
-    <a href="https://app.tnhc.dev/" class="btn">Return to Platform Dashboard →</a>
-  </div>
-</body>
-</html>"#,
-            env!("CARGO_PKG_VERSION"),
-            db_count,
-            uptime
-        );
-        axum::response::Html(html).into_response()
+        axum::response::Html(STUDIO_HTML).into_response()
     } else {
         Json(HealthResponse {
             status: "ok",
@@ -74,6 +32,11 @@ pub async fn root(
         })
         .into_response()
     }
+}
+
+/// GET /studio
+pub async fn studio() -> axum::response::Html<&'static str> {
+    axum::response::Html(STUDIO_HTML)
 }
 
 /// GET /health
@@ -240,4 +203,155 @@ pub async fn delete_database(
     state.persistence.delete(id).await;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct SnapshotTable {
+    pub name: String,
+    pub columns: Vec<String>,
+    pub rows: Vec<Vec<serde_json::Value>>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct DatabaseSnapshot {
+    pub database_id: Uuid,
+    pub name: String,
+    pub engine: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub tables: Vec<SnapshotTable>,
+}
+
+/// GET /databases/:id/snapshot — dump tables and data as a downloadable snapshot
+pub async fn export_snapshot(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+) -> Result<axum::response::Response, DatabaseError> {
+    let config = {
+        let dbs = state.databases.read().await;
+        dbs.get(&id)
+            .cloned()
+            .ok_or_else(|| DatabaseError::DatabaseNotFound(id.to_string()))?
+    };
+
+    let pool = state.get_or_create_pool(&config).await?;
+
+    let tables_sql = if config.engine.contains("sqlite") {
+        "SELECT name AS table_name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+    } else {
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
+    };
+
+    let mut tables = Vec::new();
+    if let Ok(res) = pool.execute_query(tables_sql).await {
+        for row in res.rows {
+            if let Some(name_val) = row.get(0) {
+                if let Some(table_name) = name_val.as_str() {
+                    let dump_sql = format!("SELECT * FROM \"{}\" LIMIT 1000", table_name);
+                    if let Ok(dump_res) = pool.execute_query(&dump_sql).await {
+                        tables.push(SnapshotTable {
+                            name: table_name.to_string(),
+                            columns: dump_res.columns,
+                            rows: dump_res.rows,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    let snapshot = DatabaseSnapshot {
+        database_id: id,
+        name: config.name.clone(),
+        engine: config.engine.clone(),
+        created_at: chrono::Utc::now(),
+        tables,
+    };
+
+    let json_bytes = serde_json::to_vec_pretty(&snapshot)
+        .map_err(|e| DatabaseError::Query(format!("Failed to serialize snapshot: {e}")))?;
+
+    let filename = format!("snapshot-{}-{}.json", config.name, chrono::Utc::now().format("%Y%m%d%H%M%S"));
+
+    let response = axum::response::Response::builder()
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .header(
+            axum::http::header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{}\"", filename),
+        )
+        .body(axum::body::Body::from(json_bytes))
+        .map_err(|e| DatabaseError::Query(format!("Response build failed: {e}")))?;
+
+    Ok(response)
+}
+
+/// POST /databases/:id/snapshot/restore — restore tables and data from a snapshot
+pub async fn restore_snapshot(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<Uuid>,
+    Json(snapshot): Json<DatabaseSnapshot>,
+) -> Result<Json<serde_json::Value>, DatabaseError> {
+    let config = {
+        let dbs = state.databases.read().await;
+        dbs.get(&id)
+            .cloned()
+            .ok_or_else(|| DatabaseError::DatabaseNotFound(id.to_string()))?
+    };
+
+    let pool = state.get_or_create_pool(&config).await?;
+    let mut restored_tables = 0;
+    let mut restored_rows = 0;
+
+    for table in snapshot.tables {
+        if table.columns.is_empty() {
+            continue;
+        }
+        let col_defs = table
+            .columns
+            .iter()
+            .map(|c| format!("\"{}\" TEXT", c))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let create_sql = format!("CREATE TABLE IF NOT EXISTS \"{}\" ({})", table.name, col_defs);
+        let _ = pool.execute_write(&create_sql).await;
+
+        for row in table.rows {
+            if row.len() == table.columns.len() {
+                let cols = table
+                    .columns
+                    .iter()
+                    .map(|c| format!("\"{}\"", c))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let vals = row
+                    .iter()
+                    .map(|v| match v {
+                        serde_json::Value::Null => "NULL".to_string(),
+                        serde_json::Value::String(s) => format!("'{}'", s.replace('\'', "''")),
+                        serde_json::Value::Number(n) => n.to_string(),
+                        serde_json::Value::Bool(b) => {
+                            if *b {
+                                "TRUE".to_string()
+                            } else {
+                                "FALSE".to_string()
+                            }
+                        }
+                        other => format!("'{}'", other.to_string().replace('\'', "''")),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let insert_sql = format!("INSERT INTO \"{}\" ({}) VALUES ({})", table.name, cols, vals);
+                if pool.execute_write(&insert_sql).await.is_ok() {
+                    restored_rows += 1;
+                }
+            }
+        }
+        restored_tables += 1;
+    }
+
+    Ok(Json(serde_json::json!({
+        "status": "ok",
+        "restored_tables": restored_tables,
+        "restored_rows": restored_rows,
+    })))
 }

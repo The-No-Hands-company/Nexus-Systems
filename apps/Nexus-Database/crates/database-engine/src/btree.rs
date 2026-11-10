@@ -28,13 +28,15 @@ impl BTree {
     fn alloc(&self) -> u64 { self.next_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst) }
 
     pub fn insert(&self, key: &[u8], value: &[u8]) -> Result<()> {
-        let mut page = self.pool.get_page_mut(self.root_page_id.get())?;
-        page.page.write_data(&(key.len() as u16).to_le_bytes())?;
-        page.page.write_data(key)?;
-        page.page.write_data(&(value.len() as u32).to_le_bytes())?;
-        page.page.write_data(value)?;
-        let count = page.page.item_count();
-        page.page.set_item_count(count + 1);
+        {
+            let mut page = self.pool.get_page_mut(self.root_page_id.get())?;
+            page.page.write_data(&(key.len() as u16).to_le_bytes())?;
+            page.page.write_data(key)?;
+            page.page.write_data(&(value.len() as u32).to_le_bytes())?;
+            page.page.write_data(value)?;
+            let count = page.page.item_count();
+            page.page.set_item_count(count + 1);
+        }
         self.pool.unpin(self.root_page_id.get());
         Ok(())
     }
@@ -94,10 +96,12 @@ impl BTree {
             new_count += 1;
         }
 
-        let mut page = self.pool.get_page_mut(self.root_page_id.get())?;
-        page.page.data_region_mut()[..new_data.len()].copy_from_slice(&new_data);
-        page.page.set_item_count(new_count);
-        page.page.set_checksum();
+        {
+            let mut page = self.pool.get_page_mut(self.root_page_id.get())?;
+            page.page.data_region_mut()[..new_data.len()].copy_from_slice(&new_data);
+            page.page.set_item_count(new_count);
+            page.page.set_checksum();
+        }
         self.pool.unpin(self.root_page_id.get());
         Ok(found)
     }

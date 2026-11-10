@@ -60,6 +60,7 @@ async fn main() -> anyhow::Result<()> {
     let read_routes = Router::new()
         .route("/databases", get(routes::list_databases))
         .route("/databases/:id", get(routes::get_database))
+        .route("/databases/:id/snapshot", get(routes::export_snapshot))
         .route_layer(middleware::from_fn(auth::require_read));
 
     // Admin-level auth: POST/PUT/DELETE endpoints
@@ -67,10 +68,12 @@ async fn main() -> anyhow::Result<()> {
         .route("/databases", post(routes::provision_database))
         .route("/databases/:id", delete(routes::delete_database))
         .route("/databases/:id/query", post(routes::query_database))
+        .route("/databases/:id/snapshot/restore", post(routes::restore_snapshot))
         .route_layer(middleware::from_fn(auth::require_admin));
 
     let app = Router::new()
         .route("/", get(routes::root))
+        .route("/studio", get(routes::studio))
         .route("/health", get(routes::health))
         .merge(read_routes)
         .merge(write_routes)

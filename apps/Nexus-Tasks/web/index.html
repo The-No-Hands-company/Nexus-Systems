@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Nexus Tasks</title>
+  <style>
+    :root {
+      --bg: #090a0f;
+      --card: #12151f;
+      --panel: #0d1017;
+      --line: #1e2436;
+      --line-bright: #2d3748;
+      --text: #f1f5f9;
+      --muted: #8492a6;
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --success: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    header {
+      height: 54px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      gap: 16px;
+      shrink: 0;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; }
+    .brand-icon {
+      width: 26px; height: 26px; border-radius: 6px;
+      background: linear-gradient(135deg, #4f46e5, #818cf8);
+      display: flex; align-items: center; justify-content: center; font-size: 14px;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--accent); background: rgba(99,102,241,0.1);
+      border: 1px solid rgba(99,102,241,0.25); border-radius: 999px; padding: 2px 8px;
+    }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+    .header-actions { display: flex; align-items: center; gap: 10px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px; background: var(--card);
+      border: 1px solid var(--line); color: var(--text); padding: 6px 12px;
+      border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer;
+      text-decoration: none; transition: all 0.15s ease;
+    }
+    .btn:hover { border-color: var(--line-bright); background: #181d2a; }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn-sm { padding: 4px 8px; font-size: 12px; }
+
+    .layout {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      height: calc(100vh - 54px);
+    }
+    .sidebar {
+      width: 250px;
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      shrink: 0;
+      padding: 14px;
+      gap: 14px;
+    }
+    .sidebar-title {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--muted); display: flex; justify-content: space-between; align-items: center;
+    }
+    .list-group {
+      display: flex; flex-direction: column; gap: 4px; overflow-y: auto; max-height: 300px;
+    }
+    .list-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 10px; border-radius: 6px; font-size: 13px; cursor: pointer;
+      color: var(--muted); transition: all 0.15s;
+    }
+    .list-item:hover { background: var(--card); color: var(--text); }
+    .list-item.active { background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); color: #fff; font-weight: 600; }
+
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--bg);
+    }
+    .fast-entry-bar {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--line);
+      background: var(--card);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .task-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+    }
+    .task-input:focus { border-color: var(--accent); }
+    .select-sm {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 9px 10px;
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+    }
+
+    .task-view {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .task-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      transition: all 0.15s;
+    }
+    .task-card:hover { border-color: var(--line-bright); background: #151926; }
+    .task-card.completed { opacity: 0.6; }
+    .task-card.completed .task-title { text-decoration: line-through; color: var(--muted); }
+
+    .checkbox {
+      width: 18px; height: 18px; border-radius: 4px;
+      border: 2px solid var(--muted); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; shrink: 0;
+    }
+    .checkbox.checked { background: var(--success); border-color: var(--success); color: #000; font-weight: bold; font-size: 12px; }
+
+    .task-body { flex: 1; min-width: 0; }
+    .task-title { font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+    .task-desc { font-size: 12px; color: var(--muted); }
+
+    .task-meta { display: flex; align-items: center; gap: 8px; }
+    .priority-pill {
+      font-size: 11px; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; font-weight: 600;
+    }
+    .priority-high { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: var(--danger); }
+    .priority-medium { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); color: var(--warning); }
+    .priority-low { background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: var(--success); }
+
+    .assignee-chip {
+      display: inline-flex; align-items: center; gap: 4px; font-size: 11px;
+      background: rgba(255,255,255,0.06); padding: 2px 8px; border-radius: 999px;
+      border: 1px solid var(--line); color: var(--text);
+    }
+    .assignee-avatar {
+      width: 16px; height: 16px; border-radius: 50%; background: var(--accent);
+      display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700;
+    }
+    .empty-state {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      height: 280px; color: var(--muted); gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-icon">✓</div>
+      <span>Nexus Tasks</span>
+      <span class="badge"><span class="badge-dot"></span> Sovereign Punchlists</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-sm" onclick="promptNewList()">+ New List</button>
+      <a href="https://app.tnhc.dev/" class="btn btn-sm">Platform Dashboard ↗</a>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-title">
+        <span>Task Lists</span>
+        <button class="btn btn-sm" onclick="promptNewList()">+</button>
+      </div>
+      <div class="list-group" id="listsContainer">
+        <div class="list-item active" onclick="selectList('')">
+          <span>📋 All Tasks</span>
+          <span style="font-size: 11px; opacity: 0.6;" id="allCount">0</span>
+        </div>
+      </div>
+
+      <div class="sidebar-title" style="margin-top: 10px;">
+        <span>Filter by Priority</span>
+      </div>
+      <div class="list-group">
+        <div class="list-item" onclick="filterPriority('')">All Priorities</div>
+        <div class="list-item" onclick="filterPriority('high')">🔴 High Priority</div>
+        <div class="list-item" onclick="filterPriority('medium')">🟡 Medium Priority</div>
+        <div class="list-item" onclick="filterPriority('low')">🟢 Low Priority</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="fast-entry-bar">
+        <input type="text" id="taskTitle" class="task-input" placeholder="Type a new task and press Enter... (e.g. Deploy cloud proxy config)" onkeydown="if(event.key==='Enter') addTask()"/>
+        <select id="taskPriority" class="select-sm">
+          <option value="medium">Medium Priority</option>
+          <option value="high">High Priority</option>
+          <option value="low">Low Priority</option>
+        </select>
+        <select id="taskAssignee" class="select-sm">
+          <option value="">Unassigned</option>
+          <option value="Alex Chen">Alex Chen (Dev)</option>
+          <option value="Sarah Connor">Sarah Connor (DevOps)</option>
+          <option value="David Kim">David Kim (Security)</option>
+        </select>
+        <button class="btn btn-primary" onclick="addTask()">Add Task</button>
+      </div>
+
+      <div class="task-view" id="tasksContainer">
+        <div class="empty-state">Loading tasks…</div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    let tasks = [];
+    let lists = [];
+    let currentListId = '';
+    let currentPriority = '';
+
+    async function init() {
+      await fetchLists();
+      await fetchTasks();
+    }
+
+    async function fetchLists() {
+      try {
+        const res = await fetch('/api/v1/tasks/lists');
+        if (res.ok) {
+          lists = await res.json();
+          renderLists();
+        }
+      } catch (_) {}
+    }
+
+    function renderLists() {
+      const container = document.getElementById('listsContainer');
+      container.innerHTML = `
+        <div class="list-item ${currentListId === '' ? 'active' : ''}" onclick="selectList('')">
+          <span>📋 All Tasks</span>
+          <span style="font-size: 11px; opacity: 0.6;">${tasks.length}</span>
+        </div>
+        ${lists.map(l => `
+          <div class="list-item ${currentListId === l.id ? 'active' : ''}" onclick="selectList('${l.id}')">
+            <span>📁 ${l.name}</span>
+            <span style="font-size: 11px; opacity: 0.6;">${l.taskCount || 0}</span>
+          </div>
+        `).join('')}
+      `;
+    }
+
+    async function fetchTasks() {
+      try {
+        let url = '/api/v1/tasks';
+        const params = [];
+        if (currentListId) params.push(`listId=${encodeURIComponent(currentListId)}`);
+        if (currentPriority) params.push(`priority=${encodeURIComponent(currentPriority)}`);
+        if (params.length > 0) url += '?' + params.join('&');
+
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(res.statusText);
+        tasks = await res.json();
+        renderTasks();
+      } catch (e) {
+        document.getElementById('tasksContainer').innerHTML = `<div class="empty-state" style="color:var(--danger)">Failed to load tasks: ${e.message}</div>`;
+      }
+    }
+
+    function renderTasks() {
+      const container = document.getElementById('tasksContainer');
+      if (tasks.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div style="font-size: 32px;">✨</div>
+            <div>No tasks found. Add a task above to get started!</div>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = tasks.map(t => `
+        <div class="task-card ${t.completed ? 'completed' : ''}">
+          <div class="checkbox ${t.completed ? 'checked' : ''}" onclick="toggleTask('${t.id}')">
+            ${t.completed ? '✓' : ''}
+          </div>
+          <div class="task-body">
+            <div class="task-title">${t.title}</div>
+            ${t.description ? `<div class="task-desc">${t.description}</div>` : ''}
+          </div>
+          <div class="task-meta">
+            ${t.assignee ? `
+              <div class="assignee-chip">
+                <span class="assignee-avatar">${t.assignee[0]}</span>
+                <span>${t.assignee}</span>
+              </div>
+            ` : ''}
+            <span class="priority-pill priority-${t.priority || 'medium'}">${t.priority || 'medium'}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function selectList(id) {
+      currentListId = id;
+      renderLists();
+      fetchTasks();
+    }
+
+    function filterPriority(pri) {
+      currentPriority = pri;
+      fetchTasks();
+    }
+
+    async function addTask() {
+      const title = document.getElementById('taskTitle').value.trim();
+      const priority = document.getElementById('taskPriority').value;
+      const assignee = document.getElementById('taskAssignee').value;
+      if (!title) return;
+
+      try {
+        const res = await fetch('/api/v1/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title,
+            priority,
+            assignee,
+            listId: currentListId
+          })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        document.getElementById('taskTitle').value = '';
+        await fetchTasks();
+        await fetchLists();
+      } catch (err) {
+        alert("Failed to create task: " + err.message);
+      }
+    }
+
+    async function toggleTask(id) {
+      try {
+        await fetch('/api/v1/tasks/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+        await fetchTasks();
+      } catch (_) {}
+    }
+
+    async function promptNewList() {
+      const name = prompt("Enter new list name (e.g. Infrastructure Sprint):");
+      if (!name || !name.trim()) return;
+      try {
+        await fetch('/api/v1/tasks/lists', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim() })
+        });
+        await fetchLists();
+      } catch (_) {}
+    }
+
+    init();
+  </script>
+</body>
+</html>

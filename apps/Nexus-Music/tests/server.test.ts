@@ -63,4 +63,22 @@ describe("nexus-music", () => {
     expect(body.playlistId).toBe(playlist.id);
     expect(body.trackId).toBe(track.id);
   });
+
+  it("GET / serves Web Audio Player UI", async () => {
+    const res = await fetch(`${base}/`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const html = await res.text();
+    expect(html).toContain("Nexus Music");
+  });
+
+  it("GET /api/v1/music/tracks/:id/stream supports audio range streaming", async () => {
+    const res = await fetch(`${base}/api/v1/music/tracks/sample-track/stream`, {
+      headers: { range: "bytes=0-1023" },
+    });
+    expect(res.status).toBe(206);
+    expect(res.headers.get("content-type")).toBe("audio/mpeg");
+    expect(res.headers.get("accept-ranges")).toBe("bytes");
+    expect(res.headers.get("content-range")).toContain("bytes 0-1023/");
+  });
 });

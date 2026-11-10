@@ -82,4 +82,30 @@ describe("nexus-files", () => {
     const get = await fetch(`${base}/api/v1/files/${created.id}`);
     expect(get.status).toBe(404);
   });
+
+  it("GET / serves Web File Explorer UI", async () => {
+    const res = await fetch(`${base}/`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const html = await res.text();
+    expect(html).toContain("Nexus Files");
+  });
+
+  it("POST /api/v1/files/:id/share generates expiring share link", async () => {
+    const create = await fetch(`${base}/api/v1/files`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "shared-doc.txt",
+        contentType: "text/plain",
+        size: 50,
+      }),
+    });
+    const created = await create.json() as { id: string };
+
+    const share = await fetch(`${base}/api/v1/files/${created.id}/share`, { method: "POST" });
+    expect(share.status).toBe(200);
+    const body = await share.json() as { shareUrl: string; token: string };
+    expect(body.shareUrl).toContain("/share/");
+  });
 });

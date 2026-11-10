@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Nexus Files</title>
+  <style>
+    :root {
+      --bg: #090a0f;
+      --card: #12151f;
+      --panel: #0d1017;
+      --line: #1e2436;
+      --line-bright: #2d3748;
+      --text: #f1f5f9;
+      --muted: #8492a6;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --danger: #ef4444;
+      --success: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    header {
+      height: 54px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      gap: 16px;
+      shrink: 0;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 15px;
+    }
+    .brand-icon {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: ui-monospace, monospace;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+      background: rgba(56,189,248,0.1);
+      border: 1px solid rgba(56,189,248,0.25);
+      border-radius: 999px;
+      padding: 2px 8px;
+    }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+    .header-actions { display: flex; align-items: center; gap: 10px; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+    .btn:hover { border-color: var(--line-bright); background: #181d2a; }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
+    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn-sm { padding: 4px 8px; font-size: 12px; }
+
+    .layout {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      height: calc(100vh - 54px);
+    }
+    .sidebar {
+      width: 240px;
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      shrink: 0;
+      padding: 14px;
+      gap: 16px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--muted);
+      transition: all 0.15s;
+    }
+    .nav-item:hover { background: var(--card); color: var(--text); }
+    .nav-item.active { background: rgba(56,189,248,0.15); border: 1px solid rgba(56,189,248,0.3); color: #fff; font-weight: 600; }
+
+    .storage-card {
+      margin-top: auto;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+    }
+    .storage-bar {
+      height: 6px;
+      background: var(--line);
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 8px 0;
+    }
+    .storage-fill { height: 100%; width: 14%; background: var(--accent); }
+
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--bg);
+      position: relative;
+    }
+    .toolbar {
+      padding: 10px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--card);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+    .search-box {
+      display: flex;
+      align-items: center;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 6px 12px;
+      width: 320px;
+      max-width: 100%;
+    }
+    .search-box input {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+      width: 100%;
+      margin-left: 6px;
+    }
+
+    .drop-overlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(2, 132, 199, 0.2);
+      border: 2px dashed var(--accent);
+      backdrop-filter: blur(2px);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+    .drop-overlay.active { display: flex; }
+
+    .files-view {
+      flex: 1;
+      overflow-y: auto;
+      padding: 18px;
+    }
+    table.files-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+    table.files-table th {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line-bright);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    table.files-table td {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      white-space: nowrap;
+    }
+    table.files-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .file-name-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 500;
+    }
+    .file-icon {
+      font-size: 18px;
+    }
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 300px;
+      color: var(--muted);
+      gap: 12px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-icon">📁</div>
+      <span>Nexus Files</span>
+      <span class="badge"><span class="badge-dot"></span> Sovereign S3</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-primary btn-sm" onclick="document.getElementById('fileUploadInput').click()">+ Upload File</button>
+      <input type="file" id="fileUploadInput" style="display:none" multiple onchange="handleFileSelect(event)"/>
+      <a href="https://app.tnhc.dev/" class="btn btn-sm">Platform Dashboard ↗</a>
+    </div>
+  </header>
+
+  <div class="layout" id="dropZone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+    <div class="drop-overlay" id="dropOverlay">Drop files here to upload to Nexus S3</div>
+
+    <aside class="sidebar">
+      <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted);">Navigation</div>
+      <div class="nav-item active" onclick="setFilter('all')">📂 All Files</div>
+      <div class="nav-item" onclick="setFilter('image')">🖼 Images</div>
+      <div class="nav-item" onclick="setFilter('pdf')">📄 Documents</div>
+      <div class="nav-item" onclick="setFilter('audio')">🎵 Audio & Video</div>
+
+      <div class="storage-card">
+        <div style="font-weight: 600; color: #fff;">Sovereign Cloud Vault</div>
+        <div class="storage-bar"><div class="storage-fill" id="storageFill"></div></div>
+        <div style="color: var(--muted);" id="storageLabel">Loading storage…</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="toolbar">
+        <div class="search-box">
+          <span>🔍</span>
+          <input type="text" id="searchInput" placeholder="Search files by name..." oninput="handleSearch()"/>
+        </div>
+        <div style="font-size: 12px; color: var(--muted);" id="fileCountLabel">0 files</div>
+      </div>
+
+      <div class="files-view">
+        <table class="files-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Size</th>
+              <th>Type</th>
+              <th>Version</th>
+              <th>Updated</th>
+              <th style="text-align: right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="filesTableBody">
+            <tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 40px;">Loading files…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    let files = [];
+    let currentFilter = 'all';
+
+    async function fetchFiles() {
+      try {
+        const res = await fetch('/api/v1/files');
+        if (!res.ok) throw new Error(res.statusText);
+        const data = await res.json();
+        files = data.files || [];
+        renderFiles();
+        fetchHealth();
+      } catch (err) {
+        document.getElementById('filesTableBody').innerHTML = `<tr><td colspan="6" style="color:var(--danger); text-align:center;">Failed to load files: ${err.message}</td></tr>`;
+      }
+    }
+
+    async function fetchHealth() {
+      try {
+        const res = await fetch('/health');
+        if (res.ok) {
+          const data = await res.json();
+          const info = data.storage || {};
+          document.getElementById('storageLabel').textContent = `${data.fileCount} active files • Backend: ${info.backend || 'Hybrid S3'}`;
+        }
+      } catch (_) {}
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function getIcon(type, name) {
+      if (type.includes('image')) return '🖼️';
+      if (type.includes('pdf')) return '📕';
+      if (type.includes('audio')) return '🎵';
+      if (type.includes('video')) return '🎬';
+      if (type.includes('text') || name.endsWith('.txt') || name.endsWith('.md')) return '📝';
+      if (name.endsWith('.json') || name.endsWith('.js') || name.endsWith('.ts')) return '💻';
+      return '📄';
+    }
+
+    function renderFiles() {
+      const tbody = document.getElementById('filesTableBody');
+      const query = document.getElementById('searchInput').value.toLowerCase().trim();
+
+      let filtered = files.filter(f => {
+        if (query && !f.name.toLowerCase().includes(query)) return false;
+        if (currentFilter === 'image') return f.contentType.includes('image');
+        if (currentFilter === 'pdf') return f.contentType.includes('pdf') || f.contentType.includes('text');
+        if (currentFilter === 'audio') return f.contentType.includes('audio') || f.contentType.includes('video');
+        return true;
+      });
+
+      document.getElementById('fileCountLabel').textContent = `${filtered.length} files`;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <div style="font-size: 32px;">☁️</div>
+                <div>No files found. Drag and drop files here or click Upload File.</div>
+              </div>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(f => `
+        <tr>
+          <td>
+            <div class="file-name-cell">
+              <span class="file-icon">${getIcon(f.contentType, f.name)}</span>
+              <span>${f.name}</span>
+            </div>
+          </td>
+          <td>${formatBytes(f.size)}</td>
+          <td style="color: var(--muted); font-family: monospace; font-size: 11px;">${f.contentType}</td>
+          <td><span class="badge" style="font-size: 10px;">v${f.version || 1}</span></td>
+          <td style="color: var(--muted); font-size: 12px;">${new Date(f.updatedAt || f.createdAt).toLocaleDateString()}</td>
+          <td style="text-align: right;">
+            <a href="/api/v1/files/${f.id}/download" download="${f.name}" class="btn btn-sm" title="Download">⬇</a>
+            <button class="btn btn-sm" onclick="shareFile('${f.id}')" title="Copy Presigned Share Link">🔗</button>
+            <button class="btn btn-sm" onclick="deleteFile('${f.id}')" style="color: var(--danger);" title="Delete file">🗑</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function setFilter(filter) {
+      currentFilter = filter;
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+      renderFiles();
+    }
+
+    function handleSearch() {
+      renderFiles();
+    }
+
+    async function handleFileSelect(event) {
+      const filesToUpload = event.target.files;
+      if (!filesToUpload || filesToUpload.length === 0) return;
+      await uploadFiles(filesToUpload);
+      event.target.value = '';
+    }
+
+    async function uploadFiles(fileList) {
+      for (const file of fileList) {
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+          const res = await fetch('/api/v1/files', { method: 'POST', body: formData });
+          if (!res.ok) throw new Error(await res.text());
+        } catch (err) {
+          alert(`Failed to upload ${file.name}: ${err.message}`);
+        }
+      }
+      await fetchFiles();
+    }
+
+    async function deleteFile(id) {
+      if (!confirm("Move this file to trash?")) return;
+      try {
+        const res = await fetch(`/api/v1/files/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error(await res.text());
+        await fetchFiles();
+      } catch (err) {
+        alert("Failed to delete file: " + err.message);
+      }
+    }
+
+    async function shareFile(id) {
+      try {
+        const res = await fetch(`/api/v1/files/${id}/share`, { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          navigator.clipboard.writeText(data.shareUrl || `${window.location.origin}/share/${id}`);
+          alert("Share link copied to clipboard!");
+        } else {
+          navigator.clipboard.writeText(`${window.location.origin}/api/v1/files/${id}/download`);
+          alert("Download link copied to clipboard!");
+        }
+      } catch (_) {
+        navigator.clipboard.writeText(`${window.location.origin}/api/v1/files/${id}/download`);
+        alert("Download link copied to clipboard!");
+      }
+    }
+
+    // Drag and drop handlers
+    function handleDragOver(e) {
+      e.preventDefault();
+      document.getElementById('dropOverlay').classList.add('active');
+    }
+    function handleDragLeave(e) {
+      e.preventDefault();
+      document.getElementById('dropOverlay').classList.remove('active');
+    }
+    async function handleDrop(e) {
+      e.preventDefault();
+      document.getElementById('dropOverlay').classList.remove('active');
+      if (e.dataTransfer.files) {
+        await uploadFiles(e.dataTransfer.files);
+      }
+    }
+
+    fetchFiles();
+  </script>
+</body>
+</html>

@@ -21,6 +21,7 @@ async fn test_app() -> Router {
 
     let routes = Router::new()
         .route("/health", axum::routing::get(routes::health))
+        .route("/studio", axum::routing::get(routes::studio))
         .route("/databases", axum::routing::get(routes::list_databases))
         .route("/databases", axum::routing::post(routes::provision_database))
         .route(
@@ -34,6 +35,14 @@ async fn test_app() -> Router {
         .route(
             "/databases/:id/query",
             axum::routing::post(routes::query_database),
+        )
+        .route(
+            "/databases/:id/snapshot",
+            axum::routing::get(routes::export_snapshot),
+        )
+        .route(
+            "/databases/:id/snapshot/restore",
+            axum::routing::post(routes::restore_snapshot),
         );
 
     routes.with_state(state)
@@ -483,4 +492,82 @@ async fn health_reflects_database_count() {
         .unwrap();
     let body = json_body(resp.into_body()).await;
     assert_eq!(body["managed_databases"], 1);
+}
+
+// ── Studio & Snapshots ───────────────────────────────────────────────
+
+#[tokio::test]
+async fn studio_serves_html() {
+    let app = test_app().await;
+    let resp = app
+        .oneshot(Request::get("/studio").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let html = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(html.contains("Nexus Database Studio"));
+}
+
+#[tokio::test]
+async fn export_and_restore_snapshot() {
+    let app = test_app().await;
+
+    // 1. Provision a SQLite DB
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::post("/databases")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"name":"snap_test","engine":"sqlite"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let body = json_body(resp.into_body()).await;
+    let db_id = body["id"].as_str().unwrap();
+
+    // 2. Create a table and insert a row
+    let create_resp = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/databases/{db_id}/query"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"sql":"CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT); INSERT INTO users (name) VALUES ('Alice');","readonly":false}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_resp.status(), StatusCode::OK);
+
+    // 3. Export snapshot
+    let snap_resp = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/databases/{db_id}/snapshot"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(snap_resp.status(), StatusCode::OK);
+    let snap_body = json_body(snap_resp.into_body()).await;
+    assert_eq!(snap_body["name"], "snap_test");
+    assert!(!snap_body["tables"].as_array().unwrap().is_empty());
+
+    // 4. Restore snapshot into the database
+    let restore_resp = app
+        .oneshot(
+            Request::post(format!("/databases/{db_id}/snapshot/restore"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(snap_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(restore_resp.status(), StatusCode::OK);
+    let res_body = json_body(restore_resp.into_body()).await;
+    assert_eq!(res_body["status"], "ok");
 }

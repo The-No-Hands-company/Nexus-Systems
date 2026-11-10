@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Nexus Finance</title>
+  <style>
+    :root {
+      --bg: #090a0f;
+      --card: #12151f;
+      --panel: #0d1017;
+      --line: #1e2436;
+      --line-bright: #2d3748;
+      --text: #f1f5f9;
+      --muted: #8492a6;
+      --accent: #10b981;
+      --accent-hover: #059669;
+      --danger: #ef4444;
+      --blue: #38bdf8;
+      --purple: #a855f7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+    header {
+      height: 54px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      gap: 16px;
+      shrink: 0;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; }
+    .brand-icon {
+      width: 26px; height: 26px; border-radius: 6px;
+      background: linear-gradient(135deg, #059669, #10b981);
+      display: flex; align-items: center; justify-content: center; font-size: 14px;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--accent); background: rgba(16,185,129,0.1);
+      border: 1px solid rgba(16,185,129,0.25); border-radius: 999px; padding: 2px 8px;
+    }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+    .header-actions { display: flex; align-items: center; gap: 10px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px; background: var(--card);
+      border: 1px solid var(--line); color: var(--text); padding: 6px 12px;
+      border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer;
+      text-decoration: none; transition: all 0.15s ease;
+    }
+    .btn:hover { border-color: var(--line-bright); background: #181d2a; }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
+    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn-sm { padding: 4px 8px; font-size: 12px; }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+      width: 100%;
+      flex: 1;
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .kpi-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px;
+    }
+    .kpi-title { font-size: 12px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; margin-bottom: 6px; }
+    .kpi-value { font-size: 26px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .panel-title { font-size: 15px; font-weight: 600; }
+
+    table.finance-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+    table.finance-table th {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+    table.finance-table td {
+      padding: 10px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      white-space: nowrap;
+    }
+    .category-pill {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--line);
+      text-transform: capitalize;
+    }
+    .amount-badge {
+      font-weight: 600;
+      font-family: ui-monospace, monospace;
+    }
+    .amount-badge.expense { color: var(--danger); }
+    .amount-badge.income { color: var(--accent); }
+
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal.show { display: flex; }
+    .modal-box {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 24px;
+      width: 440px;
+      max-width: 90vw;
+    }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .form-group input, .form-group select {
+      width: 100%; padding: 8px 10px; background: var(--bg);
+      border: 1px solid var(--line); border-radius: 6px; color: var(--text);
+      font-size: 13px; outline: none;
+    }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+    .tabs { display: flex; gap: 8px; margin-bottom: 18px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+    .tab-btn {
+      background: transparent; border: none; color: var(--muted); font-size: 14px;
+      font-weight: 500; cursor: pointer; padding: 6px 12px; border-radius: 6px;
+    }
+    .tab-btn.active { background: var(--card); color: #fff; font-weight: 600; border: 1px solid var(--line); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-icon">💳</div>
+      <span>Nexus Finance</span>
+      <span class="badge"><span class="badge-dot"></span> Sovereign Ledger</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-sm" onclick="openInvoiceModal()">+ New Invoice</button>
+      <button class="btn btn-primary btn-sm" onclick="openExpenseModal()">+ Add Transaction</button>
+      <a href="https://app.tnhc.dev/" class="btn btn-sm">Platform Dashboard ↗</a>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-title">Net Balance</div>
+        <div class="kpi-value" id="kpiBalance">$0.00</div>
+        <div class="kpi-sub">Total ledger cash reserve</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Total Inflow / Income</div>
+        <div class="kpi-value" style="color: var(--accent);" id="kpiIncome">$0.00</div>
+        <div class="kpi-sub">Customer payments & receipts</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Total Outflow / Expenses</div>
+        <div class="kpi-value" style="color: var(--danger);" id="kpiExpenses">$0.00</div>
+        <div class="kpi-sub">Operational & cloud costs</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Active Invoices</div>
+        <div class="kpi-value" style="color: var(--blue);" id="kpiInvoices">0</div>
+        <div class="kpi-sub">Billed receivables</div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" id="tabLedgerBtn" onclick="showTab('ledger')">📊 Transaction Ledger</button>
+      <button class="tab-btn" id="tabInvoicesBtn" onclick="showTab('invoices')">🧾 Invoices & Billing</button>
+    </div>
+
+    <div id="ledgerSection" class="main-grid">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Recent Transactions</div>
+          <button class="btn btn-sm" onclick="fetchFinanceData()">↻ Refresh</button>
+        </div>
+        <div style="overflow-x: auto;">
+          <table class="finance-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Category</th>
+                <th style="text-align: right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody id="transactionsBody">
+              <tr><td colspan="4" style="text-align: center; color: var(--muted); padding: 30px;">Loading ledger…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Expenses by Category</div>
+        </div>
+        <div id="categoryBreakdown" style="display: flex; flex-direction: column; gap: 12px;">
+          <div style="color: var(--muted); font-size: 13px;">No expense data recorded.</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="invoicesSection" class="panel" style="display: none;">
+      <div class="panel-header">
+        <div class="panel-title">Invoices & Receivables</div>
+        <button class="btn btn-primary btn-sm" onclick="openInvoiceModal()">+ Create Invoice</button>
+      </div>
+      <div style="overflow-x: auto;">
+        <table class="finance-table">
+          <thead>
+            <tr>
+              <th>Invoice #</th>
+              <th>Client</th>
+              <th>Amount</th>
+              <th>Status</th>
+              <th>Due Date</th>
+              <th style="text-align: right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="invoicesBody">
+            <tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 30px;">No invoices issued yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Transaction Modal -->
+  <div class="modal" id="expenseModal">
+    <div class="modal-box">
+      <h3 style="margin-bottom: 14px;">Record Transaction</h3>
+      <div class="form-group">
+        <label>Type</label>
+        <select id="txType">
+          <option value="expense">Expense (-)</option>
+          <option value="income">Income (+)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Amount ($)</label>
+        <input type="number" step="0.01" id="txAmount" placeholder="e.g. 129.50" />
+      </div>
+      <div class="form-group">
+        <label>Category</label>
+        <select id="txCategory">
+          <option value="infrastructure">Infrastructure & Cloud</option>
+          <option value="software">Software & Licenses</option>
+          <option value="consulting">Consulting & Services</option>
+          <option value="hardware">Hardware & Equipment</option>
+          <option value="travel">Travel & Meals</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <input type="text" id="txDescription" placeholder="e.g. MinIO object storage cluster" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeExpenseModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitTransaction()">Record</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Invoice Modal -->
+  <div class="modal" id="invoiceModal">
+    <div class="modal-box">
+      <h3 style="margin-bottom: 14px;">Generate Invoice</h3>
+      <div class="form-group">
+        <label>Client / Customer Name</label>
+        <input type="text" id="invClient" placeholder="e.g. Acme Corporation" />
+      </div>
+      <div class="form-group">
+        <label>Amount ($)</label>
+        <input type="number" step="0.01" id="invAmount" placeholder="e.g. 2500.00" />
+      </div>
+      <div class="form-group">
+        <label>Due Date</label>
+        <input type="date" id="invDueDate" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeInvoiceModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitInvoice()">Create Invoice</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let expenses = [];
+    let invoices = [];
+    const userId = "default";
+
+    async function fetchFinanceData() {
+      try {
+        const res = await fetch(`/api/v1/finance/expenses?userId=${userId}`);
+        if (!res.ok) throw new Error(res.statusText);
+        const data = await res.json();
+        expenses = data.expenses || [];
+        const summary = data.summary || {};
+
+        document.getElementById('kpiBalance').textContent = formatCurrency(summary.netBalance || 0);
+        document.getElementById('kpiIncome').textContent = formatCurrency(summary.totalIncome || 0);
+        document.getElementById('kpiExpenses').textContent = formatCurrency(summary.totalExpense || 0);
+
+        renderTransactions();
+        renderCategoryBreakdown(summary.byCategory || {});
+      } catch (e) {
+        console.error(e);
+      }
+      await fetchInvoices();
+    }
+
+    async function fetchInvoices() {
+      try {
+        const res = await fetch(`/api/v1/finance/invoices?userId=${userId}`);
+        if (res.ok) {
+          const data = await res.json();
+          invoices = data.invoices || [];
+          document.getElementById('kpiInvoices').textContent = invoices.length;
+          renderInvoices();
+        }
+      } catch (_) {}
+    }
+
+    function formatCurrency(num) {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
+    }
+
+    function renderTransactions() {
+      const tbody = document.getElementById('transactionsBody');
+      if (expenses.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--muted); padding: 30px;">No transactions recorded. Click "+ Add Transaction".</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = expenses.map(e => `
+        <tr>
+          <td style="color: var(--muted); font-size: 12px;">${e.date}</td>
+          <td style="font-weight: 500;">${e.description || 'Untitled'}</td>
+          <td><span class="category-pill">${e.category}</span></td>
+          <td style="text-align: right;">
+            <span class="amount-badge ${e.type === 'income' ? 'income' : 'expense'}">
+              ${e.type === 'income' ? '+' : '-'}${formatCurrency(e.amount)}
+            </span>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function renderCategoryBreakdown(cats) {
+      const wrap = document.getElementById('categoryBreakdown');
+      const keys = Object.keys(cats);
+      if (keys.length === 0) {
+        wrap.innerHTML = `<div style="color: var(--muted); font-size: 13px;">No expense breakdown yet.</div>`;
+        return;
+      }
+      const total = Object.values(cats).reduce((a, b) => a + b, 0);
+      wrap.innerHTML = keys.map(k => {
+        const amt = cats[k];
+        const pct = total > 0 ? Math.round((amt / total) * 100) : 0;
+        return `
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+              <span style="text-transform: capitalize;">${k}</span>
+              <span style="font-weight: 600;">${formatCurrency(amt)} (${pct}%)</span>
+            </div>
+            <div style="height: 6px; background: var(--line); border-radius: 3px; overflow: hidden;">
+              <div style="height: 100%; width: ${pct}%; background: var(--accent);"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderInvoices() {
+      const tbody = document.getElementById('invoicesBody');
+      if (invoices.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 30px;">No invoices generated yet.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = invoices.map(i => `
+        <tr>
+          <td style="font-family: monospace; font-weight: 600;">${i.invoiceNumber}</td>
+          <td>${i.clientName}</td>
+          <td style="font-weight: 600;">${formatCurrency(i.amount)}</td>
+          <td><span class="badge" style="font-size: 10px;">${i.status}</span></td>
+          <td style="color: var(--muted); font-size: 12px;">${i.dueDate}</td>
+          <td style="text-align: right;">
+            <button class="btn btn-sm" onclick="markPaid('${i.id}')" title="Mark Paid">✓ Paid</button>
+            <button class="btn btn-sm" onclick="alert('Print invoice ${i.invoiceNumber}')" title="Print/Export">🖨</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function showTab(tab) {
+      if (tab === 'ledger') {
+        document.getElementById('ledgerSection').style.display = 'grid';
+        document.getElementById('invoicesSection').style.display = 'none';
+        document.getElementById('tabLedgerBtn').classList.add('active');
+        document.getElementById('tabInvoicesBtn').classList.remove('active');
+      } else {
+        document.getElementById('ledgerSection').style.display = 'none';
+        document.getElementById('invoicesSection').style.display = 'flex';
+        document.getElementById('tabLedgerBtn').classList.remove('active');
+        document.getElementById('tabInvoicesBtn').classList.add('active');
+      }
+    }
+
+    function openExpenseModal() { document.getElementById('expenseModal').classList.add('show'); }
+    function closeExpenseModal() { document.getElementById('expenseModal').classList.remove('show'); }
+    function openInvoiceModal() { document.getElementById('invoiceModal').classList.add('show'); }
+    function closeInvoiceModal() { document.getElementById('invoiceModal').classList.remove('show'); }
+
+    async function submitTransaction() {
+      const amount = parseFloat(document.getElementById('txAmount').value);
+      const type = document.getElementById('txType').value;
+      const category = document.getElementById('txCategory').value;
+      const description = document.getElementById('txDescription').value.trim();
+
+      if (!amount || amount <= 0) return alert("Valid amount is required");
+
+      try {
+        const res = await fetch('/api/v1/finance/expenses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, amount, type, category, description })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        closeExpenseModal();
+        document.getElementById('txAmount').value = '';
+        document.getElementById('txDescription').value = '';
+        await fetchFinanceData();
+      } catch (err) {
+        alert("Error recording transaction: " + err.message);
+      }
+    }
+
+    async function submitInvoice() {
+      const clientName = document.getElementById('invClient').value.trim();
+      const amount = parseFloat(document.getElementById('invAmount').value);
+      const dueDate = document.getElementById('invDueDate').value;
+
+      if (!clientName || !amount) return alert("Client name and amount are required");
+
+      try {
+        const res = await fetch('/api/v1/finance/invoices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, clientName, amount, dueDate })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        closeInvoiceModal();
+        await fetchInvoices();
+      } catch (err) {
+        alert("Error creating invoice: " + err.message);
+      }
+    }
+
+    async function markPaid(id) {
+      try {
+        const res = await fetch(`/api/v1/finance/invoices/${id}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'paid' })
+        });
+        if (res.ok) await fetchInvoices();
+      } catch (_) {}
+    }
+
+    fetchFinanceData();
+  </script>
+</body>
+</html>

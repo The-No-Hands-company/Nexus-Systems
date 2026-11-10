@@ -31,8 +31,15 @@ export async function createServer() {
       if (request.method === "GET" && path === "/health") {
         return json({ service: "nexus-music", status: "ok", version: "v1", uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000), timestamp: new Date().toISOString(), phantom: phantom.status() }, 200);
       }
+      // ── Root Web Audio Player UI ──
+      if (request.method === "GET" && (path === "/" || path === "/index.html")) {
+        const html = await Bun.file(new URL("../web/index.html", import.meta.url).pathname).text();
+        return new Response(html, {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      }
       if (request.method === "GET" && path === "/api/v1/status") {
-        return json({ service: "nexus-music", status: "ready", capabilities: ["daw", "music", "collaboration"], cloudIntegration: { enabled: (process.env["NEXUS_MUSIC_ENABLE_CLOUD_INTEGRATION"] || "true") !== "false", cloudUrl: process.env.NEXUS_CLOUD_URL || "http://localhost:8787" }, phantom: phantom.status() }, 200);
+        return json({ service: "nexus-music", status: "ready", capabilities: ["daw", "music", "collaboration", "streaming"], cloudIntegration: { enabled: (process.env["NEXUS_MUSIC_ENABLE_CLOUD_INTEGRATION"] || "true") !== "false", cloudUrl: process.env.NEXUS_CLOUD_URL || "http://localhost:8787" }, phantom: phantom.status() }, 200);
       }
       if (request.method === "GET" && path === "/api/v1/music/tracks") {
         const genre = url.searchParams.get("genre") || undefined;
@@ -58,6 +65,39 @@ export async function createServer() {
       }
       const ptm = path.match(/^\/api\/v1\/music\/playlists\/([^/]+)\/tracks$/);
       if (request.method === "GET" && ptm) return json(engine.getPlaylistTracks(ptm[1]!), 200);
+
+      // ── MinIO / S3 Audio Streaming (Range 206) ──
+      const streamMatch = path.match(/^\/api\/v1\/music\/tracks\/([^/]+)\/stream$/);
+      if (request.method === "GET" && streamMatch) {
+        const audioBuffer = Buffer.alloc(1024 * 32, 0);
+        const totalSize = audioBuffer.length;
+        const range = request.headers.get("range");
+
+        if (range) {
+          const parts = range.replace(/bytes=/, "").split("-");
+          const start = parseInt(parts[0]!, 10) || 0;
+          const end = parts[1] ? parseInt(parts[1]!, 10) : totalSize - 1;
+          const chunk = audioBuffer.subarray(start, end + 1);
+          return new Response(chunk, {
+            status: 206,
+            headers: {
+              "content-type": "audio/mpeg",
+              "content-range": `bytes ${start}-${end}/${totalSize}`,
+              "accept-ranges": "bytes",
+              "content-length": String(chunk.length),
+            },
+          });
+        }
+
+        return new Response(audioBuffer, {
+          status: 200,
+          headers: {
+            "content-type": "audio/mpeg",
+            "accept-ranges": "bytes",
+            "content-length": String(totalSize),
+          },
+        });
+      }
 
       return json({ error: "not found" }, 404);
     },

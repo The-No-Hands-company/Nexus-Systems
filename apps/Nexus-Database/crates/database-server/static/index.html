@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Nexus Database Studio</title>
+  <style>
+    :root {
+      --bg: #090a0f;
+      --card: #12151f;
+      --panel: #0d1017;
+      --line: #1e2436;
+      --line-bright: #2d3748;
+      --text: #f1f5f9;
+      --muted: #8492a6;
+      --accent: #f59e0b;
+      --accent-hover: #d97706;
+      --success: #10b981;
+      --danger: #ef4444;
+      --code-bg: #08090d;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    header {
+      height: 54px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      gap: 16px;
+      shrink: 0;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: -0.01em;
+    }
+    .brand-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, #f59e0b, #b45309);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: ui-monospace, monospace;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+      background: rgba(245,158,11,0.1);
+      border: 1px solid rgba(245,158,11,0.25);
+      border-radius: 999px;
+      padding: 2px 8px;
+    }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+    .header-actions { display: flex; align-items: center; gap: 10px; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+    .btn:hover { border-color: var(--line-bright); background: #181d2a; }
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #000;
+      font-weight: 600;
+    }
+    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn-sm { padding: 4px 8px; font-size: 12px; }
+
+    .layout {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      height: calc(100vh - 54px);
+    }
+    .sidebar {
+      width: 280px;
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      shrink: 0;
+    }
+    .sidebar-section {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .sidebar-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .db-list, .table-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow-y: auto;
+      max-height: 200px;
+    }
+    .db-item, .table-item {
+      padding: 7px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: background 0.15s;
+    }
+    .db-item:hover, .table-item:hover { background: var(--card); }
+    .db-item.active { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); color: #fff; font-weight: 600; }
+
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--bg);
+    }
+    .editor-pane {
+      display: flex;
+      flex-direction: column;
+      border-bottom: 1px solid var(--line);
+      background: var(--card);
+    }
+    .editor-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #0f121a;
+      gap: 8px;
+    }
+    .editor-toolbar-left { display: flex; align-items: center; gap: 8px; }
+    textarea.sql-editor {
+      width: 100%;
+      height: 140px;
+      background: var(--code-bg);
+      color: #e2e8f0;
+      border: none;
+      padding: 12px 14px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      resize: vertical;
+      outline: none;
+    }
+    .results-pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--bg);
+    }
+    .results-bar {
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--muted);
+    }
+    .results-table-wrap {
+      flex: 1;
+      overflow: auto;
+      padding: 0;
+    }
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      font-family: ui-monospace, monospace;
+      text-align: left;
+    }
+    table.data-table th {
+      background: #0e111a;
+      position: sticky;
+      top: 0;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--line-bright);
+      color: var(--muted);
+      font-weight: 600;
+      white-space: nowrap;
+      z-index: 10;
+    }
+    table.data-table td {
+      padding: 6px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      white-space: nowrap;
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    table.data-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .status-alert {
+      margin: 14px;
+      padding: 12px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .status-alert.error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5; }
+    .status-alert.success { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); color: #6ee7b7; }
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--muted);
+      gap: 8px;
+      font-size: 13px;
+    }
+    .empty-icon { font-size: 28px; opacity: 0.6; }
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal.show { display: flex; }
+    .modal-box {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 24px;
+      width: 420px;
+      max-width: 90vw;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    }
+    .modal-box h3 { margin-bottom: 14px; font-size: 16px; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 8px 10px;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+    }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      <span>Nexus Database Studio</span>
+      <span class="badge"><span class="badge-dot"></span> v1.0 RC</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-sm" onclick="openNewDbModal()">+ New Database</button>
+      <a href="https://app.tnhc.dev/" class="btn btn-sm">Platform Dashboard ↗</a>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-title">
+          <span>Managed Databases</span>
+          <button class="btn btn-sm" onclick="fetchDatabases()" title="Refresh">↻</button>
+        </div>
+        <div class="db-list" id="dbList">
+          <div style="font-size: 12px; color: var(--muted); padding: 8px 0;">Loading databases…</div>
+        </div>
+      </div>
+
+      <div class="sidebar-section" style="flex: 1; display: flex; flex-direction: column;">
+        <div class="sidebar-title">
+          <span>Tables in Database</span>
+          <button class="btn btn-sm" onclick="fetchTables()" title="Refresh tables">↻</button>
+        </div>
+        <div class="table-list" id="tableList" style="max-height: none; flex: 1;">
+          <div style="font-size: 12px; color: var(--muted); padding: 8px 0;">Select a database</div>
+        </div>
+      </div>
+
+      <div class="sidebar-section" style="background: rgba(0,0,0,0.2);">
+        <div class="sidebar-title">Snapshots & Backups</div>
+        <div style="display: flex; gap: 6px; flex-direction: column;">
+          <button class="btn btn-sm" onclick="exportSnapshot()">⬇ Export Snapshot (JSON)</button>
+          <button class="btn btn-sm" onclick="document.getElementById('snapshotFileInput').click()">⬆ Restore Snapshot</button>
+          <input type="file" id="snapshotFileInput" style="display:none" accept=".json" onchange="restoreSnapshotFile(event)"/>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main SQL Console -->
+    <main class="main">
+      <div class="editor-pane">
+        <div class="editor-toolbar">
+          <div class="editor-toolbar-left">
+            <span style="font-size: 12px; font-weight: 600; color: var(--muted);" id="activeDbLabel">No Database Selected</span>
+            <div style="width: 1px; height: 14px; background: var(--line); margin: 0 4px;"></div>
+            <button class="btn btn-sm" onclick="insertSnippet('SELECT * FROM ')">SELECT</button>
+            <button class="btn btn-sm" onclick="insertSnippet('CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY, name TEXT, created_at TEXT);')">CREATE TABLE</button>
+            <button class="btn btn-sm" onclick="insertSnippet('INSERT INTO items (name, created_at) VALUES (\'Widget\', datetime(\'now\'));')">INSERT</button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <label style="font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; cursor: pointer;">
+              <input type="checkbox" id="readonlyCheck"/> Read-only
+            </label>
+            <button class="btn btn-primary btn-sm" id="runBtn" onclick="runQuery()">▶ Run (Cmd+Enter)</button>
+          </div>
+        </div>
+        <textarea class="sql-editor" id="sqlEditor" spellcheck="false" placeholder="Enter SQL query here (e.g. SELECT * FROM sqlite_master;)">SELECT 1 AS status, 'Nexus Database Online' AS message, datetime('now') AS server_time;</textarea>
+      </div>
+
+      <!-- Results Area -->
+      <div class="results-pane">
+        <div class="results-bar">
+          <span id="resultsStats">Ready</span>
+          <button class="btn btn-sm" onclick="exportResultsJson()" id="exportJsonBtn" style="display: none;">Export JSON</button>
+        </div>
+        <div class="results-table-wrap" id="resultsTableWrap">
+          <div class="empty-state">
+            <div class="empty-icon">📊</div>
+            <div>Execute a SQL query or pick a table to view rows</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- New DB Modal -->
+  <div class="modal" id="newDbModal">
+    <div class="modal-box">
+      <h3>Provision New Managed Database</h3>
+      <div class="form-group">
+        <label>Database Name</label>
+        <input type="text" id="newDbName" placeholder="e.g. app_production" />
+      </div>
+      <div class="form-group">
+        <label>Engine</label>
+        <select id="newDbEngine">
+          <option value="sqlite">SQLite (Fast, In-Memory / Local ACID)</option>
+          <option value="postgres">PostgreSQL (Cluster Engine)</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeNewDbModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="createDatabase()">Provision</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentDbId = null;
+    let databases = [];
+    let lastResult = null;
+
+    async function fetchDatabases() {
+      try {
+        const res = await fetch('/databases');
+        if (!res.ok) throw new Error(res.statusText);
+        databases = await res.json();
+        renderDbList();
+        if (databases.length > 0 && !currentDbId) {
+          selectDatabase(databases[0].id);
+        }
+      } catch (err) {
+        document.getElementById('dbList').innerHTML = `<div style="color:var(--danger); font-size:12px;">Error: ${err.message}</div>`;
+      }
+    }
+
+    function renderDbList() {
+      const container = document.getElementById('dbList');
+      if (databases.length === 0) {
+        container.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:8px 0;">No databases provisioned yet.</div>`;
+        return;
+      }
+      container.innerHTML = databases.map(db => `
+        <div class="db-item ${db.id === currentDbId ? 'active' : ''}" onclick="selectDatabase('${db.id}')">
+          <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">📁 ${db.name}</span>
+          <span style="font-size:10px; color:var(--muted); font-family:monospace;">${db.engine}</span>
+        </div>
+      `).join('');
+    }
+
+    function selectDatabase(id) {
+      currentDbId = id;
+      const db = databases.find(d => d.id === id);
+      document.getElementById('activeDbLabel').textContent = db ? `${db.name} (${db.engine})` : 'Active Database';
+      renderDbList();
+      fetchTables();
+    }
+
+    async function fetchTables() {
+      const container = document.getElementById('tableList');
+      if (!currentDbId) {
+        container.innerHTML = `<div style="font-size:12px;color:var(--muted);">Select a database first</div>`;
+        return;
+      }
+      const db = databases.find(d => d.id === currentDbId);
+      const isSqlite = !db || db.engine.includes('sqlite');
+      const sql = isSqlite 
+        ? "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';"
+        : "SELECT table_name AS name FROM information_schema.tables WHERE table_schema = 'public';";
+
+      try {
+        const res = await fetch(`/databases/${currentDbId}/query`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sql, readonly: true })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        if (!data.rows || data.rows.length === 0) {
+          container.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:6px 0;">No tables found.</div>`;
+          return;
+        }
+        container.innerHTML = data.rows.map(r => `
+          <div class="table-item" onclick="selectTable('${r[0]}')">
+            <span>📄 ${r[0]}</span>
+            <span style="font-size:10px; color:var(--muted);">table</span>
+          </div>
+        `).join('');
+      } catch (e) {
+        container.innerHTML = `<div style="font-size:11px;color:var(--muted);">${e.message}</div>`;
+      }
+    }
+
+    function selectTable(tableName) {
+      document.getElementById('sqlEditor').value = `SELECT * FROM "${tableName}" LIMIT 50;`;
+      runQuery();
+    }
+
+    function insertSnippet(text) {
+      const editor = document.getElementById('sqlEditor');
+      editor.value = text;
+      editor.focus();
+    }
+
+    async function runQuery() {
+      if (!currentDbId) {
+        alert("Please create or select a database first.");
+        return;
+      }
+      const sql = document.getElementById('sqlEditor').value.trim();
+      if (!sql) return;
+
+      const readonly = document.getElementById('readonlyCheck').checked;
+      const stats = document.getElementById('resultsStats');
+      const wrap = document.getElementById('resultsTableWrap');
+      const exportBtn = document.getElementById('exportJsonBtn');
+
+      stats.textContent = "Executing query…";
+      const start = performance.now();
+
+      try {
+        const res = await fetch(`/databases/${currentDbId}/query`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sql, readonly })
+        });
+        const elapsed = (performance.now() - start).toFixed(1);
+
+        if (!res.ok) {
+          const err = await res.text();
+          wrap.innerHTML = `<div class="status-alert error"><strong>Query Error (${res.status}):</strong><br/>${err}</div>`;
+          stats.textContent = `Failed in ${elapsed}ms`;
+          exportBtn.style.display = 'none';
+          return;
+        }
+
+        const data = await res.json();
+        lastResult = data;
+        exportBtn.style.display = 'inline-flex';
+
+        if (data.columns && data.columns.length > 0) {
+          stats.textContent = `${data.row_count ?? data.rows.length} rows returned in ${data.elapsed_ms ?? elapsed}ms`;
+          wrap.innerHTML = `
+            <table class="data-table">
+              <thead>
+                <tr>${data.columns.map(c => `<th>${c}</th>`).join('')}</tr>
+              </thead>
+              <tbody>
+                ${data.rows.map(r => `
+                  <tr>${r.map(val => `<td>${val === null ? '<span style="color:var(--muted)">NULL</span>' : (typeof val === 'object' ? JSON.stringify(val) : String(val))}</td>`).join('')}</tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `;
+        } else {
+          stats.textContent = `Statement completed in ${elapsed}ms`;
+          wrap.innerHTML = `<div class="status-alert success">Statement executed successfully.</div>`;
+        }
+      } catch (err) {
+        wrap.innerHTML = `<div class="status-alert error">Network Error: ${err.message}</div>`;
+        stats.textContent = "Execution failed";
+      }
+    }
+
+    async function exportSnapshot() {
+      if (!currentDbId) return alert("Select a database to export");
+      window.open(`/databases/${currentDbId}/snapshot`, '_blank');
+    }
+
+    async function restoreSnapshotFile(event) {
+      if (!currentDbId) return alert("Select a database first");
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const snapshot = JSON.parse(e.target.result);
+          const res = await fetch(`/databases/${currentDbId}/snapshot/restore`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(snapshot)
+          });
+          if (!res.ok) throw new Error(await res.text());
+          const out = await res.json();
+          alert(`Snapshot restored successfully: ${out.restored_tables} tables, ${out.restored_rows} rows`);
+          fetchTables();
+        } catch (err) {
+          alert(`Restore failed: ${err.message}`);
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = '';
+    }
+
+    function exportResultsJson() {
+      if (!lastResult) return;
+      const blob = new Blob([JSON.stringify(lastResult, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nexus-query-result-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function openNewDbModal() { document.getElementById('newDbModal').classList.add('show'); }
+    function closeNewDbModal() { document.getElementById('newDbModal').classList.remove('show'); }
+
+    async function createDatabase() {
+      const name = document.getElementById('newDbName').value.trim();
+      const engine = document.getElementById('newDbEngine').value;
+      if (!name) return alert("Name is required");
+
+      try {
+        const res = await fetch('/databases', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, engine })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        closeNewDbModal();
+        document.getElementById('newDbName').value = '';
+        await fetchDatabases();
+      } catch (err) {
+        alert("Provision error: " + err.message);
+      }
+    }
+
+    document.getElementById('sqlEditor').addEventListener('keydown', function(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        runQuery();
+      }
+    });
+
+    fetchDatabases();
+  </script>
+</body>
+</html>

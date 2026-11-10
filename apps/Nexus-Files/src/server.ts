@@ -93,6 +93,54 @@ const server = Bun.serve({
         }, 200);
       }
 
+      // ── Root Web File Explorer UI ──
+      if (request.method === "GET" && (path === "/" || path === "/index.html")) {
+        const html = await Bun.file(new URL("../web/index.html", import.meta.url).pathname).text();
+        return new Response(html, {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      }
+
+      // ── Presigned share token generation ──
+      const shareMatch = path.match(/^\/api\/v1\/files\/([^/]+)\/share$/);
+      if (request.method === "POST" && shareMatch) {
+        const fileId = shareMatch[1]!;
+        const file = files.find((f) => f.id === fileId);
+        if (!file || file.status === "deleted") return jsonResponse({ error: "file not found" }, 404);
+        const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+        const token = Buffer.from(JSON.stringify({ id: fileId, exp: expiresAt })).toString("base64url");
+        return jsonResponse({
+          status: "ok",
+          token,
+          expiresAt: new Date(expiresAt).toISOString(),
+          shareUrl: `${baseUrl}/share/${token}`,
+        }, 200);
+      }
+
+      // ── Access shared file ──
+      const accessShareMatch = path.match(/^\/share\/([^/]+)$/);
+      if (request.method === "GET" && accessShareMatch) {
+        const token = accessShareMatch[1]!;
+        try {
+          const payload = JSON.parse(Buffer.from(token, "base64url").toString());
+          if (payload.exp && Date.now() > payload.exp) {
+            return new Response("Share link expired", { status: 410 });
+          }
+          const file = files.find((f) => f.id === payload.id);
+          if (!file || file.status === "deleted") return new Response("File not found", { status: 404 });
+          const stream = await backend.getFileStream(file.id);
+          if (!stream) return new Response("Content not found", { status: 404 });
+          return new Response(stream as any, {
+            headers: {
+              "content-type": file.contentType,
+              "content-disposition": `inline; filename="${file.name}"`,
+            },
+          });
+        } catch {
+          return new Response("Invalid share link", { status: 400 });
+        }
+      }
+
       // ── List / Search files ──
       if (request.method === "GET" && path === "/api/v1/files") {
         const name = url.searchParams.get("name");

@@ -54,6 +54,83 @@
       "status": "active",
       "createdAt": "2026-06-13T11:17:46.260Z",
       "updatedAt": "2026-06-13T11:17:46.260Z"
+    },
+    {
+      "id": "file-000006",
+      "name": "report.pdf",
+      "size": 4096,
+      "contentType": "application/pdf",
+      "sha256": "",
+      "version": 1,
+      "status": "active",
+      "createdAt": "2026-11-10T02:40:13.764Z",
+      "updatedAt": "2026-11-10T02:40:13.764Z"
+    },
+    {
+      "id": "file-000007",
+      "name": "test.txt",
+      "size": 100,
+      "contentType": "text/plain",
+      "sha256": "",
+      "version": 1,
+      "status": "active",
+      "createdAt": "2026-11-10T02:40:13.781Z",
+      "updatedAt": "2026-11-10T02:40:13.781Z"
+    },
+    {
+      "id": "file-000008",
+      "name": "to-delete.txt",
+      "size": 0,
+      "contentType": "text/plain",
+      "sha256": "",
+      "version": 1,
+      "status": "deleted",
+      "createdAt": "2026-11-10T02:40:13.782Z",
+      "updatedAt": "2026-11-10T02:40:13.782Z"
+    },
+    {
+      "id": "file-000009",
+      "name": "report.pdf",
+      "size": 4096,
+      "contentType": "application/pdf",
+      "sha256": "",
+      "version": 1,
+      "status": "active",
+      "createdAt": "2026-11-10T02:40:30.357Z",
+      "updatedAt": "2026-11-10T02:40:30.357Z"
+    },
+    {
+      "id": "file-000010",
+      "name": "test.txt",
+      "size": 100,
+      "contentType": "text/plain",
+      "sha256": "",
+      "version": 1,
+      "status": "active",
+      "createdAt": "2026-11-10T02:40:30.361Z",
+      "updatedAt": "2026-11-10T02:40:30.361Z"
+    },
+    {
+      "id": "file-000011",
+      "name": "to-delete.txt",
+      "size": 0,
+      "contentType": "text/plain",
+      "sha256": "",
+      "version": 1,
+      "status": "deleted",
+      "createdAt": "2026-11-10T02:40:30.365Z",
+      "updatedAt": "2026-11-10T02:40:30.369Z"
+    },
+    {
+      "id": "file-000012",
+      "name": "shared-doc.txt",
+      "size": 50,
+      "contentType": "text/plain",
+      "sha256": "",
+      "version": 1,
+      "status": "active",
+      "createdAt": "2026-11-10T02:40:30.375Z",
+      "updatedAt": "2026-11-10T02:40:30.375Z"
     }
   ],
   "versions": []

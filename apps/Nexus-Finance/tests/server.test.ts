@@ -29,4 +29,56 @@ describe("nexus-finance", () => {
     expect(body["service"]).toBe("nexus-finance");
     expect(Array.isArray(body["capabilities"])).toBe(true);
   });
+
+  it("GET / serves Financial Dashboard UI", async () => {
+    const res = await fetch(`${base}/`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const html = await res.text();
+    expect(html).toContain("Nexus Finance");
+  });
+
+  it("manages expenses and summary", async () => {
+    const add = await fetch(`${base}/api/v1/finance/expenses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        userId: "test-user",
+        amount: 450,
+        type: "expense",
+        category: "infrastructure",
+        description: "Cloud server instances",
+      }),
+    });
+    expect(add.status).toBe(201);
+
+    const list = await fetch(`${base}/api/v1/finance/expenses?userId=test-user`);
+    expect(list.status).toBe(200);
+    const body = await list.json() as any;
+    expect(body.expenses.length).toBeGreaterThan(0);
+    expect(body.summary.totalExpense).toBe(450);
+  });
+
+  it("creates and updates invoices", async () => {
+    const create = await fetch(`${base}/api/v1/finance/invoices`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        userId: "test-user",
+        clientName: "Enterprise Client Corp",
+        amount: 3200,
+        currency: "USD",
+      }),
+    });
+    expect(create.status).toBe(201);
+    const inv = await create.json() as any;
+    expect(inv.clientName).toBe("Enterprise Client Corp");
+
+    const patch = await fetch(`${base}/api/v1/finance/invoices/${inv.id}/status`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status: "paid" }),
+    });
+    expect(patch.status).toBe(200);
+  });
 });
