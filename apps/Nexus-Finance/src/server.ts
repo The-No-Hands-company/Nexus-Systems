@@ -14,10 +14,10 @@ function json(p: unknown, s = 200): Response {
   });
 }
 
-export async function createServer() {
-  const port = Number(process.env.PORT || "3076");
+export async function createServer(customPort?: number, dbPath?: string) {
+  const port = customPort !== undefined ? customPort : Number(process.env.PORT || "3076");
   const startedAt = Date.now();
-  const engine = new FinanceEngine("data/nexus-finance.sqlite");
+  const engine = new FinanceEngine(dbPath || process.env.NEXUS_FINANCE_DB || "data/nexus-finance.sqlite");
   const phantom = new PhantomApp("nexus-finance");
   const phantomId = await phantom.start();
   const discovery = new NexusDiscovery({

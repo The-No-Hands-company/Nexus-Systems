@@ -74,6 +74,10 @@ service_identity() {
         nexus-wiki|wiki) SERVICE_DIR="$ROOT/apps/Nexus-Wiki"; SERVICE_EXEC_PATTERN="uvicorn nexus_wiki.main:app" ;;
         nexus-code|code) SERVICE_DIR="$ROOT/apps/Nexus-Code"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-vault|vault) SERVICE_DIR="$ROOT/apps/Nexus-Vault"; SERVICE_EXEC_PATTERN="bun src/index.ts" ;;
+        nexus-files|files) SERVICE_DIR="$ROOT/apps/Nexus-Files"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        nexus-finance|finance) SERVICE_DIR="$ROOT/apps/Nexus-Finance"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        nexus-tasks|tasks) SERVICE_DIR="$ROOT/apps/Nexus-Tasks"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        nexus-music|music) SERVICE_DIR="$ROOT/apps/Nexus-Music"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         ai|nexus-ai)    SERVICE_DIR="$ROOT/apps/Nexus-AI"; SERVICE_EXEC_PATTERN="python main.py" ;;
         database|nexus-database) SERVICE_DIR="$ROOT/apps/Nexus-Database"; SERVICE_EXEC_PATTERN="nexus-database" ;;
         guardian|nexus-guardian) SERVICE_DIR="$ROOT/apps/Nexus-Guardian"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
@@ -111,6 +115,10 @@ service_port() {
         nexus-wiki|wiki) printf '%s\n' 3160 ;;
         nexus-code|code) printf '%s\n' 3126 ;;
         nexus-vault|vault) printf '%s\n' 3900 ;;
+        nexus-files|files) printf '%s\n' 3033 ;;
+        nexus-finance|finance) printf '%s\n' 3076 ;;
+        nexus-tasks|tasks) printf '%s\n' 3108 ;;
+        nexus-music|music) printf '%s\n' 3092 ;;
         ai|nexus-ai) printf '%s\n' 3400 ;;
         database|nexus-database) printf '%s\n' 3088 ;;
         guardian|nexus-guardian) printf '%s\n' 4320 ;;
@@ -575,6 +583,34 @@ start_nexus_vault_service() {
         bun src/index.ts
 }
 
+start_nexus_files_service() {
+    start_service "nexus-files" "$ROOT/apps/Nexus-Files" 3033 \
+        PORT=3033 \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        bun run src/index.ts
+}
+
+start_nexus_finance_service() {
+    start_service "nexus-finance" "$ROOT/apps/Nexus-Finance" 3076 \
+        PORT=3076 \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        bun run src/index.ts
+}
+
+start_nexus_tasks_service() {
+    start_service "nexus-tasks" "$ROOT/apps/Nexus-Tasks" 3108 \
+        PORT=3108 \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        bun run src/index.ts
+}
+
+start_nexus_music_service() {
+    start_service "nexus-music" "$ROOT/apps/Nexus-Music" 3092 \
+        PORT=3092 \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        bun run src/index.ts
+}
+
 start_nexus_ai_service() {
     start_service "ai" "$ROOT/apps/Nexus-AI" 3400 \
         PORT=3400 \
@@ -701,6 +737,10 @@ start_named_service() {
         nexus-wiki|wiki) start_nexus_wiki_service ;;
         nexus-code|code) start_nexus_code_service ;;
         nexus-vault|vault) start_nexus_vault_service ;;
+        nexus-files|files) start_nexus_files_service ;;
+        nexus-finance|finance) start_nexus_finance_service ;;
+        nexus-tasks|tasks) start_nexus_tasks_service ;;
+        nexus-music|music) start_nexus_music_service ;;
         ai|nexus-ai) start_nexus_ai_service ;;
         database|nexus-database) start_nexus_database_service ;;
         guardian|nexus-guardian) start_nexus_guardian_service ;;
@@ -1163,7 +1203,13 @@ cmd_start() {
     start_nexus_code_service
     start_nexus_vault_service
 
-    # 4fe-i. Core Intelligence & Infrastructure Services
+    # 4fe-i. Everyday & Productivity Suite: Files, Finance, Tasks, Music
+    start_nexus_files_service
+    start_nexus_finance_service
+    start_nexus_tasks_service
+    start_nexus_music_service
+
+    # 4fe-j. Core Intelligence & Infrastructure Services
     start_nexus_ai_service
     start_nexus_database_service
     start_nexus_guardian_service
@@ -1397,7 +1443,7 @@ cmd_stop() {
     local svc
 
     log "Stopping all Nexus services..."
-    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-vault ai database guardian edge nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-vault nexus-files nexus-finance nexus-tasks nexus-music ai database guardian edge nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
         stop_service "$svc" || true
     done
     cd "$ROOT"
@@ -1407,7 +1453,7 @@ cmd_stop() {
 
 cmd_service_status() {
     echo "Service Status:"
-    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-vault ai database guardian edge nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-vault nexus-files nexus-finance nexus-tasks nexus-music ai database guardian edge nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
         service_identity "$svc" || continue
         local pid port
         port="$(service_port "$svc")"

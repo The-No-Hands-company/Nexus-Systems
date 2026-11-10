@@ -6,7 +6,7 @@ describe("nexus-finance", () => {
   let handle: Awaited<ReturnType<typeof createServer>>;
 
   beforeAll(async () => {
-    handle = await createServer();
+    handle = await createServer(0, ":memory:");
     await new Promise((r) => setTimeout(r, 200));
     base = `http://127.0.0.1:${handle.server.port}`;
   });

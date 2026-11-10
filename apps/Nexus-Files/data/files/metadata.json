@@ -131,6 +131,94 @@
       "status": "active",
       "createdAt": "2026-11-10T02:40:30.375Z",
       "updatedAt": "2026-11-10T02:40:30.375Z"
+    },
+    {
+      "id": "file-000013",
+      "name": "report.pdf",
+      "size": 4096,
+      "contentType": "application/pdf",
+      "sha256": "",
+      "version": 1,
+      "status": "active",
+      "createdAt": "2026-11-10T03:33:02.663Z",
+      "updatedAt": "2026-11-10T03:33:02.663Z"
+    },
+    {
+      "id": "file-000014",
+      "name": "test.txt",
+      "size": 100,
+      "contentType": "text/plain",
+      "sha256": "",
+      "version": 1,
+      "status": "active",
+      "createdAt": "2026-11-10T03:33:02.687Z",
+      "updatedAt": "2026-11-10T03:33:02.687Z"
+    },
+    {
+      "id": "file-000015",
+      "name": "to-delete.txt",
+      "size": 0,
+      "contentType": "text/plain",
+      "sha256": "",
+      "version": 1,
+      "status": "deleted",
+      "createdAt": "2026-11-10T03:33:02.690Z",
+      "updatedAt": "2026-11-10T03:33:02.694Z"
+    },
+    {
+      "id": "file-000016",
+      "name": "shared-doc.txt",
+      "size": 50,
+      "contentType": "text/plain",
+      "sha256": "",
+      "version": 1,
+      "status": "active",
+      "createdAt": "2026-11-10T03:33:02.698Z",
+      "updatedAt": "2026-11-10T03:33:02.698Z"
+    },
+    {
+      "id": "file-000017",
+      "name": "report.pdf",
+      "size": 4096,
+      "contentType": "application/pdf",
+      "sha256": "",
+      "version": 1,
+      "status": "active",
+      "createdAt": "2026-11-10T03:35:51.849Z",
+      "updatedAt": "2026-11-10T03:35:51.849Z"
+    },
+    {
+      "id": "file-000018",
+      "name": "test.txt",
+      "size": 100,
+      "contentType": "text/plain",
+      "sha256": "",
+      "version": 1,
+      "status": "active",
+      "createdAt": "2026-11-10T03:35:51.850Z",
+      "updatedAt": "2026-11-10T03:35:51.850Z"
+    },
+    {
+      "id": "file-000019",
+      "name": "to-delete.txt",
+      "size": 0,
+      "contentType": "text/plain",
+      "sha256": "",
+      "version": 1,
+      "status": "deleted",
+      "createdAt": "2026-11-10T03:35:51.850Z",
+      "updatedAt": "2026-11-10T03:35:51.851Z"
+    },
+    {
+      "id": "file-000020",
+      "name": "shared-doc.txt",
+      "size": 50,
+      "contentType": "text/plain",
+      "sha256": "",
+      "version": 1,
+      "status": "active",
+      "createdAt": "2026-11-10T03:35:51.852Z",
+      "updatedAt": "2026-11-10T03:35:51.852Z"
     }
   ],
   "versions": []

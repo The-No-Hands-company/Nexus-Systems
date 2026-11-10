@@ -98,6 +98,10 @@ const FALLBACK_DOCS_UPSTREAM = process.env.DOCS_UPSTREAM || "http://127.0.0.1:31
 const FALLBACK_WIKI_UPSTREAM = process.env.WIKI_UPSTREAM || "http://127.0.0.1:3160";
 const FALLBACK_CODE_UPSTREAM = process.env.CODE_UPSTREAM || "http://127.0.0.1:3126";
 const FALLBACK_VAULT_UPSTREAM = process.env.VAULT_UPSTREAM || "http://127.0.0.1:3900";
+const FALLBACK_FILES_UPSTREAM = process.env.FILES_UPSTREAM || "http://127.0.0.1:3033";
+const FALLBACK_FINANCE_UPSTREAM = process.env.FINANCE_UPSTREAM || "http://127.0.0.1:3076";
+const FALLBACK_TASKS_UPSTREAM = process.env.TASKS_UPSTREAM || "http://127.0.0.1:3108";
+const FALLBACK_MUSIC_UPSTREAM = process.env.MUSIC_UPSTREAM || "http://127.0.0.1:3092";
 const FALLBACK_AI_UPSTREAM = process.env.AI_UPSTREAM || "http://127.0.0.1:3400";
 const FALLBACK_DATABASE_UPSTREAM = process.env.DATABASE_UPSTREAM || "http://127.0.0.1:3088";
 const FALLBACK_GUARDIAN_UPSTREAM = process.env.GUARDIAN_UPSTREAM || "http://127.0.0.1:4320";
@@ -854,6 +858,18 @@ async function handleRequestInner(
         fixedKind = "app";
       } else if (host === `vault.${DOMAIN}` || host === `www.vault.${DOMAIN}`) {
         upstreamUrl = FALLBACK_VAULT_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `files.${DOMAIN}` || host === `www.files.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_FILES_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `finance.${DOMAIN}` || host === `www.finance.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_FINANCE_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `tasks.${DOMAIN}` || host === `www.tasks.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_TASKS_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `music.${DOMAIN}` || host === `www.music.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_MUSIC_UPSTREAM;
         fixedKind = "app";
       } else if (host === `ai.${DOMAIN}` || host === `www.ai.${DOMAIN}`) {
         upstreamUrl = FALLBACK_AI_UPSTREAM;
