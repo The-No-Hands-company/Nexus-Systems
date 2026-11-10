@@ -38,6 +38,9 @@ let upstreamPath: string | null = null;
 let upstreamSocket: Bun.ServerWebSocket<undefined> | null = null;
 let upstreamClose: { code: number; reason: string } | null = null;
 let authRequests = 0;
+// REST endpoint tracking
+let lastRestPath: string | null = null;
+let lastRestMethod: string | null = null;
 
 const delay = (milliseconds: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
@@ -176,12 +179,26 @@ function startTerminal(options: { handshakeDelay?: number } = {}): void {
       const url = new URL(req.url);
       upstreamCookie = req.headers.get("cookie");
       upstreamPath = `${url.pathname}${url.search}`;
+      lastRestPath = url.pathname;
+      lastRestMethod = req.method;
       if (options.handshakeDelay) await delay(options.handshakeDelay);
       const upgraded =
         url.pathname === "/api/v1/terminal/attach" && server.upgrade(req, { data: undefined });
       upstreamHandshakeFinished = true;
-      if (upgraded) {
-        return undefined;
+      if (upgraded) return undefined;
+      // REST stubs for session-persistence and file-upload routes
+      if (req.method === "GET" && url.pathname === "/api/v1/terminal/active-sessions") {
+        return Response.json({ sessions: [] });
+      }
+      if (req.method === "GET" && url.pathname === "/api/v1/terminal/audit") {
+        return Response.json({ sessions: [] });
+      }
+      if (req.method === "POST" && /^\/api\/v1\/terminal\/sessions\/[^/]+\/kill$/.test(url.pathname)) {
+        const id = url.pathname.split("/").at(-2)!;
+        return Response.json({ ok: true, killed: id });
+      }
+      if (req.method === "POST" && url.pathname === "/api/v1/terminal/upload") {
+        return Response.json({ ok: true, filename: "test.txt", path: "/home/test.txt", size: 100 });
       }
       return new Response("not found", { status: 404 });
     },
@@ -222,6 +239,8 @@ beforeEach(() => {
   upstreamSocket = null;
   upstreamClose = null;
   authRequests = 0;
+  lastRestPath = null;
+  lastRestMethod = null;
   startTerminal();
 });
 
@@ -497,6 +516,67 @@ describe("terminal frame relay", () => {
 
     const close = await client.closed;
     expect(close.code).toBe(1011);
+  });
+
+  it("proxies GET /ipa/terminal/active-sessions to Terminal and returns its response", async () => {
+    const res = await fetch(
+      `http://127.0.0.1:${dashboardPort()}/ipa/terminal/active-sessions`,
+      { headers: { cookie: "role=founder; nexus_session=secret-session" } },
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { sessions: unknown[] };
+    expect(Array.isArray(body.sessions)).toBe(true);
+    expect(lastRestPath).toBe("/api/v1/terminal/active-sessions");
+    expect(lastRestMethod).toBe("GET");
+  });
+
+  it("proxies POST /ipa/terminal/sessions/:id/kill to Terminal", async () => {
+    const res = await fetch(
+      `http://127.0.0.1:${dashboardPort()}/ipa/terminal/sessions/terminal-1/kill`,
+      { method: "POST", headers: { cookie: "role=admin; nexus_session=secret-session" } },
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { ok: boolean; killed: string };
+    expect(body.ok).toBe(true);
+    expect(body.killed).toBe("terminal-1");
+    expect(lastRestPath).toBe("/api/v1/terminal/sessions/terminal-1/kill");
+  });
+
+  it("proxies POST /ipa/terminal/upload to Terminal", async () => {
+    const form = new FormData();
+    form.append("file", new Blob(["hello"]), "hello.txt");
+    const res = await fetch(
+      `http://127.0.0.1:${dashboardPort()}/ipa/terminal/upload`,
+      { method: "POST", headers: { cookie: "role=founder; nexus_session=secret-session" }, body: form },
+    );
+    expect(res.status).toBe(200);
+    expect(lastRestPath).toBe("/api/v1/terminal/upload");
+    expect(lastRestMethod).toBe("POST");
+  });
+
+  it("blocks unsigned-out callers from terminal REST routes", async () => {
+    for (const path of [
+      "/ipa/terminal/active-sessions",
+      "/ipa/terminal/upload",
+      "/ipa/terminal/audit",
+    ]) {
+      const res = await fetch(`http://127.0.0.1:${dashboardPort()}${path}`, {
+        method: path === "/ipa/terminal/active-sessions" ? "GET" : "POST",
+      });
+      expect(res.status).toBe(401);
+    }
+    // Terminal upstream must not have been contacted for any of these
+    expect(lastRestPath).toBeNull();
+  });
+
+  it("blocks member-role callers from terminal REST routes", async () => {
+    for (const path of ["/ipa/terminal/active-sessions", "/ipa/terminal/audit"]) {
+      const res = await fetch(`http://127.0.0.1:${dashboardPort()}${path}`, {
+        headers: { cookie: "role=member; nexus_session=secret-session" },
+      });
+      expect(res.status).toBe(403);
+    }
+    expect(lastRestPath).toBeNull();
   });
 
   it("maps real failures, relays isolated shells, and cleans every session", async () => {

@@ -196,13 +196,43 @@ export default function TerminalView({
   }, [createSession, updateState]);
 
   useEffect(() => {
-    // Deferring one turn lets StrictMode cancel its first setup during effect
-    // replay before any controller (and therefore any PTY) is constructed.
-    const timer = window.setTimeout(() => {
+    // On first mount, attempt to restore any live detached sessions from the
+    // backend. If the fetch fails or returns nothing, open one fresh session.
+    // A StrictMode double-invoke is harmless: the second run sees controllers
+    // already populated and skips the session-open path.
+    const timer = window.setTimeout(async () => {
+      if (controllers.current.size > 0) return;
+      try {
+        const res = await fetch("/ipa/terminal/active-sessions");
+        if (res.ok) {
+          const data = (await res.json()) as {
+            sessions?: Array<{ id: string; cols: number; rows: number; detached: boolean }>;
+          };
+          const live = data.sessions?.filter((s) => s.detached) ?? [];
+          if (live.length > 0) {
+            // Reopen each detached session. The backend replays scrollback.
+            live.forEach((s, i) => {
+              const id = s.id;
+              const controller = createSession({
+                id,
+                sessionId: id,
+                onStateChange: (state) => updateState(id, state),
+              });
+              controllers.current.set(id, controller);
+              const label = `Terminal ${nextSessionNumber.current++}`;
+              setTabs((current) => [...current, { id, label, state: "connecting", controller }]);
+              if (i === 0) setActiveId(id);
+            });
+            return;
+          }
+        }
+      } catch {
+        // Network or auth failure — fall through to fresh session.
+      }
       if (controllers.current.size === 0) newSession();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [newSession]);
+  }, [newSession, createSession, updateState]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClock(now()), 1_000);

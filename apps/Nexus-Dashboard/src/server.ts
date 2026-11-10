@@ -739,6 +739,21 @@ export async function handleRequest(
 
   if (path.startsWith(AUTH_PREFIX)) return proxyToAuth(req, path);
 
+  // Terminal REST endpoints (file upload, active-session listing, per-session kill).
+  // The WebSocket attach path is handled above; these are the companion REST routes
+  // the terminal frontend calls for session persistence and drag-and-drop upload.
+  if (
+    path.startsWith("/ipa/terminal/") &&
+    path !== "/ipa/terminal/attach" &&
+    (path === "/ipa/terminal/upload" ||
+      path === "/ipa/terminal/active-sessions" ||
+      path === "/ipa/terminal/audit" ||
+      /^\/ipa\/terminal\/sessions\/[^/]+\/kill$/.test(path))
+  ) {
+    const targetPath = path.replace(/^\/ipa\/terminal\//, "/api/v1/terminal/");
+    return proxyToTerminal(req, targetPath);
+  }
+
   // Anything else under /ipa is not ours and must not fall through to the SPA.
   // Returning the HTML shell for a mistyped API call is how a caller ends up
   // parsing "<!doctype html>" as JSON.
