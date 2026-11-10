@@ -307,6 +307,11 @@ const CLOUD_ALLOWLIST: Record<string, { upstream: string; adminOnly?: boolean }>
   // Federation + identity views.
   "federation/peers": { upstream: "/v1/federation/peers" },
   "federation/identity": { upstream: "/v1/federation/identity" },
+  // Topology, service actions, and backups
+  topology: { upstream: "/api/v1/topology" },
+  backups: { upstream: "/api/v1/backups" },
+  "backups/create": { upstream: "/api/v1/backups/create" },
+  "services/restart": { upstream: "/api/v1/services/restart" },
 };
 
 async function proxyToCloud(req: Request, name: string, search: string): Promise<Response> {
@@ -333,8 +338,17 @@ async function proxyToCloud(req: Request, name: string, search: string): Promise
   }
 
   try {
+    const forwardHeaders: Record<string, string> = { ...cloudHeaders() };
+    let reqBody: string | undefined = undefined;
+    if (req.method === "POST") {
+      reqBody = await req.text();
+      forwardHeaders["content-type"] = req.headers.get("content-type") ?? "application/json";
+    }
+
     const res = await fetch(`${cloudBaseUrl()}${entry.upstream}${search}`, {
-      headers: cloudHeaders(),
+      method: req.method,
+      headers: forwardHeaders,
+      body: reqBody,
       signal: AbortSignal.timeout(5000),
     });
     const body = await res.text();
@@ -517,6 +531,37 @@ async function proxyToAuth(req: Request, path: string): Promise<Response> {
   // Pass the response through verbatim. Set-Cookie especially: dropping it
   // would make login appear to succeed while leaving the user signed out.
   return new Response(res.body, { status: res.status, headers: res.headers });
+}
+
+function terminalBaseUrl(): string {
+  return process.env.NEXUS_TERMINAL_URL || "http://127.0.0.1:3110";
+}
+
+async function proxyToTerminal(req: Request, targetPath: string): Promise<Response> {
+  const who = await callerIdentity(req);
+  if (!who) return Response.json({ error: "not_authenticated" }, { status: 401 });
+  if (!isAdminRole(who.role)) return Response.json({ error: "forbidden" }, { status: 403 });
+
+  const upstream = new URL(`${terminalBaseUrl()}${targetPath}`);
+  const incoming = new URL(req.url);
+  upstream.search = incoming.search;
+
+  const headers = new Headers(req.headers);
+  headers.delete("host");
+  headers.delete("connection");
+
+  try {
+    const res = await fetch(upstream, {
+      method: req.method,
+      headers,
+      body: req.method === "GET" || req.method === "HEAD" ? undefined : await req.arrayBuffer(),
+      redirect: "manual",
+      signal: AbortSignal.timeout(15000),
+    });
+    return new Response(res.body, { status: res.status, headers: res.headers });
+  } catch {
+    return Response.json({ error: "terminal_unavailable" }, { status: 503 });
+  }
 }
 
 type UpgradeServer = Pick<Bun.Server<TerminalSocketData>, "upgrade">;

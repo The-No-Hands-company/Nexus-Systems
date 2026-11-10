@@ -24,6 +24,11 @@ import {
   setRouteEnabled,
   setRouteTrustState,
   updateRouteHealth,
+  upsertGeoRoute,
+  getGeoRoute,
+  listGeoRoutes,
+  deleteGeoRoute,
+  resolveGeoRouting,
 } from "./state";
 import {
   upsertRateLimitRule,
@@ -382,6 +387,49 @@ const server = Bun.serve({
         return jsonResponse({ status: "ok", metrics: getMetricsForHost(decodeURIComponent(encodedHost)) });
       }
 
+      // ── Regional Geo-Routing ──
+      if (request.method === "GET" && path === "/api/v1/edge/geo-routing") {
+        return jsonResponse({ status: "ok", geoRoutes: listGeoRoutes() });
+      }
+
+      if (request.method === "POST" && path === "/api/v1/edge/geo-routing") {
+        const body = await parseBody(request);
+        const host = typeof body.host === "string" ? normalizeHost(body.host) : "";
+        const defaultRegion = typeof body.defaultRegion === "string" ? body.defaultRegion.trim() : "default";
+        const regions = typeof body.regions === "object" && body.regions !== null ? (body.regions as Record<string, string>) : {};
+        const countryToRegion = typeof body.countryToRegion === "object" && body.countryToRegion !== null ? (body.countryToRegion as Record<string, string>) : undefined;
+        const enabled = typeof body.enabled === "boolean" ? body.enabled : true;
+
+        if (!host || Object.keys(regions).length === 0) {
+          return jsonResponse({ error: "host and at least one region target are required" }, { status: 400 });
+        }
+
+        const geoRoute = upsertGeoRoute({ host, defaultRegion, regions, countryToRegion, enabled });
+        return jsonResponse({ status: "ok", geoRoute }, { status: 201 });
+      }
+
+      const geoDeleteMatch = path.match(/^\/api\/v1\/edge\/geo-routing\/([^/]+)$/);
+      if (request.method === "DELETE" && geoDeleteMatch) {
+        const [, encodedHost] = geoDeleteMatch;
+        const deleted = deleteGeoRoute(decodeURIComponent(encodedHost));
+        if (!deleted) return jsonResponse({ error: "Geo route not found" }, { status: 404 });
+        return jsonResponse({ status: "ok", deleted: true });
+      }
+
+      if (request.method === "POST" && path === "/api/v1/edge/geo-routing/resolve") {
+        const body = await parseBody(request);
+        const host = typeof body.host === "string" ? normalizeHost(body.host) : "";
+        const region = typeof body.region === "string" ? body.region : undefined;
+        const country = typeof body.country === "string" ? body.country : undefined;
+        if (!host) return jsonResponse({ error: "host is required" }, { status: 400 });
+
+        const resolution = resolveGeoRouting(host, { region, country });
+        if (!resolution) {
+          return jsonResponse({ error: `No active geo-routing configured for host '${host}'` }, { status: 404 });
+        }
+        return jsonResponse({ status: "ok", resolution });
+      }
+
       // ── Ingress Proxy ──
       const requestHost = normalizeHost(
         request.headers.get("x-forwarded-host") || request.headers.get("host") || "",
@@ -417,10 +465,32 @@ const server = Bun.serve({
           );
         }
 
-        const upstreamUrl = buildUpstreamUrl(route.upstreamUrl, path, url.search);
+        const clientRegion =
+          request.headers.get("x-nexus-region") ||
+          request.headers.get("cf-ipcountry") ||
+          request.headers.get("x-geo-country") ||
+          url.searchParams.get("region") ||
+          undefined;
+        const clientCountry =
+          request.headers.get("cf-ipcountry") ||
+          request.headers.get("x-geo-country") ||
+          undefined;
+
+        const geoResolution = resolveGeoRouting(requestHost, {
+          region: clientRegion,
+          country: clientCountry,
+        });
+        const targetBaseUrl = geoResolution?.upstreamUrl || route.upstreamUrl;
+
+        const upstreamUrl = buildUpstreamUrl(targetBaseUrl, path, url.search);
         const proxyStart = Date.now();
         const response = await proxyRequest(request, upstreamUrl);
         const proxyLatency = Date.now() - proxyStart;
+
+        if (geoResolution) {
+          response.headers.set("x-nexus-edge-region", geoResolution.resolvedRegion);
+          response.headers.set("x-nexus-edge-routed-by", geoResolution.matchedRule);
+        }
 
         recordMetric({ host: requestHost, method: request.method, path, statusCode: response.status, latencyMs: proxyLatency, clientIp });
         return response;

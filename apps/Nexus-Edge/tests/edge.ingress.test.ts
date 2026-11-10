@@ -126,4 +126,84 @@ describe("nexus-edge ingress routing", () => {
     const payload = await response.json();
     expect(payload.error).toContain("disabled");
   });
+
+  test("routes traffic geographically based on region or country header", async () => {
+    const edgePort = edgeHandle!.server.port;
+    const defaultUpstream = `http://127.0.0.1:${upstreamServer!.port}`;
+
+    // Spin up an apac regional upstream
+    const apacServer = Bun.serve({
+      port: 0,
+      fetch: () => new Response(JSON.stringify({ region: "apac-node", ok: true }), {
+        headers: { "content-type": "application/json" },
+      }),
+    });
+
+    try {
+      // Create primary route
+      await fetch(`http://127.0.0.1:${edgePort}/api/v1/edge/routes`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          host: "geo.nexus.local",
+          upstreamUrl: defaultUpstream,
+          trustState: "trusted",
+        }),
+      });
+
+      // Configure Geo-Routing
+      const geoConfigRes = await fetch(`http://127.0.0.1:${edgePort}/api/v1/edge/geo-routing`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          host: "geo.nexus.local",
+          defaultRegion: "eu",
+          regions: {
+            eu: defaultUpstream,
+            apac: `http://127.0.0.1:${apacServer.port}`,
+          },
+          countryToRegion: {
+            SE: "eu",
+            ID: "apac",
+            JP: "apac",
+          },
+        }),
+      });
+      expect(geoConfigRes.status).toBe(201);
+
+      // Direct APAC request
+      const apacReq = await fetch(`http://127.0.0.1:${edgePort}/api/test`, {
+        headers: {
+          "x-forwarded-host": "geo.nexus.local",
+          "x-nexus-region": "apac",
+        },
+      });
+      expect(apacReq.status).toBe(200);
+      expect(apacReq.headers.get("x-nexus-edge-region")).toBe("apac");
+      const apacBody = await apacReq.json();
+      expect(apacBody.region).toBe("apac-node");
+
+      // Country-based routing (ID -> apac)
+      const countryReq = await fetch(`http://127.0.0.1:${edgePort}/api/test`, {
+        headers: {
+          "x-forwarded-host": "geo.nexus.local",
+          "cf-ipcountry": "ID",
+        },
+      });
+      expect(countryReq.status).toBe(200);
+      expect(countryReq.headers.get("x-nexus-edge-region")).toBe("apac");
+
+      // Resolve endpoint verification
+      const resolveRes = await fetch(`http://127.0.0.1:${edgePort}/api/v1/edge/geo-routing/resolve`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ host: "geo.nexus.local", country: "SE" }),
+      });
+      expect(resolveRes.status).toBe(200);
+      const resolveData = await resolveRes.json();
+      expect(resolveData.resolution.resolvedRegion).toBe("eu");
+    } finally {
+      apacServer.stop();
+    }
+  });
 });

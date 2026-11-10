@@ -102,6 +102,9 @@ const FALLBACK_FILES_UPSTREAM = process.env.FILES_UPSTREAM || "http://127.0.0.1:
 const FALLBACK_FINANCE_UPSTREAM = process.env.FINANCE_UPSTREAM || "http://127.0.0.1:3076";
 const FALLBACK_TASKS_UPSTREAM = process.env.TASKS_UPSTREAM || "http://127.0.0.1:3108";
 const FALLBACK_MUSIC_UPSTREAM = process.env.MUSIC_UPSTREAM || "http://127.0.0.1:3092";
+const FALLBACK_TERMINAL_UPSTREAM = process.env.TERMINAL_UPSTREAM || "http://127.0.0.1:3110";
+const FALLBACK_FORGE_UPSTREAM = process.env.FORGE_UPSTREAM || "http://127.0.0.1:3120";
+const FALLBACK_NETWORK_UPSTREAM = process.env.NETWORK_UPSTREAM || "http://127.0.0.1:3124";
 const FALLBACK_AI_UPSTREAM = process.env.AI_UPSTREAM || "http://127.0.0.1:3400";
 const FALLBACK_DATABASE_UPSTREAM = process.env.DATABASE_UPSTREAM || "http://127.0.0.1:3088";
 const FALLBACK_GUARDIAN_UPSTREAM = process.env.GUARDIAN_UPSTREAM || "http://127.0.0.1:4320";
@@ -870,6 +873,15 @@ async function handleRequestInner(
         fixedKind = "app";
       } else if (host === `music.${DOMAIN}` || host === `www.music.${DOMAIN}`) {
         upstreamUrl = FALLBACK_MUSIC_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `terminal.${DOMAIN}` || host === `www.terminal.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_TERMINAL_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `forge.${DOMAIN}` || host === `www.forge.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_FORGE_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `network.${DOMAIN}` || host === `www.network.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_NETWORK_UPSTREAM;
         fixedKind = "app";
       } else if (host === `ai.${DOMAIN}` || host === `www.ai.${DOMAIN}`) {
         upstreamUrl = FALLBACK_AI_UPSTREAM;

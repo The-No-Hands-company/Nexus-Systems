@@ -18,8 +18,12 @@
       </div>
 
       <div class="header-actions">
+        <div id="liveTicker" style="display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; color: #4ade80; margin-right: 16px;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #4ade80; display: inline-block; box-shadow: 0 0 8px #4ade80;"></span>
+          LIVE RADAR (5s AUTO-PROBE)
+        </div>
         <button id="rescanBtn" class="btn btn-acid">
-          <span class="icon">↻</span> Rescan Ecosystem
+          <span class="icon">↻</span> Probe Ecosystem Now
         </button>
       </div>
     </div>
@@ -31,12 +35,17 @@
       <div class="stat-card">
         <span class="stat-label">REGISTERED SERVICES</span>
         <span id="statTotalApps" class="stat-value">--</span>
-        <span class="stat-sub">Managed under deploy.sh</span>
+        <span class="stat-sub">Managed under ecosystem</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">RUNTIME HEALTH</span>
+        <span id="statHealthRatio" class="stat-value" style="color: #4ade80;">--/--</span>
+        <span class="stat-sub" id="statHealthSub">Probing ports & gateway</span>
       </div>
       <div class="stat-card stat-card-highlight">
         <span class="stat-label">AVERAGE V1.0 READINESS</span>
         <span id="statAvgScore" class="stat-value">--%</span>
-        <span class="stat-sub" id="statAvgStage">Ecosystem Overall</span>
+        <span class="stat-sub" id="statAvgStage">Ground Truth Overall</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">STAGE BREAKDOWN</span>

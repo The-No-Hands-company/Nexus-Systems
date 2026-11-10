@@ -79,7 +79,7 @@ function dimension(
   return Math.max(bounds.min, Math.min(bounds.max, Math.trunc(value)));
 }
 
-function upstreamUrl(cols: number, rows: number): string | null {
+function upstreamUrl(cols: number, rows: number, sessionId?: string | null): string | null {
   try {
     const url = new URL(process.env.NEXUS_TERMINAL_URL || DEFAULT_TERMINAL_URL);
     if (url.username || url.password) return null;
@@ -92,6 +92,7 @@ function upstreamUrl(cols: number, rows: number): string | null {
     url.hash = "";
     url.searchParams.set("cols", String(cols));
     url.searchParams.set("rows", String(rows));
+    if (sessionId) url.searchParams.set("sessionId", sessionId);
     return url.toString();
   } catch {
     return null;
@@ -138,7 +139,7 @@ function clearOpenTimer(pair: RelayPair): void {
  */
 export async function authorizeTerminalUpgrade(req: Request): Promise<UpgradeDecision> {
   const url = new URL(req.url);
-  if (url.pathname !== ATTACH_PATH) {
+  if (url.pathname !== ATTACH_PATH && url.pathname !== "/api/terminal/attach") {
     return { ok: false, response: errorResponse("not_found", 404) };
   }
   if (!hasWebSocketHeaders(req)) {
@@ -172,7 +173,8 @@ export async function authorizeTerminalUpgrade(req: Request): Promise<UpgradeDec
     return { ok: false, response: errorResponse("invalid_dimensions", 400) };
   }
 
-  const fixedUpstream = upstreamUrl(cols, rows);
+  const sessionId = url.searchParams.get("sessionId");
+  const fixedUpstream = upstreamUrl(cols, rows, sessionId);
   if (!fixedUpstream) {
     return { ok: false, response: errorResponse("terminal_unavailable", 503) };
   }

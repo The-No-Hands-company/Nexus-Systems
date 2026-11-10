@@ -9,6 +9,8 @@ import MailRead from "./pages/mail/MailRead";
 import MailCompose from "./pages/mail/MailCompose";
 import CloudOverview from "./pages/cloud/CloudOverview";
 import CloudTools from "./pages/cloud/CloudTools";
+import CloudTopology from "./pages/cloud/CloudTopology";
+import CloudBackups from "./pages/cloud/CloudBackups";
 import CloudFederation from "./pages/cloud/CloudFederation";
 import CloudIdentity from "./pages/cloud/CloudIdentity";
 import CloudApi from "./pages/cloud/CloudApi";
@@ -243,6 +245,22 @@ export default function App() {
           }
         />
         <Route
+          path="/cloud/topology"
+          element={
+            <ShellView state={appsState} user={user}>
+              <CloudTopology />
+            </ShellView>
+          }
+        />
+        <Route
+          path="/cloud/backups"
+          element={
+            <ShellView state={appsState} user={user}>
+              <CloudBackups />
+            </ShellView>
+          }
+        />
+        <Route
           path="/cloud/federation"
           element={
             <ShellView state={appsState} user={user}>
@@ -351,6 +369,8 @@ const ROUTE_TITLES: Record<string, string> = {
   "/apps": "All Apps — Nexus",
   "/cloud": "Cloud — Nexus",
   "/cloud/tools": "Cloud Tools — Nexus",
+  "/cloud/topology": "Cloud Topology — Nexus",
+  "/cloud/backups": "Cloud Backups — Nexus",
   "/cloud/federation": "Cloud Federation — Nexus",
   "/cloud/identity": "Cloud Identity — Nexus",
   "/cloud/api": "Cloud API — Nexus",

@@ -41,7 +41,7 @@ export class TerminalAudit {
 
   begin(id: string, subject: string): void {
     this.db
-      .query("INSERT INTO sessions (id, subject, started_at) VALUES (?, ?, ?)")
+      .query("INSERT OR IGNORE INTO sessions (id, subject, started_at) VALUES (?, ?, ?)")
       .run(id, subject, new Date().toISOString());
   }
 

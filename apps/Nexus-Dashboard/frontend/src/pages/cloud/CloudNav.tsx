@@ -3,6 +3,8 @@ import { NavLink } from "react-router-dom";
 const TABS = [
   { to: "/cloud", label: "Overview", end: true },
   { to: "/cloud/tools", label: "Tools" },
+  { to: "/cloud/topology", label: "Topology" },
+  { to: "/cloud/backups", label: "Backups" },
   { to: "/cloud/federation", label: "Federation" },
   { to: "/cloud/identity", label: "Identity" },
   { to: "/cloud/api", label: "API" },

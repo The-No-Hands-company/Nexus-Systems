@@ -1,18 +1,27 @@
 let currentData = null;
 let activeCategory = "all";
 let searchFilter = "";
+let isFetching = false;
 
-async function fetchAudit() {
+async function fetchAudit(silent = false) {
+  if (isFetching) return;
+  isFetching = true;
   const grid = document.getElementById("appsGrid");
-  grid.innerHTML = '<div class="loading-state">Scanning platform services and checking live ports...</div>';
+  if (!silent && !currentData) {
+    grid.innerHTML = '<div class="loading-state">Probing ecosystem daemons & public endpoints in real-time...</div>';
+  }
 
   try {
     const res = await fetch("/api/summary");
-    if (!res.ok) throw new Error("Failed to load audit summary");
+    if (!res.ok) throw new Error("Failed to load live audit summary");
     currentData = await res.json();
     renderAll();
   } catch (err) {
-    grid.innerHTML = `<div class="loading-state" style="color: #f87171;">Error loading audit data: ${err.message}</div>`;
+    if (!silent) {
+      grid.innerHTML = `<div class="loading-state" style="color: #f87171;">Error loading live audit data: ${err.message}</div>`;
+    }
+  } finally {
+    isFetching = false;
   }
 }
 
@@ -21,6 +30,20 @@ function renderAll() {
 
   // 1. KPI Stats
   document.getElementById("statTotalApps").textContent = currentData.totalApps;
+
+  const healthRatioEl = document.getElementById("statHealthRatio");
+  const healthSubEl = document.getElementById("statHealthSub");
+  if (healthRatioEl) {
+    healthRatioEl.textContent = `${currentData.operationalApps}/${currentData.totalApps} Live`;
+    healthRatioEl.style.color = currentData.degradedApps === 0 ? "#4ade80" : "#ef4444";
+  }
+  if (healthSubEl) {
+    healthSubEl.textContent =
+      currentData.degradedApps === 0
+        ? "All services healthy & reachable"
+        : `${currentData.degradedApps} service(s) offline or 502`;
+  }
+
   document.getElementById("statAvgScore").textContent = `${currentData.averageScore}%`;
 
   let avgStage = "Beta Stage";
@@ -32,13 +55,12 @@ function renderAll() {
   const b = currentData.stagesCount;
   const breakdownEl = document.getElementById("statBreakdown");
   breakdownEl.innerHTML = `
+    ${b.degraded > 0 ? `<span class="breakdown-badge" style="color: #ef4444; font-weight: 700; border: 1px solid #ef4444; padding: 2px 6px;">Degraded: ${b.degraded}</span>` : ""}
     <span class="breakdown-badge" style="color: var(--cyan)">Alpha: ${b.alpha}</span>
     <span class="breakdown-badge" style="color: var(--yellow)">Beta: ${b.beta}</span>
     <span class="breakdown-badge" style="color: var(--green)">RC: ${b.rc}</span>
     <span class="breakdown-badge" style="color: var(--acid)">v1.0: ${b.v1}</span>
   `;
-
-  document.getElementById("lastScannedAt").textContent = `Last Scan: ${new Date(currentData.scannedAt).toLocaleTimeString()}`;
 
   // 2. Render Apps Grid
   renderGrid();
@@ -66,18 +88,25 @@ function renderGrid() {
 
   grid.innerHTML = filtered
     .map((item) => {
-      const stageClass = "stage-" + item.stage.replace(/\s+/g, "");
-      const topMissing = item.missingFeatures[0]?.name || "Polish & testing";
+      const stageClass = "stage-" + item.stage.replace(/[^a-zA-Z0-9]/g, "");
+      const topMissing = item.live.degradedReason || item.missingFeatures[0]?.name || "Polish & testing";
+
+      const livePill = item.live.isOperational
+        ? `<span class="live-pill live-pill-up">🟢 ${item.live.publicStatusText} (${item.live.publicLatencyMs}ms)</span>`
+        : `<span class="live-pill live-pill-down">🔴 ${item.live.degradedReason || "OFFLINE / 502"}</span>`;
 
       return `
-      <div class="app-card" onclick="openModal('${item.app.id}')">
+      <div class="app-card ${!item.live.isOperational ? "app-card-degraded" : ""}" onclick="openModal('${item.app.id}')">
         <div>
           <div class="app-card-top">
             <div>
               <div class="app-card-title">${item.app.name}</div>
-              <div class="app-card-meta">:${item.app.port} • ${item.app.category.toUpperCase()} • ${item.live.portListening ? "● ONLINE" : "○ OFFLINE"}</div>
+              <div class="app-card-meta">:${item.app.port} • ${item.app.category.toUpperCase()}</div>
             </div>
             <span class="stage-badge ${stageClass}">${item.stage}</span>
+          </div>
+          <div style="margin: 6px 0 10px;">
+            ${livePill}
           </div>
           <p class="app-card-desc">${item.app.description}</p>
         </div>
@@ -85,14 +114,14 @@ function renderGrid() {
         <div class="progress-section">
           <div class="progress-header">
             <span>v1.0 READINESS</span>
-            <span><strong>${item.totalScore}%</strong></span>
+            <span><strong>${item.totalScore}%</strong> ${item.rawScore !== item.totalScore ? `<small style="color: #ef4444;">(Capped from ${item.rawScore}%)</small>` : ""}</span>
           </div>
           <div class="progress-bar-bg">
-            <div class="progress-bar-fill" style="width: ${item.totalScore}%"></div>
+            <div class="progress-bar-fill" style="width: ${item.totalScore}%; background: ${!item.live.isOperational ? "#ef4444" : ""}"></div>
           </div>
           <div class="app-card-features">
             <span>Features: ${item.completedFeatures.length}/${item.app.features.length}</span>
-            <span class="missing-pill" title="Next: ${topMissing}">Next: ${topMissing}</span>
+            <span class="missing-pill" title="${topMissing}">${topMissing.slice(0, 32)}</span>
           </div>
         </div>
       </div>
@@ -115,15 +144,22 @@ window.openModal = function (appId) {
     <!-- Top Readiness Metric -->
     <div style="background: rgba(226, 248, 78, 0.05); border: 1px solid rgba(226, 248, 78, 0.25); padding: 18px; margin-bottom: 24px;">
       <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
-        <span style="font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; color: var(--text-dim);">Current Maturity Stage</span>
-        <span style="font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--acid);">${item.stage} (${item.totalScore}%)</span>
+        <span style="font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; color: var(--text-dim);">Live Ground-Truth Maturity</span>
+        <span style="font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: ${item.live.isOperational ? "var(--acid)" : "#ef4444"};">${item.stage} (${item.totalScore}%)</span>
       </div>
       <div class="progress-bar-bg" style="height: 8px;">
-        <div class="progress-bar-fill" style="width: ${item.totalScore}%"></div>
+        <div class="progress-bar-fill" style="width: ${item.totalScore}%; background: ${!item.live.isOperational ? "#ef4444" : ""}"></div>
       </div>
-      <div style="display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin-top: 8px;">
-        <span>Port :${item.app.port} ${item.live.portListening ? "● Listening" : "○ Down"}</span>
-        <span>HTTP Health: ${item.live.httpHealthy ? "● 200 OK" : "○ Offline"}</span>
+      ${
+        item.live.degradedReason
+          ? `<div style="background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); padding: 8px 12px; margin-top: 12px; font-family: var(--font-mono); font-size: 11px; color: #fca5a5;">
+              ⚠️ <strong>DEGRADED RULE APPLIED:</strong> ${item.live.degradedReason}. Score hard-capped at ${item.totalScore}% (raw score: ${item.rawScore}%).
+            </div>`
+          : ""
+      }
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-top: 12px; border-top: 1px solid var(--border-subtle); padding-top: 10px;">
+        <div>Local Daemon :${item.app.port}: <strong style="color: ${item.live.portListening ? "#4ade80" : "#ef4444"};">${item.live.portListening ? "● Listening" : "○ Down"}</strong> (${item.live.localLatencyMs}ms)</div>
+        <div>Public Gateway: <strong style="color: ${item.live.publicReachable ? "#4ade80" : "#ef4444"};">${item.live.publicStatusText}</strong> (${item.live.publicLatencyMs}ms)</div>
       </div>
     </div>
 
@@ -151,7 +187,7 @@ window.openModal = function (appId) {
         <div class="pillar-box-score">${item.pillars.quality.score}/10 <span style="font-size: 11px; font-weight: 400; color: var(--text-muted);">(${item.pillars.quality.label})</span></div>
       </div>
       <div class="pillar-box">
-        <div class="pillar-box-label">Platform Gate (10 pts)</div>
+        <div class="pillar-box-label">Runtime Gateway (10 pts)</div>
         <div class="pillar-box-score">${item.pillars.platform.score}/10 <span style="font-size: 11px; font-weight: 400; color: var(--text-muted);">(${item.pillars.platform.label})</span></div>
       </div>
     </div>
@@ -219,7 +255,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeModal();
 });
 
-document.getElementById("rescanBtn").addEventListener("click", fetchAudit);
+document.getElementById("rescanBtn").addEventListener("click", () => fetchAudit(false));
 
 document.getElementById("searchInput").addEventListener("input", (e) => {
   searchFilter = e.target.value.toLowerCase().trim();
@@ -235,5 +271,8 @@ document.querySelectorAll("#categoryFilter .pill").forEach((btn) => {
   });
 });
 
-// Initial load
-fetchAudit();
+// Initial load + 5-second automatic ground-truth polling
+fetchAudit(false);
+setInterval(() => {
+  fetchAudit(true);
+}, 5000);

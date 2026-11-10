@@ -50,13 +50,19 @@ function TerminalPanel({
   controller,
   label,
   preserveTabFocus,
+  onUploadSuccess,
+  onUploadError,
 }: {
   active: boolean;
   controller: TerminalSessionController;
   label: string;
   preserveTabFocus: boolean;
+  onUploadSuccess?: (filename: string, size: number) => void;
+  onUploadError?: (error: string) => void;
 }) {
   const mountRef: RefObject<HTMLDivElement> = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (mountRef.current) controller.mount(mountRef.current);
@@ -68,6 +74,50 @@ function TerminalPanel({
     if (!preserveTabFocus) controller.focus();
   }, [active, controller, preserveTabFocus]);
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragging) setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const res = await fetch("/ipa/terminal/upload", {
+          method: "POST",
+          body: formData,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.message || err.error || "Upload failed");
+        }
+        const data = await res.json();
+        onUploadSuccess?.(data.filename || file.name, data.size || file.size);
+      } catch (err: any) {
+        onUploadError?.(err.message || "Failed to upload file");
+      }
+    }
+    setUploading(false);
+  };
+
   return (
     <section
       id={`panel-${controller.id}`}
@@ -75,9 +125,26 @@ function TerminalPanel({
       aria-label={label}
       aria-labelledby={`tab-${controller.id}`}
       hidden={!active}
-      className="terminal-canvas min-h-0 flex-1 bg-black p-3"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`terminal-canvas relative min-h-0 flex-1 bg-black p-3 ${isDragging ? "ring-2 ring-lime-400" : ""}`}
     >
       <div ref={mountRef} className="h-full w-full" />
+      {isDragging && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/85 backdrop-blur-sm pointer-events-none">
+          <div className="rounded-lg border border-lime-400/60 bg-zinc-900/90 p-6 text-center shadow-xl">
+            <span className="text-3xl">📥</span>
+            <p className="mt-2 text-sm font-semibold text-lime-400">Drop to upload to Terminal</p>
+            <p className="text-xs text-zinc-400">File will be placed in the current working directory</p>
+          </div>
+        </div>
+      )}
+      {uploading && (
+        <div className="absolute top-4 right-4 z-20 rounded bg-zinc-800/95 border border-zinc-700 px-3 py-1.5 text-xs text-lime-400 shadow-lg">
+          Uploading file...
+        </div>
+      )}
     </section>
   );
 }
@@ -97,6 +164,7 @@ export default function TerminalView({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [clock, setClock] = useState(() => now());
+  const [uploadToast, setUploadToast] = useState<{ message: string; isError?: boolean } | null>(null);
   const detailsButtonRef = useRef<HTMLButtonElement>(null);
   const detailsCloseRef = useRef<HTMLButtonElement>(null);
   const detailsDrawerRef = useRef<HTMLElement>(null);
@@ -114,6 +182,7 @@ export default function TerminalView({
     const id = `terminal-${number}`;
     const controller = createSession({
       id,
+      sessionId: id,
       onStateChange: (state) => updateState(id, state),
     });
     controllers.current.set(id, controller);
@@ -183,6 +252,8 @@ export default function TerminalView({
       controllers.current.delete(id);
       controller.dispose();
     }
+    // Kill the persisted shell upstream so resources are freed immediately
+    fetch(`/ipa/terminal/sessions/${encodeURIComponent(id)}/kill`, { method: "POST" }).catch(() => {});
 
     setTabs((current) => {
       const closedIndex = current.findIndex((tab) => tab.id === id);
@@ -330,8 +401,29 @@ export default function TerminalView({
               controller={tab.controller}
               label={tab.label}
               preserveTabFocus={keyboardActivatedTab.current === tab.id}
+              onUploadSuccess={(filename, size) => {
+                const kb = Math.round(size / 1024) || 1;
+                setUploadToast({ message: `Uploaded ${filename} (${kb} KB) to current directory` });
+                setTimeout(() => setUploadToast(null), 4000);
+              }}
+              onUploadError={(err) => {
+                setUploadToast({ message: `Upload error: ${err}`, isError: true });
+                setTimeout(() => setUploadToast(null), 5000);
+              }}
             />
           ))}
+          {uploadToast && (
+            <div
+              role="status"
+              className={`absolute bottom-3 right-4 z-30 rounded border px-3 py-1.5 text-xs shadow-lg ${
+                uploadToast.isError
+                  ? "border-red-500/50 bg-red-950 text-red-200"
+                  : "border-lime-500/50 bg-zinc-900 text-lime-400"
+              }`}
+            >
+              {uploadToast.message}
+            </div>
+          )}
         </div>
       )}
 

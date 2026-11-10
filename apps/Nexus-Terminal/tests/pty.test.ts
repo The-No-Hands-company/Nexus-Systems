@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { getSession, killAll, reapIdle, sessionCount, spawnShell } from "../src/pty";
+import { getSession, killAll, reapIdle, sessionCount, spawnShell, listActiveSessions, killSession } from "../src/pty";
 
 const IDLE_TIMEOUT_MS = 30 * 60 * 1_000;
 
@@ -136,5 +136,56 @@ describe("PTY session lifecycle", () => {
 
     expect(exits).toBe(2);
     expect(sessionCount()).toBe(0);
+  });
+
+  it("supports session persistence, buffer replay, reattach, and explicit kill", async () => {
+    const fixedSessionId = "persist-session-123";
+    let firstData = "";
+    const onData1 = (chunk: string) => { firstData += chunk; };
+
+    const session1 = spawnShell({
+      subject: "founder-user",
+      cols: 80,
+      rows: 24,
+      sessionId: fixedSessionId,
+      onData: onData1,
+      onExit: () => {},
+    });
+    expect(session1).not.toBeNull();
+    expect(session1!.id).toBe(fixedSessionId);
+
+    // Write a test echo command
+    session1!.write("printf 'SESSION_PERSIST_TEST\\n'\r");
+    await waitUntil(() => firstData.includes("SESSION_PERSIST_TEST"), "output before detach");
+
+    // Check active sessions list
+    const activeList = listActiveSessions("founder-user");
+    expect(activeList.some((s) => s.id === fixedSessionId)).toBe(true);
+
+    // Simulate tab disconnect / detach
+    session1!.detach(onData1);
+    expect(session1!.detachedAt).not.toBeNull();
+
+    // Reattach with the same sessionId
+    let replayedData = "";
+    const onData2 = (chunk: string) => { replayedData += chunk; };
+
+    const reattached = spawnShell({
+      subject: "founder-user",
+      cols: 80,
+      rows: 24,
+      sessionId: fixedSessionId,
+      onData: onData2,
+      onExit: () => {},
+    });
+
+    expect(reattached).toBe(session1);
+    // Buffer should be immediately replayed to onData2
+    expect(replayedData).toContain("SESSION_PERSIST_TEST");
+
+    // Explicitly kill session
+    const killed = await killSession(fixedSessionId);
+    expect(killed).toBe(true);
+    expect(getSession(fixedSessionId)).toBeUndefined();
   });
 });

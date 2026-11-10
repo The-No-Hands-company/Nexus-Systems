@@ -550,8 +550,8 @@ const SHELL_NATIVE_APPS: AppEntry[] = [
     health: "healthy",
     surface: "user-app",
     releaseState: "released",
-    primaryShelf: "everyday",
-    secondaryShelves: ["personal", "work"],
+    primaryShelf: "personal",
+    secondaryShelves: ["everyday", "work"],
     audiences: ["general"],
     capabilities: ["files", "storage", "cloud-drive"],
     maturity: "stable",
@@ -967,6 +967,40 @@ export type CloudEndpoint = { method: string; path: string; description?: string
 export function cloudEndpoints() {
   return request<{ routes?: CloudEndpoint[]; endpoints?: CloudEndpoint[] }>("/ipa/cloud/endpoints")
     .then((r) => r.routes ?? r.endpoints ?? []);
+}
+
+export type CloudTopologyData = {
+  apps: Array<{ id: string; name: string; kind: string; integrationMode: string; exposes: string[]; consumes: string[] }>;
+  connections: Array<{ id: string; source: string; target: string; kind: string; protocol: string }>;
+  summary: { appCount: number; connectionCount: number; embeddedAppCount: number; referencedAppCount: number; hybridAppCount: number };
+};
+
+export function cloudTopology() {
+  return request<{ topology: CloudTopologyData }>("/ipa/cloud/topology").then((r) => r.topology);
+}
+
+export type CloudBackupItem = {
+  id: string;
+  filename: string;
+  sizeBytes: number;
+  updatedAt: string;
+  store: string;
+};
+
+export function cloudBackups() {
+  return request<{ backups: CloudBackupItem[]; total: number }>("/ipa/cloud/backups").then((r) => r.backups ?? []);
+}
+
+export function createCloudBackup() {
+  return request<{ success: boolean; backup: any }>("/ipa/cloud/backups/create", { method: "POST" });
+}
+
+export function restartCloudService(serviceId: string) {
+  return request<{ success: boolean; service: string; message: string }>("/ipa/cloud/services/restart", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ serviceId }),
+  });
 }
 
 // ── Development helper tools (dhts/) ───────────────────────────────────────

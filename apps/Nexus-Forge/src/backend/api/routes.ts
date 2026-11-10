@@ -35,6 +35,19 @@ export async function handleApi(request: Request, options: ApiOptions): Promise<
     return json(200, { repos: list, total: list.length });
   }
 
+  if (url.pathname === "/api/packages" && request.method === "GET") {
+    return json(200, {
+      packages: [
+        { name: "@nexus/sdk", version: "0.1.0", type: "npm", downloads: 1420 },
+        { name: "@nexus/phantom-sdk", version: "0.1.0", type: "npm", downloads: 980 },
+        { name: "@nexus/design", version: "0.1.0", type: "npm", downloads: 2150 },
+        { name: "nexus-database-engine", version: "0.1.0", type: "cargo", downloads: 540 },
+        { name: "nexus-forge", version: "0.1.0", type: "npm", downloads: 320 },
+      ],
+      total: 5,
+    });
+  }
+
   if (url.pathname === "/api/repos" && request.method === "POST") {
     if (!principal) return json(401, { error: "authentication required" });
     let body: Record<string, unknown>;

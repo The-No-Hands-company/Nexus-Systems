@@ -64,6 +64,9 @@ export interface EdgeRoute {
   lastHealthCheck: string;
   createdAt: string;
   updatedAt: string;
+  geoRoutingEnabled?: boolean;
+  regionalUpstreams?: Record<string, string>;
+  countryToRegion?: Record<string, string>;
 }
 
 export interface RateLimitRule {
@@ -97,4 +100,21 @@ export interface TrafficSummary {
   avgLatencyMs: number;
   statusCodes: Record<number, number>;
   lastRequestAt: string;
+}
+
+export interface GeoRouteConfig {
+  host: string;
+  defaultRegion: string;
+  regions: Record<string, string>;
+  countryToRegion?: Record<string, string>;
+  enabled: boolean;
+  updatedAt: string;
+}
+
+export interface GeoRoutingResolution {
+  host: string;
+  clientRegion: string;
+  resolvedRegion: string;
+  upstreamUrl: string;
+  matchedRule: string;
 }

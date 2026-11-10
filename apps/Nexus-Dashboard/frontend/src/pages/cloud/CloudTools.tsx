@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { cloudTools, type CloudTool } from "../../api";
+import { cloudTools, restartCloudService, type CloudTool } from "../../api";
 import { timeAgo, healthDotClass } from "./format";
 import CloudNav from "./CloudNav";
 
@@ -12,6 +12,21 @@ type State = { kind: "loading" } | { kind: "unavailable" } | { kind: "ready"; to
  */
 export default function CloudTools() {
   const [state, setState] = useState<State>({ kind: "loading" });
+  const [restartingId, setRestartingId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ id: string; msg: string; ok: boolean } | null>(null);
+
+  const handleRestart = async (toolId: string) => {
+    setRestartingId(toolId);
+    setFeedback(null);
+    try {
+      const res = await restartCloudService(toolId);
+      setFeedback({ id: toolId, msg: res.message || "Restarted", ok: true });
+    } catch (err: any) {
+      setFeedback({ id: toolId, msg: err?.message || "Restart failed", ok: false });
+    } finally {
+      setRestartingId(null);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -52,15 +67,16 @@ export default function CloudTools() {
                 <th scope="col" className="px-4 py-3 font-medium">Status</th>
                 <th scope="col" className="px-4 py-3 font-medium">Address</th>
                 <th scope="col" className="px-4 py-3 font-medium">Last seen</th>
-                <th scope="col" className="px-4 py-3 font-medium">Open</th>
+                <th scope="col" className="px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
               {state.tools.map((t) => {
                 const health = t.health || t.status;
                 const url = t.publicUrl || t.upstreamUrl;
+                const toolId = t.id ?? t.name;
                 return (
-                  <tr key={t.id ?? t.name}>
+                  <tr key={toolId}>
                     <td className="px-4 py-3 font-medium text-zinc-100">{t.name}</td>
                     <td className="px-4 py-3">
                       {(t.capabilities ?? []).length > 0 ? (
@@ -86,17 +102,33 @@ export default function CloudTools() {
                       {t.lastHeartbeatAt ? timeAgo(t.lastHeartbeatAt) : "—"}
                     </td>
                     <td className="px-4 py-3">
-                      {url && (
-                        <a
-                          aria-label={`Open ${t.name}`}
-                          href={url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
+                      <div className="flex items-center gap-2">
+                        {url && (
+                          <a
+                            aria-label={`Open ${t.name}`}
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800"
+                          >
+                            Open <span aria-hidden="true">↗</span>
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          aria-label={`Restart ${t.name}`}
+                          disabled={restartingId === toolId}
+                          onClick={() => handleRestart(toolId)}
+                          className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
                         >
-                          Open <span aria-hidden="true">↗</span>
-                        </a>
-                      )}
+                          {restartingId === toolId ? "Restarting…" : "Restart"}
+                        </button>
+                        {feedback && feedback.id === toolId && (
+                          <span className={`text-xs ${feedback.ok ? "text-emerald-400" : "text-rose-400"}`}>
+                            {feedback.msg}
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

@@ -4,5 +4,22 @@
   "anomalies": [],
   "responses": [],
   "routes": [],
-  "updatedAt": "2026-11-09T06:36:57.325Z"
+  "geoRoutes": [
+    {
+      "host": "geo.nexus.local",
+      "defaultRegion": "eu",
+      "regions": {
+        "eu": "http://127.0.0.1:43711",
+        "apac": "http://127.0.0.1:44435"
+      },
+      "countryToRegion": {
+        "SE": "eu",
+        "ID": "apac",
+        "JP": "apac"
+      },
+      "enabled": true,
+      "updatedAt": "2026-11-10T15:40:06.637Z"
+    }
+  ],
+  "updatedAt": "2026-11-10T15:40:06.643Z"
 }

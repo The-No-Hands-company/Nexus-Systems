@@ -1,3 +1,4 @@
+import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { federationEndpoints } from "./api/federation";
 import { handleApi, json } from "./api/routes";
@@ -50,8 +51,16 @@ export function createForge(options: ForgeOptions) {
 
   async function fetch(request: Request): Promise<Response> {
     const response = await route(request);
+    const isHtml = response.headers.get("content-type")?.includes("text/html");
     for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
-      response.headers.set(name, value);
+      if (isHtml && name === "content-security-policy") {
+        response.headers.set(
+          name,
+          "default-src 'self' 'unsafe-inline' data:; frame-ancestors 'none'",
+        );
+      } else {
+        response.headers.set(name, value);
+      }
     }
     return response;
   }
@@ -69,11 +78,35 @@ export function createForge(options: ForgeOptions) {
       return json(200, federationEndpoints.wellKnown());
     }
     try {
-      return (
-        (await handleSmartHttp(request, smartHttp)) ??
-        (await handleApi(request, api)) ??
-        json(404, { error: "not found" })
-      );
+      const handled =
+        (await handleSmartHttp(request, smartHttp)) ?? (await handleApi(request, api));
+      if (handled) return handled;
+
+      // Serve compiled frontend UI
+      const frontendDist = path.resolve(process.cwd(), "dist/frontend");
+      if (existsSync(frontendDist)) {
+        if (url.pathname.startsWith("/assets/")) {
+          const candidate = path.join(frontendDist, url.pathname);
+          if (existsSync(candidate) && !statSync(candidate).isDirectory()) {
+            return new Response(Bun.file(candidate));
+          }
+        }
+        if (
+          request.method === "GET" &&
+          (url.pathname === "/" ||
+            url.pathname === "/index.html" ||
+            url.pathname.startsWith("/repos"))
+        ) {
+          const indexHtml = path.join(frontendDist, "index.html");
+          if (existsSync(indexHtml)) {
+            return new Response(Bun.file(indexHtml), {
+              headers: { "content-type": "text/html; charset=utf-8" },
+            });
+          }
+        }
+      }
+
+      return json(404, { error: "not found" });
     } catch (error) {
       console.error("[forge] request failed", error);
       return json(500, { error: "internal error" });

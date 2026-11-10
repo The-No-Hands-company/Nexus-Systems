@@ -10,6 +10,8 @@ import type {
   EdgeRoute,
   EdgeIngressTarget,
   EdgeTrustState,
+  GeoRouteConfig,
+  GeoRoutingResolution,
 } from "./types";
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -23,6 +25,7 @@ const threats = new Map<string, EdgeThreat>();
 const anomalies = new Map<string, EdgeAnomaly>();
 const responses: EdgeResponse[] = [];
 const routes = new Map<string, EdgeRoute>();
+const geoRoutes = new Map<string, GeoRouteConfig>();
 
 const stateFilePath = resolve(
   process.env.NEXUS_EDGE_STATE_PATH ||
@@ -90,6 +93,79 @@ export function getRoute(host: string): EdgeRoute | undefined {
 
 export function listRoutes(): EdgeRoute[] {
   return Array.from(routes.values());
+}
+
+export function upsertGeoRoute(config: {
+  host: string;
+  defaultRegion: string;
+  regions: Record<string, string>;
+  countryToRegion?: Record<string, string>;
+  enabled?: boolean;
+}): GeoRouteConfig {
+  const host = normalizeHost(config.host);
+  const existing = geoRoutes.get(host);
+  const now = new Date().toISOString();
+  const entry: GeoRouteConfig = {
+    host,
+    defaultRegion: config.defaultRegion || existing?.defaultRegion || "default",
+    regions: { ...(existing?.regions || {}), ...config.regions },
+    countryToRegion: { ...(existing?.countryToRegion || {}), ...(config.countryToRegion || {}) },
+    enabled: config.enabled ?? existing?.enabled ?? true,
+    updatedAt: now,
+  };
+  geoRoutes.set(host, entry);
+  persistState();
+  return entry;
+}
+
+export function getGeoRoute(host: string): GeoRouteConfig | undefined {
+  return geoRoutes.get(normalizeHost(host));
+}
+
+export function listGeoRoutes(): GeoRouteConfig[] {
+  return Array.from(geoRoutes.values());
+}
+
+export function deleteGeoRoute(host: string): boolean {
+  const result = geoRoutes.delete(normalizeHost(host));
+  if (result) persistState();
+  return result;
+}
+
+export function resolveGeoRouting(
+  host: string,
+  clientHint?: { region?: string; country?: string },
+): GeoRoutingResolution | null {
+  const config = geoRoutes.get(normalizeHost(host));
+  if (!config || !config.enabled) return null;
+
+  let targetRegion = config.defaultRegion;
+  let matchedRule = "default_fallback";
+
+  const directRegion = clientHint?.region?.toLowerCase().trim();
+  const countryCode = clientHint?.country?.toUpperCase().trim();
+
+  if (directRegion && config.regions[directRegion]) {
+    targetRegion = directRegion;
+    matchedRule = `direct_region:${directRegion}`;
+  } else if (countryCode && config.countryToRegion && config.countryToRegion[countryCode]) {
+    const mapped = config.countryToRegion[countryCode].toLowerCase();
+    if (config.regions[mapped]) {
+      targetRegion = mapped;
+      matchedRule = `country_mapping:${countryCode}->${mapped}`;
+    }
+  }
+
+  const upstreamUrl = config.regions[targetRegion] || config.regions[config.defaultRegion];
+  if (!upstreamUrl) return null;
+
+  return {
+    host: config.host,
+    clientRegion: directRegion || countryCode || "unknown",
+    resolvedRegion: targetRegion,
+    upstreamUrl,
+    matchedRule,
+  };
 }
 
 export function setRouteEnabled(host: string, enabled: boolean): EdgeRoute | undefined {
@@ -234,6 +310,7 @@ function persistState(): void {
     anomalies: Array.from(anomalies.values()),
     responses: [...responses],
     routes: Array.from(routes.values()),
+    geoRoutes: Array.from(geoRoutes.values()),
     updatedAt: new Date().toISOString(),
   };
 
@@ -250,12 +327,19 @@ function persistState(): void {
 function hydrateState(): void {
   try {
     const raw = readFileSync(stateFilePath, "utf-8");
-    const parsed = JSON.parse(raw) as { routes?: EdgeRoute[]; threats?: EdgeThreat[] };
+    const parsed = JSON.parse(raw) as {
+      routes?: EdgeRoute[];
+      threats?: EdgeThreat[];
+      geoRoutes?: GeoRouteConfig[];
+    };
     for (const route of Array.isArray(parsed.routes) ? parsed.routes : []) {
       if (route && route.host) routes.set(route.host, route);
     }
     for (const threat of Array.isArray(parsed.threats) ? parsed.threats : []) {
       if (threat && threat.threatId) threats.set(threat.threatId, threat);
+    }
+    for (const geo of Array.isArray(parsed.geoRoutes) ? parsed.geoRoutes : []) {
+      if (geo && geo.host) geoRoutes.set(geo.host, geo);
     }
   } catch {
     persistState();

@@ -78,11 +78,14 @@ service_identity() {
         nexus-finance|finance) SERVICE_DIR="$ROOT/apps/Nexus-Finance"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-tasks|tasks) SERVICE_DIR="$ROOT/apps/Nexus-Tasks"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-music|music) SERVICE_DIR="$ROOT/apps/Nexus-Music"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        nexus-network|network) SERVICE_DIR="$ROOT/apps/Nexus-Network"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        nexus-forge|forge) SERVICE_DIR="$ROOT/apps/Nexus-Forge"; SERVICE_EXEC_PATTERN="bun run src/backend/main.ts" ;;
         ai|nexus-ai)    SERVICE_DIR="$ROOT/apps/Nexus-AI"; SERVICE_EXEC_PATTERN="python main.py" ;;
         database|nexus-database) SERVICE_DIR="$ROOT/apps/Nexus-Database"; SERVICE_EXEC_PATTERN="nexus-database" ;;
         guardian|nexus-guardian) SERVICE_DIR="$ROOT/apps/Nexus-Guardian"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         edge|nexus-edge) SERVICE_DIR="$ROOT/apps/Nexus-Edge"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         terminal)       SERVICE_DIR="$ROOT/apps/Nexus-Terminal"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        nexus-forge|forge) SERVICE_DIR="$ROOT/apps/Nexus-Forge"; SERVICE_EXEC_PATTERN="bun run src/backend/main.ts" ;;
         mailapi)        SERVICE_DIR="$ROOT/apps/Nexus-Email"; SERVICE_EXEC_PATTERN="/nexus-mailapi" ;;
         mailsmtpd)      SERVICE_DIR="$ROOT/apps/Nexus-Email"; SERVICE_EXEC_PATTERN="/nexus-mailsmtpd" ;;
         *)              warn "No ownership identity configured for $name"; return 1 ;;
@@ -119,11 +122,14 @@ service_port() {
         nexus-finance|finance) printf '%s\n' 3076 ;;
         nexus-tasks|tasks) printf '%s\n' 3108 ;;
         nexus-music|music) printf '%s\n' 3092 ;;
+        nexus-network|network) printf '%s\n' 3124 ;;
+        nexus-forge|forge) printf '%s\n' 3120 ;;
         ai|nexus-ai) printf '%s\n' 3400 ;;
         database|nexus-database) printf '%s\n' 3088 ;;
         guardian|nexus-guardian) printf '%s\n' 4320 ;;
         edge|nexus-edge) printf '%s\n' 4340 ;;
         terminal) printf '%s\n' 3110 ;;
+        nexus-forge|forge) printf '%s\n' 3120 ;;
         mailapi) printf '%s\n' 3140 ;;
         mailsmtpd) printf '%s\n' "${NEXUS_EMAIL_MX_PORT:-2525}" ;;
         *) return 1 ;;
@@ -506,7 +512,7 @@ preflight_service_start() {
         nexus-chat-web) validate_nexus_chat_caddy ;;
         nexus-deploy|deploy) adopt_cloud_registration_environment_for_dependents ;;
         proxy) adopt_cloud_registration_environment_for_dependents ;;
-        nexus-design|design|nexus-graphic|graphic|nexus-photos|photos|nexus-video|video|nexus-notes|notes|nexus-docs|docs|nexus-wiki|wiki|nexus-code|code|nexus-vault|vault|nexus-files|files|nexus-finance|finance|nexus-tasks|tasks|nexus-music|music|mailapi|nexus-project|nexus-project-web|ai|nexus-ai|database|nexus-database|guardian|nexus-guardian|edge|nexus-edge) : ;;
+        nexus-design|design|nexus-graphic|graphic|nexus-photos|photos|nexus-video|video|nexus-notes|notes|nexus-docs|docs|nexus-wiki|wiki|nexus-code|code|nexus-vault|vault|nexus-files|files|nexus-finance|finance|nexus-tasks|tasks|nexus-music|music|nexus-network|network|nexus-forge|forge|mailapi|nexus-project|nexus-project-web|ai|nexus-ai|database|nexus-database|guardian|nexus-guardian|edge|nexus-edge) : ;;
         *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, proxy, creative, document, and developer suites"; return 1 ;;
     esac
 }
@@ -609,6 +615,22 @@ start_nexus_music_service() {
         PORT=3092 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
         bun run src/index.ts
+}
+
+start_nexus_network_service() {
+    start_service "nexus-network" "$ROOT/apps/Nexus-Network" 3124 \
+        PORT=3124 \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        bun run src/index.ts
+}
+
+start_nexus_forge_service() {
+    start_service "nexus-forge" "$ROOT/apps/Nexus-Forge" 3120 \
+        PORT=3120 \
+        NEXUS_FORGE_BUN="$(command -v bun || echo bun)" \
+        FORGE_HOOKS_DIR=/tmp/nexus-forge-hooks \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        bun run src/backend/main.ts
 }
 
 start_nexus_ai_service() {
@@ -741,6 +763,9 @@ start_named_service() {
         nexus-finance|finance) start_nexus_finance_service ;;
         nexus-tasks|tasks) start_nexus_tasks_service ;;
         nexus-music|music) start_nexus_music_service ;;
+        nexus-network|network) start_nexus_network_service ;;
+        nexus-forge|forge) start_nexus_forge_service ;;
+        nexus-forge|forge) start_nexus_forge_service ;;
         ai|nexus-ai) start_nexus_ai_service ;;
         database|nexus-database) start_nexus_database_service ;;
         guardian|nexus-guardian) start_nexus_guardian_service ;;
@@ -1208,6 +1233,7 @@ cmd_start() {
     start_nexus_finance_service
     start_nexus_tasks_service
     start_nexus_music_service
+    start_nexus_network_service
 
     # 4fe-j. Core Intelligence & Infrastructure Services
     start_nexus_ai_service

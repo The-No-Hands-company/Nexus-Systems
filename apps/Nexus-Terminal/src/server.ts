@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto"; import { startHeartbeat } from "./cloud";
 import { PhantomApp } from "../../../packages/phantom-sdk/src/integration";
 import { NexusDiscovery } from "../../../packages/nexus-discovery/src/index"; import { TerminalEngine } from "./terminal-engine";
-import { spawnShell, getSession, sessionCount, reapIdle, killAll } from "./pty";
+import { spawnShell, getSession, sessionCount, reapIdle, killAll, listActiveSessions, killSession } from "./pty";
 import { callerIdentity, canUseTerminal, terminalEnabled } from "./auth";
 import { TerminalAudit } from "./audit";
 import { buildTerminalContract } from "./terminal-contract";
+import { basename, join } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
 
 /**
  * What travels with an upgraded socket.
@@ -23,6 +25,7 @@ type ShellSocket = {
   cols: number;
   rows: number;
   sessionId?: string;
+  requestedSessionId?: string;
 } | {
   kind: "reject";
   code: TerminalFailureCode;
@@ -57,11 +60,14 @@ export async function createServer(options: { auditPath?: string } = {}) { const
           ws.close(d.code, TERMINAL_FAILURE_REASONS[d.code]);
           return;
         }
+        const onData = (chunk: string) => { try { ws.send(chunk); } catch { /* socket gone */ } };
+        (ws as any)._onData = onData;
         const session = spawnShell({
           subject: d.subject,
           cols: d.cols,
           rows: d.rows,
-          onData: (chunk) => { try { ws.send(chunk); } catch { /* socket gone */ } },
+          sessionId: d.requestedSessionId,
+          onData,
           onExit: (id, code) => {
             try { audit.end(id, code); }
             finally { try { ws.close(); } catch { /* already closed */ } }
@@ -88,8 +94,18 @@ export async function createServer(options: { auditPath?: string } = {}) { const
         session.write(text);
       },
       close(ws) {
-        const id = ws.data.kind === "attach" ? ws.data.sessionId : undefined;
-        if (id) void getSession(id)?.kill();
+        const d = ws.data.kind === "attach" ? ws.data : undefined;
+        if (!d || !d.sessionId) return;
+        const session = getSession(d.sessionId);
+        if (!session) return;
+        const onData = (ws as any)._onData;
+        if (d.requestedSessionId) {
+          // Named/persistent session: detach listener, keep shell alive for tmux reattach
+          if (onData) session.detach(onData);
+        } else {
+          // Ephemeral un-named session: clean up process immediately on disconnect
+          void session.kill();
+        }
       },
     },
     async fetch(request, srv) { const url = new URL(request.url); const path = url.pathname || "";
@@ -136,8 +152,9 @@ export async function createServer(options: { auditPath?: string } = {}) { const
 
       const cols = Number(url.searchParams.get("cols") || 80);
       const rows = Number(url.searchParams.get("rows") || 24);
+      const requestedSessionId = url.searchParams.get("sessionId") || undefined;
 
-      if (srv.upgrade(request, { data: { kind: "attach", subject: who.subject, cols, rows } })) {
+      if (srv.upgrade(request, { data: { kind: "attach", subject: who.subject, cols, rows, requestedSessionId } })) {
         return undefined as unknown as Response;
       }
       return json({ error: "upgrade_failed" }, 400);
@@ -148,6 +165,63 @@ export async function createServer(options: { auditPath?: string } = {}) { const
       if (!who) return json({ error: "not_authenticated" }, 401);
       if (!canUseTerminal(who)) return json({ error: "forbidden" }, 403);
       return json({ sessions: audit.recent() }, 200);
+    }
+
+    // ── Active Sessions (Persistence / Reattach) ─────────────────────────
+    if (request.method === "GET" && path === "/api/v1/terminal/active-sessions") {
+      const who = await callerIdentity(request);
+      if (!who) return json({ error: "not_authenticated" }, 401);
+      if (!canUseTerminal(who)) return json({ error: "forbidden" }, 403);
+      return json({ sessions: listActiveSessions(who.subject) }, 200);
+    }
+
+    // ── Terminate Specific Session ─────────────────────────────────────────
+    if (request.method === "POST" && path.startsWith("/api/v1/terminal/sessions/") && path.endsWith("/kill")) {
+      const who = await callerIdentity(request);
+      if (!who) return json({ error: "not_authenticated" }, 401);
+      if (!canUseTerminal(who)) return json({ error: "forbidden" }, 403);
+      const match = path.match(/^\/api\/v1\/terminal\/sessions\/([^/]+)\/kill$/);
+      if (!match) return json({ error: "invalid_path" }, 400);
+      const targetSessionId = match[1];
+      const session = getSession(targetSessionId);
+      if (!session) return json({ error: "session_not_found" }, 404);
+      if (session.subject !== who.subject && who.role !== "founder" && who.role !== "admin") {
+        return json({ error: "forbidden" }, 403);
+      }
+      await session.kill();
+      return json({ ok: true, killed: targetSessionId }, 200);
+    }
+
+    // ── File Drag-and-Drop Upload ──────────────────────────────────────────
+    if (request.method === "POST" && path === "/api/v1/terminal/upload") {
+      const who = await callerIdentity(request);
+      if (!who) return json({ error: "not_authenticated" }, 401);
+      if (!canUseTerminal(who)) return json({ error: "forbidden" }, 403);
+
+      try {
+        const formData = await request.formData();
+        const file = formData.get("file");
+        if (!file || typeof file === "string") {
+          return json({ error: "file required" }, 400);
+        }
+        const uploadFile = file as File;
+        const rawFilename = uploadFile.name || "upload.bin";
+        const safeFilename = basename(rawFilename).replace(/[^a-zA-Z0-9._-]/g, "_");
+        const targetDir = (formData.get("targetDir") as string) || process.env.HOME || "/tmp";
+        await mkdir(targetDir, { recursive: true });
+        const targetPath = join(targetDir, safeFilename);
+        const arrayBuffer = await uploadFile.arrayBuffer();
+        await writeFile(targetPath, Buffer.from(arrayBuffer));
+
+        return json({
+          ok: true,
+          filename: safeFilename,
+          path: targetPath,
+          size: arrayBuffer.byteLength,
+        }, 200);
+      } catch (err: any) {
+        return json({ error: "upload_failed", message: err?.message || String(err) }, 500);
+      }
     }
 
     if (request.method === "GET" && path === "/health") {

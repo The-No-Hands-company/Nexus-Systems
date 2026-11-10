@@ -45,6 +45,7 @@ type SocketLike = {
 
 export type CreateTerminalSessionOptions = {
   id: string;
+  sessionId?: string;
   now?: () => number;
   onStateChange?: (state: SessionState) => void;
   createTerminal?: (options: { screenReaderMode: boolean }) => TerminalLike;
@@ -117,7 +118,8 @@ export function createTerminalSession(opts: CreateTerminalSessionOptions): Termi
       fitAddon.fit();
 
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const url = `${protocol}//${window.location.host}/api/terminal/attach?cols=${terminal.cols}&rows=${terminal.rows}`;
+      const sessionParam = opts.sessionId ? `&sessionId=${encodeURIComponent(opts.sessionId)}` : "";
+      const url = `${protocol}//${window.location.host}/api/terminal/attach?cols=${terminal.cols}&rows=${terminal.rows}${sessionParam}`;
       socket = (opts.createSocket ?? ((address) => new WebSocket(address)))(url);
       socket.binaryType = "arraybuffer";
       socket.addEventListener("open", onOpen);

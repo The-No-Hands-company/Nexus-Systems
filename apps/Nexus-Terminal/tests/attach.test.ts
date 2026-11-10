@@ -257,4 +257,46 @@ describe("terminal attach guards", () => {
       expect((await res.json() as { error: string }).error).toBe("not_authenticated");
     }
   });
+
+  it("guards /api/v1/terminal/active-sessions and allows founder", async () => {
+    const unauth = await fetch(`${base}/api/v1/terminal/active-sessions`);
+    expect(unauth.status).toBe(401);
+
+    const forbidden = await fetch(`${base}/api/v1/terminal/active-sessions`, {
+      headers: { cookie: "role=member" },
+    });
+    expect(forbidden.status).toBe(403);
+
+    const allowed = await fetch(`${base}/api/v1/terminal/active-sessions`, {
+      headers: { cookie: "role=founder" },
+    });
+    expect(allowed.status).toBe(200);
+    const body = (await allowed.json()) as { sessions: unknown[] };
+    expect(Array.isArray(body.sessions)).toBe(true);
+  });
+
+  it("handles drag-and-drop file upload on /api/v1/terminal/upload", async () => {
+    const unauth = await fetch(`${base}/api/v1/terminal/upload`, { method: "POST" });
+    expect(unauth.status).toBe(401);
+
+    const formData = new FormData();
+    const testContent = "echo 'Hello from test upload'";
+    formData.append("file", new Blob([testContent], { type: "text/plain" }), "test-script.sh");
+    formData.append("targetDir", "/tmp/terminal-upload-test");
+
+    const res = await fetch(`${base}/api/v1/terminal/upload`, {
+      method: "POST",
+      headers: { cookie: "role=admin" },
+      body: formData,
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; filename: string; path: string; size: number };
+    expect(body.ok).toBe(true);
+    expect(body.filename).toBe("test-script.sh");
+    expect(body.size).toBe(testContent.length);
+
+    // Verify file exists on disk
+    const written = await Bun.file(body.path).text();
+    expect(written).toBe(testContent);
+  });
 });

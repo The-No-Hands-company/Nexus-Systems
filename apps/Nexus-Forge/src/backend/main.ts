@@ -1,12 +1,14 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { env } from "bun";
+import { installHooks } from "./git/hooks";
 import { createForge } from "./server";
 import { ForgeDB } from "./storage/db";
 import { RepositoryManager } from "./storage/repository";
 
 const dbPath = env.FORGE_DB_PATH || "./data/forge.db";
 const storagePath = env.FORGE_STORAGE_PATH || "./data/repos";
+const hooksDir = env.FORGE_HOOKS_DIR || "/tmp/nexus-forge-hooks";
 mkdirSync(path.dirname(dbPath), { recursive: true });
 const db = new ForgeDB(dbPath);
 const repos = new RepositoryManager(storagePath, db);
@@ -79,6 +81,7 @@ console.log(`🔨 Nexus Forge launching on ${host}:${port}`);
 const forge = createForge({
   db,
   repos,
+  hooksDir: installHooks(hooksDir),
   ...(env.NEXUS_FORGE_PUBLIC_URL ? { publicUrl: env.NEXUS_FORGE_PUBLIC_URL } : {}),
 });
 const server = Bun.serve({ port, hostname: host, fetch: forge.fetch });

@@ -103,7 +103,7 @@ export default function Grid() {
         </section>
       ) : (
         <div className="mt-8 space-y-10">
-          {CATALOG_SHELVES.map((key) => <AppShelf key={key} shelf={key} apps={shelves[key]} limit={6} />)}
+          {CATALOG_SHELVES.map((key) => <AppShelf key={key} shelf={key} apps={shelves[key]} limit={12} />)}
         </div>
       )}
     </section>

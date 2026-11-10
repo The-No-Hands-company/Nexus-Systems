@@ -321,6 +321,29 @@ body {
 .stage-Beta { border-color: var(--yellow); color: var(--yellow); }
 .stage-ReleaseCandidate { border-color: var(--green); color: var(--green); }
 .stage-v1 { border-color: var(--acid); color: var(--acid); }
+.stage-Offline502Degraded { border-color: #ef4444; color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+.live-pill-up {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.08);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+}
+.live-pill-down {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  font-weight: 700;
+}
 
 .app-card-desc {
   font-size: 12px;
