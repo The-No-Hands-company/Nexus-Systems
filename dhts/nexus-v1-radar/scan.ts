@@ -3,6 +3,10 @@ import { join, resolve } from "path";
 import * as net from "net";
 import { REGISTERED_APPS, type AppDefinition, type FeatureCheck } from "./criteria";
 
+// Resolved from the file's own location so the scan works when imported by
+// another app (e.g. the Dashboard server) rather than run from the repo root.
+const REPO_ROOT = resolve(import.meta.dir, "../..");
+
 export type AppLiveStatus = {
   portListening: boolean;
   httpHealthy: boolean;
@@ -177,7 +181,7 @@ function countSourceFiles(dirPath: string): number {
 }
 
 export async function auditApp(app: AppDefinition): Promise<AppAuditResult> {
-  const rootDir = resolve(process.cwd(), app.dir);
+  const rootDir = resolve(REPO_ROOT, app.dir);
   const dirExists = existsSync(rootDir);
 
   let hasCheckSh = false;
@@ -189,7 +193,7 @@ export async function auditApp(app: AppDefinition): Promise<AppAuditResult> {
   if (dirExists) {
     hasCheckSh = existsSync(join(rootDir, "check.sh"));
     hasFrontend =
-      (app.frontendDir && existsSync(resolve(process.cwd(), app.frontendDir))) ||
+      (app.frontendDir && existsSync(resolve(REPO_ROOT, app.frontendDir))) ||
       existsSync(join(rootDir, "frontend")) ||
       existsSync(join(rootDir, "src", "App.tsx")) ||
       existsSync(join(rootDir, "web")) ||

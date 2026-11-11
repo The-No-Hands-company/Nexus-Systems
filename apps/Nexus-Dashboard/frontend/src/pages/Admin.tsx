@@ -525,13 +525,26 @@ export default function Admin() {
                     </tr>
                   </thead>
                   <tbody>
-                    {peers.map((p, i) => (
-                      <tr key={i} className="border-b border-zinc-800/50">
-                        <td className="pb-2 text-zinc-300">{p.domain ?? "—"}</td>
-                        <td className="pb-2">{String(p.trust ?? p.trustLevel ?? "—")}</td>
-                        <td className="pb-2 text-zinc-500">{p.trust ? "object" : "string"}</td>
+                    {peers.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="py-4 text-center text-zinc-500 text-xs">
+                          No federation peers configured — add a peer via the Cloud API to connect another Nexus instance.
+                        </td>
                       </tr>
-                    ))}
+                    ) : peers.map((p, i) => {
+                      const statusColor =
+                        p.status === "healthy" ? "text-lime-400" :
+                        p.status === "degraded" ? "text-yellow-400" :
+                        p.status === "blocked" ? "text-red-400" :
+                        "text-zinc-500";
+                      return (
+                        <tr key={i} className="border-b border-zinc-800/50">
+                          <td className="pb-2 text-zinc-300">{p.domain}</td>
+                          <td className="pb-2 text-zinc-400">{p.trustState ?? "—"}</td>
+                          <td className={`pb-2 ${statusColor}`}>{p.status ?? "unknown"}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

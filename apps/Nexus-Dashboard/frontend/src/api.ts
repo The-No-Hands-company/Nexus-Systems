@@ -944,17 +944,12 @@ export function cloudTools() {
  */
 /** `view-federation` in status.html (loadFederationView). */
 export type CloudPeer = {
-  domain?: string;
-  url?: string;
-  trustLevel?: string;
-  // Cloud's real FederationPeer carries `trust` as an object (a signed trust
-  // record), not the display string status.html's loadFederationView assumed
-  // — a pre-existing drift. Typed `unknown` so callers must coerce it to text
-  // before rendering rather than handing an object straight to React.
-  trust?: unknown;
-  lastSeen?: string;
-  address?: string;
-  nodeAddress?: string;
+  domain: string;
+  did?: string;
+  trustState?: "pending" | "verified" | "trusted" | "quarantined" | "revoked" | "expired";
+  status?: "unknown" | "healthy" | "degraded" | "blocked";
+  lastSeenAt?: string;
+  version?: string;
 };
 
 export function cloudFederationPeers() {

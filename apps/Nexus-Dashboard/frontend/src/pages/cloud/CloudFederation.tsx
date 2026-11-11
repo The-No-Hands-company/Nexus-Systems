@@ -5,32 +5,6 @@ import CloudNav from "./CloudNav";
 
 type State = { kind: "loading" } | { kind: "unavailable" } | { kind: "ready"; peers: CloudPeer[] };
 
-/**
- * Renders `trustLevel`, falling back to `trust`.
- *
- * status.html did `esc(p.trustLevel || p.trust)`, which coerced an object
- * `trust` to the literal text "[object Object]". Faithfulness to the original
- * stops short of reproducing that: it tells the operator nothing and reads as
- * a broken page. React would throw on an object child anyway, so some handling
- * is required — this picks the field a trust object actually carries, and
- * falls back to the em-dash used for "nothing to show" everywhere else.
- */
-function trustDisplay(peer: CloudPeer): string {
-  if (typeof peer.trustLevel === "string" && peer.trustLevel) return peer.trustLevel;
-  const trust: unknown = peer.trust;
-  if (trust === undefined || trust === null) return "—";
-  if (typeof trust === "string") return trust;
-  if (typeof trust === "number" || typeof trust === "boolean") return String(trust);
-  if (typeof trust === "object") {
-    const t = trust as Record<string, unknown>;
-    for (const key of ["level", "trustLevel", "status", "score"]) {
-      const v = t[key];
-      if (typeof v === "string" && v) return v;
-      if (typeof v === "number") return String(v);
-    }
-  }
-  return "—";
-}
 
 /**
  * The ported `view-federation` from Cloud's status.html (loadFederationView):
@@ -81,18 +55,18 @@ export default function CloudFederation() {
                 <th scope="col" className="px-4 py-3 font-medium">Domain</th>
                 <th scope="col" className="px-4 py-3 font-medium">Trust</th>
                 <th scope="col" className="px-4 py-3 font-medium">Last seen</th>
-                <th scope="col" className="px-4 py-3 font-medium">Address</th>
+                <th scope="col" className="px-4 py-3 font-medium">DID</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
               {state.peers.map((p, i) => (
                 // eslint-disable-next-line react/no-array-index-key -- peers may lack a stable id
-                <tr key={p.domain ?? p.url ?? i}>
-                  <td className="px-4 py-3 font-mono text-xs text-zinc-100">{p.domain || p.url || "—"}</td>
-                  <td className="px-4 py-3 text-zinc-300">{trustDisplay(p)}</td>
-                  <td className="px-4 py-3 text-zinc-400">{p.lastSeen ? timeAgo(p.lastSeen) : "—"}</td>
+                <tr key={p.domain ?? i}>
+                  <td className="px-4 py-3 font-mono text-xs text-zinc-100">{p.domain}</td>
+                  <td className="px-4 py-3 text-zinc-300">{p.trustState ?? "—"}</td>
+                  <td className="px-4 py-3 text-zinc-400">{p.lastSeenAt ? timeAgo(p.lastSeenAt) : "—"}</td>
                   <td className="px-4 py-3 font-mono text-xs text-zinc-400">
-                    {p.address || p.nodeAddress || "—"}
+                    {p.did ?? "—"}
                   </td>
                 </tr>
               ))}

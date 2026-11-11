@@ -4,7 +4,8 @@ import { ApiError, listApps, me, moveMailMessage, platformApiOrigin, session } f
 const mockFetch = vi.fn<typeof fetch>();
 
 beforeEach(() => {
-  vi.stubGlobal("fetch", mockFetch);
+  // Stub global fetch for tests
+  (globalThis as any).fetch = mockFetch;
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -78,7 +79,7 @@ describe("session()", () => {
     vi.useFakeTimers();
     mockFetch.mockRejectedValueOnce(new TypeError("Failed to fetch")).mockResolvedValueOnce(aliceResponse());
     const pending = session();
-    await vi.advanceTimersByTimeAsync(400);
+    vi.advanceTimersByTime(400);
     expect(await pending).toMatchObject({ status: "signed-in" });
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
@@ -87,7 +88,8 @@ describe("session()", () => {
     vi.useFakeTimers();
     mockFetch.mockRejectedValue(new TypeError("Failed to fetch"));
     const pending = session();
-    await vi.advanceTimersByTimeAsync(400 + 1200);
+    vi.advanceTimersByTime(400);
+vi.advanceTimersByTime(1200);
     expect(await pending).toEqual({ status: "unreachable" });
     expect(mockFetch).toHaveBeenCalledTimes(3);
   });
