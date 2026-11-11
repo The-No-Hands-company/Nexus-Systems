@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Pill } from "../../../../../packages/nexus-design/src/components/ui/pill";
 import type { AppEntry } from "../api";
 import { shelfLabel } from "./catalogLabels";
@@ -36,12 +37,12 @@ export default function AppCard({ app, compact = false, showShelf = false }: { a
   const state = status(app);
   const { color } = appMeta(app.id);
 
-  const content = (
+  const topContent = (
     <div className="flex items-start gap-3">
       <AppIcon id={app.id} color={color} />
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="truncate font-medium text-zinc-100">{app.name}</h3>
+          <h3 className="truncate font-medium text-zinc-100 group-hover:text-accent transition-colors">{app.name}</h3>
           <Pill tone={state.tone}>{state.label}</Pill>
         </div>
         {!compact && app.description && <p className="mt-1 line-clamp-2 text-sm text-zinc-400">{app.description}</p>}
@@ -50,8 +51,31 @@ export default function AppCard({ app, compact = false, showShelf = false }: { a
     </div>
   );
 
-  if (canLaunch) {
-    return <AppLaunchLink app={app} aria-label={app.name} className="block rounded-lg border border-zinc-700 bg-zinc-900/60 p-4 transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{content}</AppLaunchLink>;
-  }
-  return <div data-app-entry="" aria-disabled="true" title={state.label} className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 opacity-75">{content}</div>;
+  return (
+    <div className="group flex flex-col justify-between rounded-lg border border-zinc-700 bg-zinc-900/60 p-4 transition-colors hover:border-accent">
+      {canLaunch ? (
+        <AppLaunchLink
+          app={app}
+          aria-label={app.name}
+          className="block focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          {topContent}
+        </AppLaunchLink>
+      ) : (
+        <div data-app-entry="" aria-disabled="true" title={state.label} className="opacity-75">
+          {topContent}
+        </div>
+      )}
+      <div className="mt-3 flex items-center justify-between border-t border-zinc-800/80 pt-2 text-xs">
+        <span className="font-mono text-[11px] text-zinc-500">{app.path}</span>
+        <Link
+          to={`/docs?app=${app.id}#${app.id}`}
+          className="font-medium text-zinc-400 transition-colors hover:text-accent"
+          title={`View ${app.name} guide & tutorial`}
+        >
+          Guide & Tutorial →
+        </Link>
+      </div>
+    </div>
+  );
 }

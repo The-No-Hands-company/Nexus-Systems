@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { useState, useMemo, useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { APP_GUIDES } from "../shell/appGuides";
 
 type DocSection = {
@@ -39,15 +39,16 @@ const BASE_DOC_SECTIONS: DocSection[] = [
   {
     id: "apps-inventory",
     category: "Catalog",
-    title: "The 26 Core Platform Applications",
-    description: "The official registry of active, released services running across the Nexus ecosystem.",
+    title: "Live Platform Applications",
+    description: "The 18 sovereign applications currently deployed and reachable on tnhc.dev.",
     content: [
-      "The platform provides exactly 26 core sovereign applications grouped into six primary shelves:",
-      "1. Work Shelf: Nexus Mail (mail.tnhc.dev :3140), Calendar (calendar.tnhc.dev :3068), Project (project.tnhc.dev :3152), Docs (docs-app.tnhc.dev :3062), Notes (notes.tnhc.dev :3064), Wiki (wiki.tnhc.dev :3066).",
-      "2. Create Shelf: Nexus Design (design.tnhc.dev :3074), Graphic (graphic.tnhc.dev :3080), Photos (photos.tnhc.dev :3096), Video (video.tnhc.dev :3113), Draw (draw.tnhc.dev :3070).",
-      "3. Developer Shelf: Nexus Deploy (deploy.tnhc.dev :3150), Code (code.tnhc.dev :3072), Terminal (:3110), Modeling (:3094), AI (:3071).",
-      "4. Operate Shelf: Nexus Cloud (cloud.tnhc.dev :3060), Edge (:3069), Guardian (:3061), Tunnel (:3063), Router (:3067), Database (:3088), Vault (:3112).",
-      "5. Connect Shelf: Nexus Chat (chat.tnhc.dev :3142), Hosting (hosting.tnhc.dev :3084), Dashboard (app.tnhc.dev :3000), Auth (auth.tnhc.dev :4310)."
+      "The following services are live and accessible. All public traffic is routed via Cloudflare Tunnel through the gate proxy at :8080 — every URL is provisioned through Nexus-Tunnel with no exceptions.",
+      "Core: Dashboard (app.tnhc.dev) — ecosystem shell, launcher, admin, cloud console, webmail. Auth (auth.tnhc.dev :4310) — OIDC/SSO for every app. Cloud (cloud.tnhc.dev :8787) — control plane and app registry.",
+      "Communication: Chat (chat.tnhc.dev :3109) — Rust/Axum real-time messaging. Mail (mail.tnhc.dev :3132) — sovereign webmail with SMTP/IMAP integration. Hosting (hosting.tnhc.dev) — static-site hosting via MinIO S3.",
+      "Productivity: Calendar (calendar.tnhc.dev :8092), Project (project.tnhc.dev :8093), Docs app (docs-app.tnhc.dev :3136), Notes (notes.tnhc.dev :3093), Wiki (wiki.tnhc.dev :3160).",
+      "Create: Design (design.tnhc.dev :3074), Graphic (graphic.tnhc.dev :3080), Photos (photos.tnhc.dev :3096), Video (video.tnhc.dev :3113), Draw (draw.tnhc.dev :8090).",
+      "Developer: Deploy (deploy.tnhc.dev :8096) — push-to-deploy platform with rootless sandboxing. Code (code.tnhc.dev :3126) — sovereign Git repository browser.",
+      "Beyond the 18 live apps, 25 services are in active development (substantial code, not yet deployed) and 73 are scaffolded (registered, placeholder logic only). See the app grid for the full catalog."
     ],
     codeBlock: {
       language: "bash",
@@ -301,8 +302,26 @@ const APP_DOC_SECTIONS: DocSection[] = Object.values(APP_GUIDES).map((guide) => 
 const DOC_SECTIONS: DocSection[] = [...BASE_DOC_SECTIONS, ...APP_DOC_SECTIONS];
 
 export default function Docs() {
+  const [searchParams] = useSearchParams();
+  const appParam = searchParams.get("app") || searchParams.get("section") || "";
+
   const [activeCategory, setActiveCategory] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  useEffect(() => {
+    if (appParam) {
+      const target = DOC_SECTIONS.find(
+        (s) => s.id === appParam || s.id.toLowerCase() === appParam.toLowerCase(),
+      );
+      if (target) {
+        setActiveCategory("All");
+        setTimeout(() => {
+          const el = document.getElementById(target.id);
+          el?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
+      }
+    }
+  }, [appParam]);
 
   const categories = useMemo(() => {
     const cats = Array.from(new Set(DOC_SECTIONS.map((s) => s.category)));
@@ -315,6 +334,7 @@ export default function Docs() {
       const query = searchQuery.toLowerCase().trim();
       const matchesSearch =
         !query ||
+        section.id.toLowerCase().includes(query) ||
         section.title.toLowerCase().includes(query) ||
         section.description.toLowerCase().includes(query) ||
         section.content.some((c) => c.toLowerCase().includes(query));
