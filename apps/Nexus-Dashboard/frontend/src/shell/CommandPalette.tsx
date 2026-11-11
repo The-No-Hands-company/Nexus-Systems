@@ -28,14 +28,15 @@ type SearchItem = {
 };
 
 const DOC_TOPICS = [
-  { id: "overview", title: "Platform Overview & Sovereignty", category: "Architecture", path: "/docs#overview" },
-  { id: "apps-inventory", title: "The 26 Core Platform Applications", category: "Catalog", path: "/docs#apps-inventory" },
-  { id: "nexus-deploy", title: "Nexus Deploy & Rootless Sandboxing", category: "Developer", path: "/docs#nexus-deploy" },
-  { id: "auth-did", title: "Sovereign Auth & Ed25519 DIDs", category: "Security", path: "/docs#auth-did" },
-  { id: "document-suite", title: "Knowledge & Document Suite (Docs, Notes, Wiki)", category: "Work", path: "/docs#document-suite" },
-  { id: "creative-suite", title: "Creative Suite (Design, Graphic, Photos, Video, Draw)", category: "Create", path: "/docs#creative-suite" },
-  { id: "infra-ops", title: "Infrastructure & Node Operations (Cloud, Edge, Vault)", category: "Operate", path: "/docs#infra-ops" },
-  { id: "api-reference", title: "Systems-API & OpenAPI Contract Parity", category: "API", path: "/docs#api-reference" },
+  { id: "overview", title: "Platform Overview & Sovereignty", category: "Architecture", path: "/docs?section=overview" },
+  { id: "apps-inventory", title: "Live Platform Applications (18 live)", category: "Catalog", path: "/docs?section=apps-inventory" },
+  { id: "nexus-deploy", title: "Nexus Deploy — Push-to-Deploy Platform", category: "Developer", path: "/docs?section=nexus-deploy" },
+  { id: "auth-did", title: "Sovereign Auth & Ed25519 DIDs", category: "Security", path: "/docs?section=auth-did" },
+  { id: "document-suite", title: "Document & Knowledge Suite (Docs, Notes, Wiki)", category: "Work", path: "/docs?section=document-suite" },
+  { id: "creative-suite", title: "Creative Studio Suite (Design, Graphic, Photos, Video, Draw)", category: "Create", path: "/docs?section=creative-suite" },
+  { id: "infra-ops", title: "Infrastructure & Node Operations", category: "Operate", path: "/docs?section=infra-ops" },
+  { id: "developer-apis", title: "Developer APIs & SDKs", category: "Developer", path: "/docs?section=developer-apis" },
+  { id: "node-operators", title: "Node Operators & Federation", category: "Operate", path: "/docs?section=node-operators" },
 ];
 
 export default function CommandPalette({ open, onClose, apps, user }: CommandPaletteProps) {
@@ -274,7 +275,7 @@ export default function CommandPalette({ open, onClose, apps, user }: CommandPal
               setQuery(e.target.value);
               setSelectedIndex(0);
             }}
-            placeholder="Search all 26 apps, guides, settings, or actions... (Esc to close)"
+            placeholder="Search apps, guides, settings, or actions... (Esc to close)"
             className="w-full bg-transparent font-sans text-sm sm:text-base text-zinc-100 placeholder-zinc-500 focus:outline-none"
           />
           {query && (

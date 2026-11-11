@@ -652,6 +652,7 @@ start_nexus_ai_service() {
     start_service "ai" "$ROOT/apps/Nexus-AI" 3400 \
         PORT=3400 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         NEXUS_BIND_HOST=127.0.0.1 \
         python main.py
 }
@@ -677,6 +678,7 @@ start_nexus_guardian_service() {
         PORT=4320 \
         NEXUS_BIND_HOST=127.0.0.1 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         bun run src/index.ts
 }
 
@@ -685,6 +687,7 @@ start_nexus_edge_service() {
         PORT=4340 \
         NEXUS_BIND_HOST=127.0.0.1 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         bun run src/index.ts
 }
 

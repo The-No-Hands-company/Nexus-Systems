@@ -281,10 +281,9 @@ function SignedOut() {
           </div>
 
           <p className="mt-5 max-w-2xl text-sm leading-relaxed text-zinc-500">
-            Access is invite-only for now. Request an account and you will be
-            given a claim code to save — there is no confirmation email, by
-            design: this node cannot send mail off-network, so nothing here
-            depends on an inbox you would have to wait for.
+            Access is invite-only. Request an account and you will be given a
+            claim code by the administrator — check your email, or save the
+            code shown after your request is approved.
           </p>
 
           {healthy.length > 0 && (
