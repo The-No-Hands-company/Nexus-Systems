@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { cloudEndpoints, type CloudEndpoint } from "../../api";
 import CloudNav from "./CloudNav";
+import { Skeleton } from "../../../../../../packages/nexus-design/src/components/ui/skeleton";
 
 type State = { kind: "loading" } | { kind: "unavailable" } | { kind: "ready"; routes: CloudEndpoint[] };
 
@@ -59,7 +60,7 @@ export default function CloudApi() {
         <p className="mt-2 text-zinc-400">Every route this node's Systems API exposes.</p>
       </div>
 
-      {state.kind === "loading" && <p role="status" className="text-zinc-500">Loading…</p>}
+      {state.kind === "loading" && <Skeleton lines={5} />}
 
       {state.kind === "unavailable" && (
         <p role="alert" className="text-red-400">

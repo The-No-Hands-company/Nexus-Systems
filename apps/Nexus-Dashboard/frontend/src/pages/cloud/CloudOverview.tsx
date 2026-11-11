@@ -9,6 +9,7 @@ import { Badge } from "../../../../../../packages/nexus-design/src/components/ui
 import { Stat } from "../../../../../../packages/nexus-design/src/components/ui/stat";
 import { PageHeader } from "../../../../../../packages/nexus-design/src/components/ui/page-header";
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from "../../../../../../packages/nexus-design/src/components/ui/table";
+import PageSkeleton from "../../components/PageSkeleton";
 
 /** status.html's hardcoded INTERNAL array in renderInternalServicesCard. */
 const INTERNAL_SERVICES = [
@@ -102,7 +103,7 @@ export default function CloudOverview() {
   }, []);
 
   if (state.kind === "loading") {
-    return <section role="status" className="mx-auto max-w-5xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
+    return <PageSkeleton maxWidth="max-w-5xl" />;
   }
 
   if (state.kind === "unavailable") {

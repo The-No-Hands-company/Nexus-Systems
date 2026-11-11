@@ -5,6 +5,7 @@ import {
   type MailMessage, type MailSummary,
 } from "../../api";
 import { mailDate, senderName } from "./format";
+import PageSkeleton from "../../components/PageSkeleton";
 
 type State =
   | { kind: "loading" }
@@ -108,7 +109,7 @@ export default function MailRead() {
   }, [messageId]);
 
   if (state.kind === "loading") {
-    return <section className="mx-auto max-w-3xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
+    return <PageSkeleton maxWidth="max-w-3xl" />;
   }
 
   if (state.kind === "missing") {

@@ -7,6 +7,7 @@ import {
 import { groupIntoThreads } from "./threads";
 import { mailDate, senderName } from "./format";
 import MailNav from "./MailNav";
+import PageSkeleton from "../../components/PageSkeleton";
 
 type State =
   | { kind: "loading" }
@@ -91,7 +92,7 @@ export default function MailList() {
   }, [folderId, query, searchFolder, selectedUnread]);
 
   if (state.kind === "loading") {
-    return <section className="mx-auto max-w-5xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
+    return <PageSkeleton maxWidth="max-w-5xl" />;
   }
 
   if (state.kind === "no-mailbox") {

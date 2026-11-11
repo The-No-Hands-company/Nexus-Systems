@@ -4,6 +4,7 @@ import { buildAuthPageUrl, AUTH_ORIGIN } from "../authPages";
 import MaintenanceControls from "../components/MaintenanceControls";
 import { PageHeader } from "../../../../../packages/nexus-design/src/components/ui/page-header";
 import { Badge } from "../../../../../packages/nexus-design/src/components/ui/badge";
+import PageSkeleton from "../components/PageSkeleton";
 import {
   me,
   isAdmin,
@@ -159,7 +160,7 @@ export default function Admin() {
   }
 
   if (user === undefined) {
-    return <section className="mx-auto max-w-3xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
+    return <PageSkeleton maxWidth="max-w-3xl" />;
   }
 
   if (user === null) {

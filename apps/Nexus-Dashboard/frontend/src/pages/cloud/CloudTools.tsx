@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { cloudTools, restartCloudService, type CloudTool } from "../../api";
 import { timeAgo, healthDotClass } from "./format";
 import CloudNav from "./CloudNav";
+import { Skeleton } from "../../../../../../packages/nexus-design/src/components/ui/skeleton";
 
 type State = { kind: "loading" } | { kind: "unavailable" } | { kind: "ready"; tools: CloudTool[] };
 
@@ -44,7 +45,7 @@ export default function CloudTools() {
         <p className="mt-2 text-zinc-400">Every tool registered with this node.</p>
       </div>
 
-      {state.kind === "loading" && <p role="status" className="text-zinc-500">Loading…</p>}
+      {state.kind === "loading" && <Skeleton lines={5} />}
 
       {state.kind === "unavailable" && (
         <p role="alert" className="text-red-400">

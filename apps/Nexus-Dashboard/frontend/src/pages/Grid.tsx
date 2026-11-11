@@ -49,7 +49,29 @@ export default function Grid() {
   const shelves = useMemo(() => groupAppsByShelf(apps), [apps]);
 
   if (state.kind === "loading") {
-    return <section className="mx-auto max-w-4xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
+    return (
+      <section className="mx-auto max-w-6xl px-4 py-6 sm:p-8" role="status" aria-busy="true">
+        <span className="sr-only">Loading apps</span>
+        <div className="mb-6">
+          <div className="h-8 w-40 animate-pulse rounded bg-zinc-700" aria-hidden />
+          <div className="mt-2 h-4 w-72 animate-pulse rounded bg-zinc-700/60" aria-hidden />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-hidden>
+          {Array.from({ length: 6 }, (_, i) => (
+            <div key={i} className="rounded-lg border border-zinc-700/50 bg-zinc-900/40 p-4">
+              <div className="flex items-start gap-3">
+                <div className="h-9 w-9 animate-pulse rounded-lg bg-zinc-700" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-3/4 animate-pulse rounded bg-zinc-700" />
+                  <div className="h-3 w-full animate-pulse rounded bg-zinc-700/60" />
+                  <div className="h-3 w-2/3 animate-pulse rounded bg-zinc-700/60" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
   }
 
   // Distinct from an empty grid on purpose: "you have no apps" and "we could

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { cloudIdentity, type CloudIdentity as CloudIdentityData } from "../../api";
 import CloudNav from "./CloudNav";
+import { Skeleton } from "../../../../../../packages/nexus-design/src/components/ui/skeleton";
 
 type State = { kind: "loading" } | { kind: "unavailable" } | { kind: "ready"; identity: CloudIdentityData };
 
@@ -34,7 +35,7 @@ export default function CloudIdentity() {
         <p className="mt-2 text-zinc-400">This node's federation identity.</p>
       </div>
 
-      {state.kind === "loading" && <p role="status" className="text-zinc-500">Loading…</p>}
+      {state.kind === "loading" && <Skeleton lines={4} />}
 
       {state.kind === "unavailable" && (
         <p role="alert" className="text-red-400">

@@ -10,6 +10,7 @@ import { buildAuthPageUrl } from "../authPages";
 import Pinned from "./widgets/Pinned";
 import AppShelf from "../components/AppShelf";
 import { groupAppsByShelf, isLauncherApp } from "../shell/catalog";
+import PageSkeleton from "../components/PageSkeleton";
 
 const AUTH_LOGIN_URL =
   import.meta.env.VITE_AUTH_LOGIN_URL ?? "https://auth.tnhc.dev/login";
@@ -83,7 +84,7 @@ export default function Home() {
   }, [authStatus, appsStatus, loadSession, loadApps]);
 
   if (auth === undefined) {
-    return <section className="mx-auto max-w-4xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
+    return <PageSkeleton maxWidth="max-w-4xl" />;
   }
 
   // Could not reach the server: say so. Treating this as signed out sent people

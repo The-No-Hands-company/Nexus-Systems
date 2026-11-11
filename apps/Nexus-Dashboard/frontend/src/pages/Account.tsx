@@ -7,6 +7,7 @@ import { PageHeader } from "../../../../../packages/nexus-design/src/components/
 import { Badge } from "../../../../../packages/nexus-design/src/components/ui/badge";
 import { useTheme, THEMES } from "../shell/useTheme";
 import { useDensity } from "../shell/useDensity";
+import PageSkeleton from "../components/PageSkeleton";
 
 const EVENT_LABELS: Record<string, string> = {
   login_success: "Signed in",
@@ -185,7 +186,7 @@ export default function Account() {
   }
 
   if (!user) {
-    return <section className="mx-auto max-w-2xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
+    return <PageSkeleton maxWidth="max-w-2xl" />;
   }
 
   return (

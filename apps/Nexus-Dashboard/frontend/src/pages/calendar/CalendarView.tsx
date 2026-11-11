@@ -7,6 +7,7 @@ import {
   type CalendarEvent,
   type CalendarEventInput,
 } from "../../api";
+import { Skeleton } from "../../../../../../packages/nexus-design/src/components/ui/skeleton";
 
 // ── date helpers ─────────────────────────────────────────────────────────────
 
@@ -290,9 +291,7 @@ function EventsPanel({
         </button>
       </div>
 
-      {loadState.kind === "loading" && (
-        <p className="py-4 text-sm text-zinc-500">Loading…</p>
-      )}
+      {loadState.kind === "loading" && <Skeleton lines={3} />}
       {loadState.kind === "error" && (
         <p role="alert" className="py-4 text-sm text-state-danger">
           {loadState.message}
