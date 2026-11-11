@@ -23,6 +23,7 @@ process.env.NEXUS_AUTH_USER_STORE_PATH = join(dir, "users.json");
 process.env.NEXUS_AUTH_RECOVERY_STORE_PATH = join(dir, "recovery.json");
 process.env.NEXUS_AUTH_INVITE_STORE_PATH = join(dir, "invites.json");
 process.env.NEXUS_AUTH_CATALOG_PREFERENCES_PATH = join(dir, "catalog-preferences.json");
+process.env.NEXUS_AUTH_OIDC_CLIENTS_FILE = join(dir, "oidc-clients.json");
 
 // Tests must never write to a real audit database: bun auto-loads this app's
 // .env, which holds the production audit URL. Blank both so audit is a no-op.
