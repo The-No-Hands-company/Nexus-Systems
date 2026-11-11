@@ -26,10 +26,12 @@ const persistedAlertConfigs: AlertConfig[] = [];
 const persistedAlertHistory: Alert[] = [];
 const persistedHealthSnapshots: HealthSnapshot[] = [];
 
-const stateFilePath = resolve(
-  process.env.NEXUS_GUARDIAN_STATE_PATH ||
-    join(dirname(fileURLToPath(import.meta.url)), "..", "data", "guardian-state.json"),
-);
+function resolveStateFilePath(): string {
+  return resolve(
+    process.env.NEXUS_GUARDIAN_STATE_PATH ||
+      join(dirname(fileURLToPath(import.meta.url)), "..", "data", "guardian-state.json"),
+  );
+}
 
 type PersistedGuardianState = {
   version: number;
@@ -79,12 +81,13 @@ function persistState(): void {
     updatedAt: new Date().toISOString(),
   };
 
-  const tempPath = `${stateFilePath}.tmp`;
+  const p = resolveStateFilePath();
+  const tempPath = `${p}.tmp`;
 
   try {
-    mkdirSync(dirname(stateFilePath), { recursive: true });
+    mkdirSync(dirname(p), { recursive: true });
     writeFileSync(tempPath, JSON.stringify(payload, null, 2), "utf-8");
-    renameSync(tempPath, stateFilePath);
+    renameSync(tempPath, p);
   } catch (error) {
     try {
       rmSync(tempPath, { force: true });
@@ -96,7 +99,7 @@ function persistState(): void {
 
 function hydrateStateFromDisk(): void {
   try {
-    const raw = readFileSync(stateFilePath, "utf-8");
+    const raw = readFileSync(resolveStateFilePath(), "utf-8");
     const parsed = JSON.parse(raw) as Partial<PersistedGuardianState>;
 
     decisions.clear();

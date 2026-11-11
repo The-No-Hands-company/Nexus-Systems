@@ -82,8 +82,10 @@ apps/Nexus-Auth/data/oidc-clients.json
 # byte-identical to defaultPolicy in src/state.ts, so nothing configured is lost.
 # Tunnel's file is routes and reachability only: no certificates, no key material.
 apps/Nexus-Guardian/data/guardian-state.json
+apps/Nexus-Guardian/data/guardian-state.json.tmp
 apps/Nexus-Edge/data/edge-state.json
 apps/Nexus-Tunnel/data/tunnel-state.json
+apps/Nexus-Tunnel/data/tunnel-state.json.tmp
 
 **/__pycache__/
 **/*.py[cod]
