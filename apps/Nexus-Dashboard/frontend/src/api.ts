@@ -1037,6 +1037,36 @@ export function runDevTool(id: string) {
   });
 }
 
+export type RadarPillar = { score: number; max: number; label: string };
+export type RadarAppResult = {
+  app: { id: string; name: string; port?: number };
+  rawScore: number;
+  totalScore: number;
+  stage: string;
+  stageColor: string;
+  pillars: {
+    data: RadarPillar; ui: RadarPillar; features: RadarPillar;
+    api: RadarPillar; quality: RadarPillar; platform: RadarPillar;
+  };
+  missingFeatures: Array<{ id: string; name: string; description?: string }>;
+  topRoadmapItems: string[];
+};
+export type RadarSummary = {
+  scannedAt: string;
+  totalApps: number;
+  operationalApps: number;
+  averageScore: number;
+  stagesCount: { degraded: number; scaffold: number; alpha: number; beta: number; rc: number; v1: number };
+  results: RadarAppResult[];
+};
+
+export function radarSummary() {
+  return request<RadarSummary>("/ipa/dev/radar");
+}
+
+export function radarRescan() {
+  return request<RadarSummary>("/ipa/dev/radar/rescan", { method: "POST" });
+}
 
 export type ServiceStatus = {
   name: string;

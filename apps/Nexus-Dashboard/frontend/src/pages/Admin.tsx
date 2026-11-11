@@ -30,8 +30,12 @@ import {
   updateUserRole,
   suspendUser,
   activateUser,
+  radarSummary,
+  radarRescan,
   type ServiceStatus,
   type ManagedUser,
+  type RadarSummary,
+  type RadarAppResult,
 } from "../api";
 
 /**
@@ -63,6 +67,10 @@ export default function Admin() {
   const [dhts, setDhts] = useState<DevToolsResponse | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
   const [toolOutput, setToolOutput] = useState<Record<string, { ok: boolean; output: string }>>({});
+  const [radar, setRadar] = useState<RadarSummary | null>(null);
+  const [radarLoading, setRadarLoading] = useState(false);
+  const [radarError, setRadarError] = useState<string | null>(null);
+  const [radarExpanded, setRadarExpanded] = useState<string | null>(null);
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [userError, setUserError] = useState<string | null>(null);
@@ -527,6 +535,133 @@ export default function Admin() {
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            {/* Platform Maturity Radar — founder dev tool */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-medium">Platform Maturity Radar</h3>
+                <div className="flex gap-2">
+                  {radar && (
+                    <span className="text-xs text-zinc-500">
+                      scanned {new Date(radar.scannedAt).toLocaleTimeString()}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    disabled={radarLoading}
+                    onClick={async () => {
+                      setRadarLoading(true);
+                      setRadarError(null);
+                      try {
+                        const s = radar ? await radarRescan() : await radarSummary();
+                        setRadar(s);
+                      } catch {
+                        setRadarError("Scan failed — check server logs.");
+                      } finally {
+                        setRadarLoading(false);
+                      }
+                    }}
+                    className="rounded bg-lime-700/60 px-3 py-1 text-xs font-medium text-lime-200 hover:bg-lime-700 disabled:opacity-50"
+                  >
+                    {radarLoading ? "Scanning…" : radar ? "Rescan" : "Scan now"}
+                  </button>
+                </div>
+              </div>
+
+              {radarError && (
+                <p role="alert" className="text-xs text-red-400 mb-2">{radarError}</p>
+              )}
+
+              {!radar && !radarLoading && (
+                <p className="text-sm text-zinc-500">Click "Scan now" to run the platform maturity scan.</p>
+              )}
+
+              {radar && (
+                <>
+                  <div className="flex flex-wrap gap-4 mb-4 text-sm">
+                    <span className="text-zinc-400">
+                      <span className="font-semibold text-zinc-100">{radar.operationalApps}</span>/{radar.totalApps} operational
+                    </span>
+                    <span className="text-zinc-400">
+                      avg score <span className="font-semibold text-zinc-100">{radar.averageScore.toFixed(1)}</span>
+                    </span>
+                    <span className="text-zinc-400">
+                      v1.0 <span className="font-semibold text-lime-400">{radar.stagesCount.v1}</span>
+                      {" · "}RC <span className="font-semibold text-blue-400">{radar.stagesCount.rc}</span>
+                      {" · "}Beta <span className="font-semibold text-yellow-400">{radar.stagesCount.beta}</span>
+                      {" · "}Alpha <span className="font-semibold text-orange-400">{radar.stagesCount.alpha}</span>
+                    </span>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 max-h-96 overflow-auto">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 bg-zinc-900">
+                        <tr className="text-zinc-500 border-b border-zinc-800 text-xs uppercase tracking-wide">
+                          <th className="text-left px-3 py-2">App</th>
+                          <th className="text-right px-3 py-2 w-16">Score</th>
+                          <th className="text-left px-3 py-2">Stage</th>
+                          <th className="text-left px-3 py-2 hidden sm:table-cell">Pillars</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {radar.results.map((r: RadarAppResult) => {
+                          const isOpen = radarExpanded === r.app.id;
+                          const stageClass =
+                            r.stage === "v1.0 Production Grade" ? "text-lime-400" :
+                            r.stage === "Release Candidate" ? "text-blue-400" :
+                            r.stage === "Beta" ? "text-yellow-400" :
+                            r.stage === "Alpha" ? "text-orange-400" :
+                            r.stage.startsWith("Offline") ? "text-red-400" :
+                            "text-zinc-500";
+                          return (
+                            <>
+                              <tr
+                                key={r.app.id}
+                                className="border-b border-zinc-800/50 hover:bg-zinc-800/30 cursor-pointer"
+                                onClick={() => setRadarExpanded(isOpen ? null : r.app.id)}
+                              >
+                                <td className="px-3 py-2 text-zinc-200 font-mono text-xs">{r.app.id}</td>
+                                <td className="px-3 py-2 text-right font-semibold text-zinc-100 tabular-nums">{r.totalScore}</td>
+                                <td className={`px-3 py-2 text-xs ${stageClass}`}>{r.stage}</td>
+                                <td className="px-3 py-2 hidden sm:table-cell">
+                                  <div className="flex gap-1 items-center">
+                                    {Object.entries(r.pillars).map(([key, p]) => (
+                                      <div key={key} title={`${key}: ${p.score}/${p.max}`}
+                                        className="h-1.5 rounded-sm bg-zinc-700 overflow-hidden"
+                                        style={{ width: `${(p.max / 10) * 8}px` }}>
+                                        <div
+                                          className="h-full bg-lime-500/80"
+                                          style={{ width: `${(p.score / p.max) * 100}%` }}
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </td>
+                              </tr>
+                              {isOpen && r.missingFeatures.length > 0 && (
+                                <tr key={`${r.app.id}-detail`} className="border-b border-zinc-800/50 bg-zinc-900/50">
+                                  <td colSpan={4} className="px-4 py-2">
+                                    <p className="text-xs text-zinc-500 mb-1">Missing features:</p>
+                                    <ul className="space-y-0.5">
+                                      {r.missingFeatures.map((f) => (
+                                        <li key={f.id} className="text-xs text-zinc-400">
+                                          <span className="font-mono text-zinc-500 mr-2">{f.id}</span>
+                                          {f.name}
+                                          {f.description && <span className="text-zinc-600"> — {f.description}</span>}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </td>
+                                </tr>
+                              )}
+                            </>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}

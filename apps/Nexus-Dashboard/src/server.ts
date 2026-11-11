@@ -3,6 +3,7 @@ import { isReleasedUserApp, mergeApps, shellNativeEntries, toAppEntries } from "
 import { callerIdentity, isAdminRole } from "./auth";
 import { cloudBaseUrl, cloudHeaders } from "./cloud";
 import { listDevTools, runDevTool } from "./devtools";
+import { auditEcosystem } from "../../../dhts/nexus-v1-radar/scan";
 import { fileIssue, validateReport } from "./issues";
 import { validateJWT, validateRequest } from "./jwt";
 import { platformApiHeaders, platformApiUrl } from "./platform-api";
@@ -31,6 +32,19 @@ import {
 
 const PORT = Number(process.env.PORT || "3132");
 const DOMAIN = process.env.DOMAIN || "tnhc.dev";
+
+// Radar scan cache — 60 s is enough for a dev tool; avoids re-running the full
+// probe on every panel open while keeping the data reasonably fresh.
+let _radarCache: Awaited<ReturnType<typeof auditEcosystem>> | null = null;
+let _radarCachedAt = 0;
+async function radarScan(force = false) {
+  const now = Date.now();
+  if (force || !_radarCache || now - _radarCachedAt > 60_000) {
+    _radarCache = await auditEcosystem();
+    _radarCachedAt = now;
+  }
+  return _radarCache;
+}
 
 /**
  * The shell's content security policy. The SPA is self-hosted (one hashed JS,
@@ -718,6 +732,21 @@ export async function handleRequest(
       return Response.json(result, { status: result.ok || result.exitCode !== null ? 200 : 400 });
     }
     return Response.json({ error: "not_found" }, { status: 404 });
+  }
+
+  // Platform Maturity Radar. Same admin gate as dev/tools; runs the scan
+  // in-process so the founder doesn't need a separate :3200 server.
+  if (path === "/ipa/dev/radar" || path === "/ipa/dev/radar/rescan") {
+    const who = await callerIdentity(req);
+    if (!isAdminRole(who?.role ?? null)) {
+      return Response.json({ error: "forbidden" }, { status: who ? 403 : 401 });
+    }
+    const force = path === "/ipa/dev/radar/rescan" && req.method === "POST";
+    if (req.method !== "GET" && !force) {
+      return Response.json({ error: "method_not_allowed" }, { status: 405 });
+    }
+    const summary = await radarScan(force);
+    return Response.json(summary);
   }
 
   if (path.startsWith(MAIL_PREFIX)) {
