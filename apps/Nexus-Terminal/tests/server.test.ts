@@ -7,7 +7,7 @@ describe("nexus-terminal", () => { let base = ""; let handle: Awaited<ReturnType
     Reflect.deleteProperty(process.env, "NEXUS_TERMINAL_ENABLED");
     process.env.NEXUS_TERMINAL_ENABLE_CLOUD_INTEGRATION = "false";
     process.env.PORT = "0";
-    handle = await createServer();
+    handle = await createServer({ dbPath: ":memory:" });
     await new Promise((r) => setTimeout(r, 200));
     base = `http://127.0.0.1:${handle.server.port}`;
   });

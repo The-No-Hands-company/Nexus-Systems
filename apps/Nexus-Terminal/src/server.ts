@@ -36,7 +36,7 @@ const TERMINAL_FAILURE_REASONS: Record<TerminalFailureCode, string> = {
   1013: "session limit reached",
 };
 function json(payload: unknown, status: number, headers?: Record<string, string>): Response { const body = JSON.stringify(payload); return new Response(body, { status, headers: { "content-type": "application/json; charset=utf-8", "x-request-id": randomUUID(), ...headers } }); }
-export async function createServer(options: { auditPath?: string } = {}) { const port = Number(process.env.PORT || "3110"); const baseUrl = process.env.NEXUS_NEXUS_TERMINAL_BASE_URL || `http://localhost:${port}`; const startedAt = Date.now(); const engine = new TerminalEngine("data/terminal.sqlite")
+export async function createServer(options: { auditPath?: string; dbPath?: string } = {}) { const port = Number(process.env.PORT || "3110"); const baseUrl = process.env.NEXUS_NEXUS_TERMINAL_BASE_URL || `http://localhost:${port}`; const startedAt = Date.now(); const engine = new TerminalEngine(options.dbPath ?? "data/terminal.sqlite")
   const phantom = new PhantomApp("nexus-terminal");
   const phantomId = await phantom.start();
   const discovery = new NexusDiscovery({ cloudUrl: process.env.NEXUS_CLOUD_URL || "http://localhost:8787", apiKey: process.env.NEXUS_CLOUD_API_KEY || undefined, ttlMs: 30000 });
