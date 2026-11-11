@@ -412,6 +412,7 @@ start_nexus_api_service() {
         NEXUS_API_ALLOWED_ORIGINS="https://app.$DOMAIN" \
         NEXUS_API_AUTH_URL=http://127.0.0.1:4310 \
         NEXUS_API_CLOUD_URL=http://127.0.0.1:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         NEXUS_API_MAIL_URL=http://127.0.0.1:3140 \
         NEXUS_API_CALENDAR_URL=http://127.0.0.1:3068 \
         NEXUS_CALENDAR_DASHBOARD_SECRET="$cal_secret" \
@@ -433,6 +434,7 @@ start_dashboard_service() {
         NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
         NEXUS_API_INTERNAL_URL=http://127.0.0.1:3036 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         NEXUS_TERMINAL_URL=http://127.0.0.1:3110 \
         NEXUS_ISSUES_TOKEN="${NEXUS_ISSUES_TOKEN:-}" \
         bun run src/index.ts
@@ -458,6 +460,7 @@ start_auth_service() {
         NEXUS_AUTH_COOKIE_DOMAIN=".$DOMAIN" \
         NEXUS_POST_LOGIN_URL="https://app.$DOMAIN/" \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         bun run src/index.ts
     export -n NEXUS_AUTH_AUDIT_DATABASE_URL NEXUS_EMAIL_SYSTEM_MAIL_TOKEN
 }
@@ -594,6 +597,8 @@ start_nexus_vault_service() {
     start_service "nexus-vault" "$ROOT/apps/Nexus-Vault" 3900 \
         PORT=3900 \
         NODE_ENV=production \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         VAULT_DATA_DIR="$ROOT/apps/Nexus-Vault/data" \
         bun src/index.ts
 }
@@ -747,6 +752,7 @@ start_nexus_project_service() {
         NEXUS_PROJECT_BASE_URL=http://127.0.0.1:8093 \
         NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         bun run src/index.ts
 }
 
@@ -990,6 +996,7 @@ cmd_start() {
         NEXUS_AUTH_COOKIE_DOMAIN=".$DOMAIN" \
         NEXUS_POST_LOGIN_URL="https://app.$DOMAIN/" \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         bun run src/index.ts
     export -n NEXUS_AUTH_AUDIT_DATABASE_URL NEXUS_EMAIL_SYSTEM_MAIL_TOKEN
 
@@ -1093,6 +1100,7 @@ cmd_start() {
             NEXUS_CALENDAR_DASHBOARD_SECRET="$cal_secret"
             NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310
             NEXUS_CLOUD_URL=http://localhost:8787
+            NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}"
         )
         if [ -n "${NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT:-}" ]; then
             calendar_env+=(NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT="$NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT")
@@ -1127,6 +1135,7 @@ cmd_start() {
             NEXUS_PROJECT_BASE_URL=http://127.0.0.1:8093 \
             NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
             NEXUS_CLOUD_URL=http://localhost:8787 \
+            NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
             bun run src/index.ts
         if command -v "$CADDY_BIN" >/dev/null 2>&1; then
             if [ -f "$ROOT/apps/Nexus-Project/frontend/dist/index.html" ]; then
@@ -1162,6 +1171,7 @@ cmd_start() {
         NEXUS_BIND_HOST=127.0.0.1 \
         NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
         NEXUS_CLOUD_URL=http://127.0.0.1:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         NEXUS_NEXUS_TERMINAL_BASE_URL=http://127.0.0.1:3110 \
         NEXUS_TERMINAL_ENABLED="${NEXUS_TERMINAL_ENABLED:-false}" \
         bun run src/index.ts
@@ -1195,6 +1205,7 @@ cmd_start() {
             NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
             NEXUS_API_INTERNAL_URL=http://127.0.0.1:3036 \
             NEXUS_CLOUD_URL=http://localhost:8787 \
+            NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
             NEXUS_TERMINAL_URL=http://127.0.0.1:3110 \
             NEXUS_ISSUES_TOKEN="$NEXUS_ISSUES_TOKEN" \
             bun run src/index.ts
@@ -1231,6 +1242,7 @@ cmd_start() {
         PORT=3075 \
         PHANTOM_REQUIRE_REAL=1 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         bun run src/index.ts
 
     # 4fa-d. The Creative Suite: Design, Graphic, Photos, Video
