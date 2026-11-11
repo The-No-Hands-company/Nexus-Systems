@@ -512,7 +512,9 @@ preflight_service_start() {
         nexus-chat-web) validate_nexus_chat_caddy ;;
         nexus-deploy|deploy) adopt_cloud_registration_environment_for_dependents ;;
         proxy) adopt_cloud_registration_environment_for_dependents ;;
-        nexus-design|design|nexus-graphic|graphic|nexus-photos|photos|nexus-video|video|nexus-notes|notes|nexus-docs|docs|nexus-wiki|wiki|nexus-code|code|nexus-vault|vault|nexus-files|files|nexus-finance|finance|nexus-tasks|tasks|nexus-music|music|nexus-network|network|nexus-forge|forge|mailapi|nexus-project|nexus-project-web|ai|nexus-ai|database|nexus-database|guardian|nexus-guardian|edge|nexus-edge) : ;;
+        nexus-design|design|nexus-graphic|graphic|nexus-photos|photos|nexus-video|video|nexus-notes|notes|nexus-docs|docs|nexus-wiki|wiki|nexus-code|code|nexus-vault|vault|nexus-files|files|nexus-finance|finance|nexus-tasks|tasks|nexus-music|music|nexus-network|network|nexus-forge|forge|mailapi|nexus-project|nexus-project-web|ai|nexus-ai|database|nexus-database|guardian|nexus-guardian|edge|nexus-edge)
+            adopt_cloud_registration_environment_for_dependents || true
+            ;;
         *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, proxy, creative, document, and developer suites"; return 1 ;;
     esac
 }
@@ -521,6 +523,7 @@ start_nexus_design_service() {
     start_service "nexus-design" "$ROOT/apps/Nexus-Design" 3074 \
         PORT=3074 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         NEXUS_NEXUS_DESIGN_BASE_URL=https://design."$DOMAIN" \
         bun run src/index.ts
 }
@@ -529,6 +532,7 @@ start_nexus_graphic_service() {
     start_service "nexus-graphic" "$ROOT/apps/Nexus-Graphic" 3080 \
         PORT=3080 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         NEXUS_NEXUS_GRAPHIC_BASE_URL=https://graphic."$DOMAIN" \
         bun run src/index.ts
 }
@@ -537,6 +541,7 @@ start_nexus_photos_service() {
     start_service "nexus-photos" "$ROOT/apps/Nexus-Photos" 3096 \
         PORT=3096 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         NEXUS_NEXUS_PHOTOS_BASE_URL=https://photos."$DOMAIN" \
         bun run src/index.ts
 }
@@ -545,6 +550,7 @@ start_nexus_video_service() {
     start_service "nexus-video" "$ROOT/apps/Nexus-Video" 3113 \
         PORT=3113 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         NEXUS_NEXUS_VIDEO_BASE_URL=https://video."$DOMAIN" \
         bun run src/index.ts
 }
@@ -553,6 +559,7 @@ start_nexus_notes_service() {
     start_service "nexus-notes" "$ROOT/apps/Nexus-Notes" 3093 \
         PORT=3093 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         NEXUS_NEXUS_NOTES_BASE_URL=https://notes."$DOMAIN" \
         bun run src/index.ts
 }
@@ -561,6 +568,7 @@ start_nexus_docs_service() {
     start_service "nexus-docs" "$ROOT/apps/Nexus-Docs" 3136 \
         PORT=3136 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         NEXUS_DOCS_BASE_URL=https://docs-app."$DOMAIN" \
         bun run src/index.ts
 }
@@ -577,6 +585,7 @@ start_nexus_code_service() {
     start_service "nexus-code" "$ROOT/apps/Nexus-Code" 3126 \
         PORT=3126 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         NEXUS_NEXUS_CODE_BASE_URL=https://code."$DOMAIN" \
         bun run src/index.ts
 }
@@ -593,6 +602,7 @@ start_nexus_files_service() {
     start_service "nexus-files" "$ROOT/apps/Nexus-Files" 3033 \
         PORT=3033 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         bun run src/index.ts
 }
 
@@ -600,6 +610,7 @@ start_nexus_finance_service() {
     start_service "nexus-finance" "$ROOT/apps/Nexus-Finance" 3076 \
         PORT=3076 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         bun run src/index.ts
 }
 
@@ -607,6 +618,7 @@ start_nexus_tasks_service() {
     start_service "nexus-tasks" "$ROOT/apps/Nexus-Tasks" 3108 \
         PORT=3108 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         bun run src/index.ts
 }
 
@@ -614,6 +626,7 @@ start_nexus_music_service() {
     start_service "nexus-music" "$ROOT/apps/Nexus-Music" 3092 \
         PORT=3092 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         bun run src/index.ts
 }
 
@@ -621,6 +634,7 @@ start_nexus_network_service() {
     start_service "nexus-network" "$ROOT/apps/Nexus-Network" 3124 \
         PORT=3124 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         bun run src/index.ts
 }
 
@@ -630,6 +644,7 @@ start_nexus_forge_service() {
         NEXUS_FORGE_BUN="$(command -v bun || echo bun)" \
         FORGE_HOOKS_DIR=/tmp/nexus-forge-hooks \
         NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         bun run src/backend/main.ts
 }
 
