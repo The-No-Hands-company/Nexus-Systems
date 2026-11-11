@@ -69,7 +69,7 @@ export default function AppCard({ app, compact = false, showShelf = false }: { a
       <div className="mt-3 flex items-center justify-between border-t border-zinc-800/80 pt-2 text-xs">
         <span className="font-mono text-[11px] text-zinc-500">{app.path}</span>
         <Link
-          to={`/docs?app=${app.id}#${app.id}`}
+          to={`/docs?section=apps`}
           className="font-medium text-zinc-400 transition-colors hover:text-accent"
           title={`View ${app.name} guide & tutorial`}
         >

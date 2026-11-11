@@ -5,6 +5,7 @@ import NotificationBell from "../shell/NotificationBell";
 import { Pill } from "../../../../../packages/nexus-design/src/components/ui/pill";
 import Activity from "./widgets/Activity";
 import Today from "./widgets/Today";
+import Unread from "./widgets/Unread";
 import { buildAuthPageUrl } from "../authPages";
 import Pinned from "./widgets/Pinned";
 import AppShelf from "../components/AppShelf";
@@ -140,15 +141,18 @@ export default function Home() {
             )}
             {appsLoad.status === "ready" && (
               <section aria-label="Curated app shelves" className="space-y-8">
-                {(["everyday", "work", "create"] as const).map((shelf) => (
-                  <AppShelf key={shelf} shelf={shelf} apps={shelves[shelf]} limit={3} />
-                ))}
+                {(["everyday", "work", "create", "develop", "operate"] as const)
+                  .filter((shelf) => shelves[shelf].length > 0)
+                  .map((shelf) => (
+                    <AppShelf key={shelf} shelf={shelf} apps={shelves[shelf]} limit={3} />
+                  ))}
               </section>
             )}
 
             {/* Widgets: today's schedule, unread mail, pinned apps, activity */}
             <div className="grid gap-4 md:grid-cols-2">
               <Today />
+              <Unread />
               <Pinned />
               <Activity />
             </div>
