@@ -1,4 +1,6 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { tmpdir } from "node:os";
+import { existsSync, copyFileSync, chmodSync, readdirSync } from "node:fs";
 
 /** Deterministic Phantom DID for a user, derived from their stable user ID. */
 function generatePhantomDid(userId: string): string {
@@ -15,10 +17,41 @@ export type SafeUser = Omit<User, "passwordHash" | "totpSecret" | "claimCodeHash
 const users = new Map<string, User>();
 let userCounter = 0;
 
+// Under `bun test` (NODE_ENV=test) never fall back to the real store: a test run
+// from the repo root skips apps/Nexus-Auth/bunfig.toml's preload and used to
+// overwrite production users with fixtures.
+const isTestRun = process.env.NODE_ENV === "test";
 const stateFilePath = resolve(
   process.env.NEXUS_AUTH_USER_STORE_PATH ||
-    join(dirname(fileURLToPath(import.meta.url)), "..", "data", "auth-users.json"),
+    (isTestRun
+      ? join(tmpdir(), `nexus-auth-test-users-${process.pid}.json`)
+      : join(dirname(fileURLToPath(import.meta.url)), "..", "data", "auth-users.json")),
 );
+
+const BACKUP_KEEP = 30;
+const BACKUP_MIN_INTERVAL_MS = 10 * 60 * 1000;
+let lastBackupAt = 0;
+
+/** Rolling snapshot of the previous store before it is replaced. Never throws. */
+function backupStore(): void {
+  if (isTestRun || process.env.NEXUS_AUTH_USER_STORE_PATH) return;
+  const now = Date.now();
+  if (now - lastBackupAt < BACKUP_MIN_INTERVAL_MS) return;
+  try {
+    if (!existsSync(stateFilePath)) return;
+    const dir = join(dirname(stateFilePath), "backups");
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const stamp = new Date(now).toISOString().replace(/[:.]/g, "-");
+    copyFileSync(stateFilePath, join(dir, `auth-users.${stamp}.json`));
+    chmodSync(join(dir, `auth-users.${stamp}.json`), 0o600);
+    lastBackupAt = now;
+    const old = readdirSync(dir)
+      .filter((f) => /^auth-users\.\d{4}-.*\.json$/.test(f))
+      .sort()
+      .slice(0, -BACKUP_KEEP);
+    for (const f of old) rmSync(join(dir, f), { force: true });
+  } catch {}
+}
 
 type PersistedUsers = {
   version: number;
@@ -61,6 +94,7 @@ function persistUsers(): void {
   };
 
   const tempPath = `${stateFilePath}.tmp`;
+  backupStore();
   try {
     mkdirSync(dirname(stateFilePath), { recursive: true });
     writeFileSync(tempPath, JSON.stringify(payload, null, 2), "utf-8");

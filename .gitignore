@@ -65,6 +65,7 @@ Backups/
 # are runtime state, not source: a fresh deploy seeds founder/operator from
 # NEXUS_AUTH_FOUNDER_PASSWORD / _OPERATOR_PASSWORD in apps/Nexus-Auth/.env.
 apps/Nexus-Auth/data/auth-users.json
+apps/Nexus-Auth/data/backups/
 apps/Nexus-Auth/data/auth-users.json.bak-*
 apps/Nexus-Auth/data/auth-users.json.tmp
 apps/Nexus-Auth/data/auth-recovery.json
