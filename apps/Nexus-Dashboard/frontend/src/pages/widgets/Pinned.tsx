@@ -3,6 +3,7 @@ import AppLaunchLink from "../../components/AppLaunchLink";
 import { listApps, type AppEntry } from "../../api";
 import { usePinnedApps } from "../../shell/usePinnedApps";
 import { isLauncherApp } from "../../shell/catalog";
+import { appMeta } from "../../components/appMeta";
 import WidgetShell, { type WidgetState } from "./WidgetShell";
 
 /**
@@ -43,9 +44,18 @@ export default function Pinned() {
                     app={a}
                     className="flex flex-col gap-2 rounded-lg border border-zinc-700 bg-zinc-800/40 p-3 transition-colors hover:border-zinc-600 hover:bg-zinc-800"
                   >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-700 text-xs font-semibold uppercase text-zinc-300">
-                      {a.name.slice(0, 2)}
-                    </div>
+                    {(() => {
+                      const { Icon, color } = appMeta(a.id);
+                      return (
+                        <span
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
+                          style={{ background: `color-mix(in srgb, ${color} 18%, transparent)`, color }}
+                          aria-hidden
+                        >
+                          <Icon size={16} weight="duotone" />
+                        </span>
+                      );
+                    })()}
                     <span className="line-clamp-1 text-sm font-medium text-zinc-200 group-hover:text-accent">
                       {a.name}
                     </span>

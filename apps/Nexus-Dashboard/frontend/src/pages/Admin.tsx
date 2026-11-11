@@ -92,20 +92,30 @@ export default function Admin() {
     return () => { cancelled = true; };
   }, []);
 
-  // Fetch cloud data only when dev tools are shown — but the effect itself is
+  // Service health is always visible in the Operator panel — fetch it as soon
+  // as we know the user is an admin, independently of the Dev Tools toggle.
+  useEffect(() => {
+    if (!isAdmin(user ?? null)) return;
+    let cancelled = false;
+    void listServiceHealth()
+      .then((sv) => { if (!cancelled) setServices(sv.services); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [user]);
+
+  // Fetch cloud/dev data only when dev tools are shown — but the effect itself is
   // unconditional, which is what keeps hook order stable across renders.
   useEffect(() => {
     if (!showDevTools) return;
     let cancelled = false;
     void (async () => {
       try {
-        const [eps, p, id, t, d, sv, us] = await Promise.all([
+        const [eps, p, id, t, d, us] = await Promise.all([
           cloudEndpoints().catch(() => []),
           cloudFederationPeers().catch(() => []),
           cloudIdentity().catch(() => null),
           cloudTools().catch(() => []),
           listDevTools().catch(() => null),
-          listServiceHealth().catch(() => ({ services: [] })),
           isAdmin(user ?? null) ? listUsers().catch(() => []) : Promise.resolve([]),
         ]);
         if (!cancelled) {
@@ -114,7 +124,6 @@ export default function Admin() {
           setIdentity(id);
           setTools(t);
           setDhts(d);
-          setServices(sv.services);
           if (Array.isArray(us)) setUsers(us);
         }
       } catch {}
@@ -290,6 +299,25 @@ export default function Admin() {
         )}
       </div>
 
+      {services.length > 0 && (
+        <div>
+          <h2 className="text-lg font-medium mb-3">System Health</h2>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {services.map((svc) => (
+              <div key={svc.name} className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 flex items-center gap-2">
+                <span aria-hidden="true" className={`h-2 w-2 rounded-full shrink-0 ${svc.healthy ? "bg-emerald-400" : "bg-red-400"}`} />
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-zinc-200 truncate">{svc.name}</div>
+                  <div className="text-xs text-zinc-500 truncate">
+                    {svc.healthy ? `${svc.latencyMs ?? "?"}ms` : svc.detail ?? "down"}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Development Notes & Tools (Founder only, development phase) */}
       <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-6 space-y-6">
         <div className="flex items-center justify-between">
@@ -367,23 +395,6 @@ export default function Admin() {
                 {dhts?.exists && dhts.tools.length === 0 && (
                   <p className="text-sm text-zinc-500">No tools registered and none discovered.</p>
                 )}
-              </div>
-            </div>
-
-            <div>
-              <h3 className="font-medium mb-3">Service Health</h3>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                {services.map((svc) => (
-                  <div key={svc.name} className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 flex items-center gap-2">
-                    <span aria-hidden="true" className={`h-2 w-2 rounded-full shrink-0 ${svc.healthy ? "bg-emerald-400" : "bg-red-400"}`} />
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-zinc-200 truncate">{svc.name}</div>
-                      <div className="text-xs text-zinc-500 truncate">
-                        {svc.healthy ? `${svc.latencyMs ?? "?"}ms` : svc.detail ?? "down"}
-                      </div>
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
 
