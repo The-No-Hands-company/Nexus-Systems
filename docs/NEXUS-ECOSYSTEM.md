@@ -129,7 +129,7 @@ Every app in the ecosystem, by category, with measured status.
 |---|---|---|
 | **Nexus** | Real-time chat runtime (Rust); the app serving chat.tnhc.dev | **Live** |
 | **Nexus-Dashboard** | The ecosystem shell — launcher, account, admin, and shell-native views | **Live** |
-| **Nexus-Auth** | Identity provider; OIDC/SSO for every app in the ecosystem | **Live** |
+| **Nexus-Auth** | Identity provider; OIDC/SSO for every app in the ecosystem. Built on Phantom DID + OIDC — not Auth0-API-compatible by design; see [Aligned projects](#aligned-projects) for a drop-in Auth0 replacement | **Live** |
 | **Nexus-Cloud** | Control plane — app registry, federation, operator console | **Live** |
 | **Nexus-Systems-API** | Service registration and discovery contract every app implements | Stub |
 | **Nexus-API** | Unified API server extracted from Nexus-Hosting (sites, deploys, federation, storage). Retired from production on 2026-10-07; the code is kept | In development |
@@ -454,6 +454,16 @@ with code beyond the scaffold. 113 register rows including `apps/Nexus`.
 
 **2026-08-20:** `apps/Phantom` added — present on disk and in `.gitmodules`
 since long before this document, never registered. 114 rows.
+
+---
+
+## Aligned projects
+
+Projects outside this monorepo that share the same principle — software that should be free, self-hosted, and sovereign — and that TNHC actively supports or watches.
+
+| Project | What it is | Relationship to Nexus |
+|---|---|---|
+| **[zeroauthy](https://github.com/occupysaas/zeroauthy)** (OccupySaaS) | A clean-room, 1:1 drop-in replacement for Auth0. Points an existing Auth0 SDK at a zeroauthy domain and nothing else changes. Go binary, embeds the admin console, Apache-2.0, OpenID Foundation certified (Basic, Config, Form Post profiles). 1.0 early preview. | Nexus-Auth and zeroauthy solve the same underlying problem — auth should not cost $240/mo — but from different angles. Nexus-Auth is purpose-built around Phantom DID and the Nexus ecosystem; zeroauthy is Auth0-API-compatible and targets teams already locked into the Auth0 SDK. If you are migrating away from Auth0 and do not want to adopt Phantom, zeroauthy is the right tool. The two projects are complementary. |
 
 ---
 
