@@ -650,8 +650,13 @@ start_nexus_network_service() {
 start_nexus_forge_service() {
     start_service "nexus-forge" "$ROOT/apps/Nexus-Forge" 3120 \
         PORT=3120 \
+        HOST=127.0.0.1 \
         NEXUS_FORGE_BUN="$(command -v bun || echo bun)" \
+        FORGE_DB_PATH="$ROOT/data/forge.sqlite" \
+        FORGE_STORAGE_PATH="$ROOT/data/forge-repos" \
         FORGE_HOOKS_DIR=/tmp/nexus-forge-hooks \
+        NEXUS_FORGE_PUBLIC_URL="https://forge.$DOMAIN" \
+        NEXUS_AUTH_URL=http://127.0.0.1:4310 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
         NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         bun run src/backend/main.ts
@@ -1300,6 +1305,7 @@ cmd_start() {
     start_nexus_wiki_service
     start_nexus_code_service
     start_nexus_vault_service
+    start_nexus_forge_service
 
     # 4fe-i. Everyday & Productivity Suite: Files, Finance, Tasks, Music
     start_nexus_files_service
