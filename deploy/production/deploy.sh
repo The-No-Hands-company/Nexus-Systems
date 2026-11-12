@@ -67,6 +67,7 @@ service_identity() {
         nexus-deploy)   SERVICE_DIR="$ROOT/apps/Nexus-Deploy"; SERVICE_EXEC_PATTERN="node dist/index.js" ;;
         nexus-monitor)      SERVICE_DIR="$ROOT/apps/Nexus-Monitor"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-monitor-web)  SERVICE_DIR="$ROOT"; SERVICE_EXEC_PATTERN="run --config $ROOT/deploy/production/nexus-monitor.Caddyfile" ;;
+        nexus-radar)        SERVICE_DIR="$ROOT/dhts/nexus-v1-radar"; SERVICE_EXEC_PATTERN="bun run server.ts" ;;
         nexus-design|design) SERVICE_DIR="$ROOT/apps/Nexus-Design"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-graphic|graphic) SERVICE_DIR="$ROOT/apps/Nexus-Graphic"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-photos|photos) SERVICE_DIR="$ROOT/apps/Nexus-Photos"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
@@ -113,6 +114,7 @@ service_port() {
         nexus-deploy) printf '%s\n' 8096 ;;
         nexus-monitor) printf '%s\n' 3030 ;;
         nexus-monitor-web) printf '%s\n' 8094 ;;
+        nexus-radar) printf '%s\n' 3200 ;;
         nexus-design|design) printf '%s\n' 3074 ;;
         nexus-graphic|graphic) printf '%s\n' 3080 ;;
         nexus-photos|photos) printf '%s\n' 3096 ;;
@@ -797,6 +799,12 @@ start_nexus_monitor_web_service() {
     fi
 }
 
+start_nexus_radar_service() {
+    start_service "nexus-radar" "$ROOT/dhts/nexus-v1-radar" 3200 \
+        PORT=3200 \
+        bun run server.ts
+}
+
 start_named_service() {
     case "$1" in
         auth) start_auth_service ;;
@@ -830,9 +838,10 @@ start_named_service() {
         nexus-project-web) start_nexus_project_web_service ;;
         nexus-monitor) start_nexus_monitor_service ;;
         nexus-monitor-web) start_nexus_monitor_web_service ;;
+        nexus-radar) start_nexus_radar_service ;;
         proxy) start_proxy_service ;;
         mailapi) start_mailapi_service ;;
-        *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, nexus-monitor, proxy, creative, document, and developer suites"; return 1 ;;
+        *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, nexus-monitor, nexus-radar, proxy, creative, document, and developer suites"; return 1 ;;
     esac
 }
 
@@ -1198,6 +1207,11 @@ cmd_start() {
                 warn "monitor UI not built — run: (cd apps/Nexus-Monitor/frontend && npm install && npm run build)"
             fi
         fi
+    fi
+
+    # 4d-5. Nexus-Radar — v1.0 maturity radar dev tool on :3200 (loopback).
+    if [ -f "$ROOT/dhts/nexus-v1-radar/server.ts" ]; then
+        start_nexus_radar_service || warn "nexus-radar deferred"
     fi
 
     # 4d. Nexus-Deploy — push-to-deploy platform on 8096. Secrets (APP_SECRET,
