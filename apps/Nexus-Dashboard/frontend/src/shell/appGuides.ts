@@ -1194,13 +1194,13 @@ export const APP_GUIDES: Record<string, AppGuide> = {
 
   "nexus-dashboard": {
     id: "nexus-dashboard",
-    name: "Nexus Dashboard",
+    name: "Nexus Shell",
     tagline: "Unified sovereign platform workspace shell, app launcher, notification drawer, and docs hub",
     category: "Everyday",
     whatIsIt:
-      "Nexus Dashboard is the primary front door and operating shell of Nexus Systems. It hosts the dynamic app launcher grid, integrated shell-native apps (Mail, Terminal, Account), the unified Platform Documentation Hub, global Cmd+K search, and the Notification Center.",
+      "Nexus Shell is the primary front door and operating shell of Nexus Systems. It hosts the dynamic app launcher grid, integrated shell-native apps (Mail, Terminal, Account), the unified Platform Documentation Hub, global Cmd+K search, and the Notification Center.",
     whenToUse:
-      "Use Nexus Dashboard as your home base: launch any of the 26 sovereign applications, search across apps and documents, read platform documentation, manage your profile, and monitor overall ecosystem health.",
+      "Use Nexus Shell as your home base: launch any of the 26 sovereign applications, search across apps and documents, read platform documentation, manage your profile, and monitor overall ecosystem health.",
     topCapabilities: [
       { title: "Dynamic App Launcher Grid", desc: "Curated category shelves (Everyday, Work, Create, Develop, Operate) with instant filtering." },
       { title: "Global Search (Cmd+K)", desc: "Lightning-fast search across all applications, documents, notes, and platform guides." },

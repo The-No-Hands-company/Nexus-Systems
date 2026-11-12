@@ -55,7 +55,7 @@ service_identity() {
         chat)           SERVICE_DIR="$ROOT/apps/Nexus-Team-Chat"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-chat)     SERVICE_DIR="$ROOT/apps/Nexus"; SERVICE_EXEC_PATTERN="$NEXUS_CHAT_BINARY_PATH serve --port 8180" ;;
         nexus-chat-web) SERVICE_DIR="$ROOT"; SERVICE_EXEC_PATTERN="caddy run --config $ROOT/deploy/production/nexus-chat.Caddyfile" ;;
-        dashboard)      SERVICE_DIR="$ROOT/apps/Nexus-Dashboard"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        shell|dashboard) SERVICE_DIR="$ROOT/apps/Nexus-Dashboard"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-api)      SERVICE_DIR="$ROOT/apps/Nexus-API"; SERVICE_EXEC_PATTERN="bun run src/gateway-index.ts" ;;
         draw)           SERVICE_DIR="$ROOT/apps/Nexus-Draw"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         proxy)          SERVICE_DIR="$ROOT/deploy/production"; SERVICE_EXEC_PATTERN="bun run proxy.ts" ;;
@@ -102,7 +102,7 @@ service_port() {
         chat) printf '%s\n' 3109 ;;
         nexus-chat) printf '%s\n' 8180 ;;
         nexus-chat-web) printf '%s\n' 8095 ;;
-        dashboard) printf '%s\n' 3132 ;;
+        shell|dashboard) printf '%s\n' 3132 ;;
         nexus-api) printf '%s\n' 3036 ;;
         draw) printf '%s\n' 3075 ;;
         proxy) printf '%s\n' 8080 ;;
@@ -426,16 +426,16 @@ start_nexus_api_service() {
         bun run src/gateway-index.ts
 }
 
-start_dashboard_service() {
+start_shell_service() {
     if [ ! -f "$ROOT/apps/Nexus-Dashboard/frontend/dist/index.html" ]; then
-        warn "dashboard UI not built — run: (cd apps/Nexus-Dashboard/frontend && npm install && bunx vite build)"
+        warn "shell UI not built — run: (cd apps/Nexus-Dashboard/frontend && npm install && bunx vite build)"
         return 1
     fi
     if [ ! -d "$ROOT/apps/Nexus-Dashboard/src" ]; then
-        warn "apps/Nexus-Dashboard/src missing — cannot start dashboard"
+        warn "apps/Nexus-Dashboard/src missing — cannot start shell"
         return 1
     fi
-    start_service "dashboard" "$ROOT/apps/Nexus-Dashboard" 3132 \
+    start_service "shell" "$ROOT/apps/Nexus-Dashboard" 3132 \
         PORT=3132 DOMAIN="$DOMAIN" \
         NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
         NEXUS_API_INTERNAL_URL=http://127.0.0.1:3036 \
@@ -516,7 +516,7 @@ preflight_service_start() {
         auth) : ;;
         cloud) validate_cloud_environment ;;
         nexus-api) : ;;
-        dashboard) : ;;
+        shell|dashboard) : ;;
         nexus-chat) validate_nexus_chat_environment ;;
         nexus-chat-web) validate_nexus_chat_caddy ;;
         nexus-deploy|deploy) adopt_cloud_registration_environment_for_dependents ;;
@@ -524,7 +524,7 @@ preflight_service_start() {
         nexus-design|design|nexus-graphic|graphic|nexus-photos|photos|nexus-video|video|nexus-notes|notes|nexus-docs|docs|nexus-wiki|wiki|nexus-code|code|nexus-vault|vault|nexus-files|files|nexus-finance|finance|nexus-tasks|tasks|nexus-music|music|nexus-network|network|nexus-forge|forge|mailapi|nexus-project|nexus-project-web|ai|nexus-ai|database|nexus-database|guardian|nexus-guardian|edge|nexus-edge)
             adopt_cloud_registration_environment_for_dependents || true
             ;;
-        *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, proxy, creative, document, and developer suites"; return 1 ;;
+        *) warn "Per-service recovery is limited to auth, cloud, shell, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, proxy, creative, document, and developer suites"; return 1 ;;
     esac
 }
 
@@ -810,7 +810,7 @@ start_named_service() {
         auth) start_auth_service ;;
         cloud) start_cloud_service ;;
         nexus-api) start_nexus_api_service ;;
-        dashboard) start_dashboard_service ;;
+        shell|dashboard) start_shell_service ;;
         nexus-chat) start_nexus_chat_service ;;
         nexus-chat-web) start_nexus_chat_web_service ;;
         nexus-deploy|deploy) start_nexus_deploy_service ;;
@@ -841,7 +841,7 @@ start_named_service() {
         nexus-radar) start_nexus_radar_service ;;
         proxy) start_proxy_service ;;
         mailapi) start_mailapi_service ;;
-        *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, nexus-monitor, nexus-radar, proxy, creative, document, and developer suites"; return 1 ;;
+        *) warn "Per-service recovery is limited to auth, cloud, shell, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, nexus-monitor, nexus-radar, proxy, creative, document, and developer suites"; return 1 ;;
     esac
 }
 
@@ -1262,11 +1262,11 @@ cmd_start() {
     # built, so a checkout that has not run `npm run build` still brings up
     # everything else.
     if [ ! -f "$ROOT/apps/Nexus-Dashboard/frontend/dist/index.html" ]; then
-        warn "dashboard UI not built — run: (cd apps/Nexus-Dashboard/frontend && npm install && bunx vite build)"
+        warn "shell UI not built — run: (cd apps/Nexus-Dashboard/frontend && npm install && bunx vite build)"
     elif [ ! -d "$ROOT/apps/Nexus-Dashboard/src" ]; then
-        warn "apps/Nexus-Dashboard/src missing — skipping dashboard"
+        warn "apps/Nexus-Dashboard/src missing — skipping shell"
     else
-        start_service "dashboard" "$ROOT/apps/Nexus-Dashboard" 3132 \
+        start_service "shell" "$ROOT/apps/Nexus-Dashboard" 3132 \
             PORT=3132 DOMAIN="$DOMAIN" \
             NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
             NEXUS_API_INTERNAL_URL=http://127.0.0.1:3036 \
@@ -1566,7 +1566,7 @@ cmd_stop() {
     local svc
 
     log "Stopping all Nexus services..."
-    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-monitor nexus-monitor-web nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-vault nexus-files nexus-finance nexus-tasks nexus-music ai database guardian edge nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-monitor nexus-monitor-web nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-vault nexus-files nexus-finance nexus-tasks nexus-music ai database guardian edge nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api shell draw mailapi mailsmtpd proxy; do
         stop_service "$svc" || true
     done
     cd "$ROOT"
@@ -1576,7 +1576,7 @@ cmd_stop() {
 
 cmd_service_status() {
     echo "Service Status:"
-    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-monitor nexus-monitor-web nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-vault nexus-files nexus-finance nexus-tasks nexus-music ai database guardian edge nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-monitor nexus-monitor-web nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-vault nexus-files nexus-finance nexus-tasks nexus-music ai database guardian edge nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api shell draw mailapi mailsmtpd proxy; do
         service_identity "$svc" || continue
         local pid port
         port="$(service_port "$svc")"
@@ -1645,7 +1645,7 @@ Usage: $(basename "$0") [command]
   bg, --bg          start in the background and return
   stop, --stop      stop all services and the infrastructure containers
   status, --status  report what is running
-  restart SERVICE   safely restart auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, or proxy
+  restart SERVICE   safely restart auth, cloud, shell, nexus-api, nexus-chat, nexus-chat-web, or proxy
   cleanup-log SERVICE
                     after both rotation checkpoints, stop one affected writer,
                     replace its exact historical log, and safely restart it
