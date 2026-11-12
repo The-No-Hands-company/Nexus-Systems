@@ -19,6 +19,7 @@ const port = Number.parseInt(env.PORT || "8094", 10);
 const host = env.HOST || "127.0.0.1";
 const cloudUrl = (env.NEXUS_CLOUD_URL || "").trim();
 const cloudApiKey = (env.NEXUS_CLOUD_API_KEY || "").trim();
+const monitorUrl = (env.NEXUS_MONITOR_URL || "http://localhost:3030").trim();
 const cloudToolId = (env.NEXUS_FORGE_TOOL_ID || "nexus-forge").trim() || "nexus-forge";
 const cloudToolName = (env.NEXUS_FORGE_TOOL_NAME || "Nexus Forge").trim() || "Nexus Forge";
 const cloudHeartbeatIntervalMs = Math.max(
@@ -104,11 +105,30 @@ if (cloudUrl) {
   }, cloudHeartbeatIntervalMs);
 }
 
+function sendForgeMonitorHeartbeat(): void {
+  fetch(`${monitorUrl}/api/v1/monitor/ingest`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      source: "nexus-forge",
+      kind: "heartbeat",
+      state: "healthy",
+      timestamp: new Date().toISOString(),
+      endpoint: forgeUpstreamUrl(),
+    }),
+  }).catch(() => {});
+}
+
+sendForgeMonitorHeartbeat();
+const monitorHeartbeatTimer = setInterval(sendForgeMonitorHeartbeat, cloudHeartbeatIntervalMs);
+if (typeof monitorHeartbeatTimer.unref === "function") monitorHeartbeatTimer.unref();
+
 function stopCloudHeartbeat(): void {
   if (cloudHeartbeatTimer) {
     clearInterval(cloudHeartbeatTimer);
     cloudHeartbeatTimer = null;
   }
+  clearInterval(monitorHeartbeatTimer);
 }
 
 // A signal handler replaces the default "exit", so it has to exit itself;
