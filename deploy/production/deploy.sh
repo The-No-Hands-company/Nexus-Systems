@@ -65,6 +65,8 @@ service_identity() {
         nexus-project)      SERVICE_DIR="$ROOT/apps/Nexus-Project"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-project-web)  SERVICE_DIR="$ROOT"; SERVICE_EXEC_PATTERN="run --config $ROOT/deploy/production/nexus-project.Caddyfile" ;;
         nexus-deploy)   SERVICE_DIR="$ROOT/apps/Nexus-Deploy"; SERVICE_EXEC_PATTERN="node dist/index.js" ;;
+        nexus-monitor)      SERVICE_DIR="$ROOT/apps/Nexus-Monitor"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        nexus-monitor-web)  SERVICE_DIR="$ROOT"; SERVICE_EXEC_PATTERN="run --config $ROOT/deploy/production/nexus-monitor.Caddyfile" ;;
         nexus-design|design) SERVICE_DIR="$ROOT/apps/Nexus-Design"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-graphic|graphic) SERVICE_DIR="$ROOT/apps/Nexus-Graphic"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-photos|photos) SERVICE_DIR="$ROOT/apps/Nexus-Photos"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
@@ -109,6 +111,8 @@ service_port() {
         nexus-project) printf '%s\n' 3152 ;;
         nexus-project-web) printf '%s\n' 8093 ;;
         nexus-deploy) printf '%s\n' 8096 ;;
+        nexus-monitor) printf '%s\n' 3030 ;;
+        nexus-monitor-web) printf '%s\n' 8094 ;;
         nexus-design|design) printf '%s\n' 3074 ;;
         nexus-graphic|graphic) printf '%s\n' 3080 ;;
         nexus-photos|photos) printf '%s\n' 3096 ;;
@@ -733,7 +737,7 @@ start_mailapi_service() {
         start_service "mailapi" "$ROOT/apps/Nexus-Email" 3140 \
             NEXUS_EMAIL_BIND=127.0.0.1:3140 \
             NEXUS_EMAIL_DOMAIN="$DOMAIN" \
-            NEXUS_EMAIL_DATABASE_URL="${NEXUS_EMAIL_DATABASE_URL:-postgres://nexus:nexus@localhost:5432/nexus_email}" \
+            NEXUS_EMAIL_DATABASE_URL="${NEXUS_EMAIL_DATABASE_URL:-postgres://nexus:nexus@localhost:5432/nexus_email}" \  # pragma: allowlist secret
             "$mailapi_bin"
         export -n NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN NEXUS_EMAIL_SYSTEM_MAIL_TOKEN
     else
@@ -762,6 +766,28 @@ start_nexus_project_web_service() {
         NEXUS_PROJECT_WEB_ROOT="$project_web_root" \
             start_service "nexus-project-web" "$ROOT" 8093 \
             "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-project.Caddyfile"
+    fi
+}
+
+start_nexus_monitor_service() {
+    local monitor_db="${NEXUS_MONITOR_DB_PATH:-$ROOT/data/monitor.sqlite}"
+    start_service "nexus-monitor" "$ROOT/apps/Nexus-Monitor" 3030 \
+        PORT=3030 \
+        NEXUS_BIND_HOST=127.0.0.1 \
+        NEXUS_MONITOR_DB_PATH="$monitor_db" \
+        NEXUS_MONITOR_BASE_URL=http://127.0.0.1:8094 \
+        NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
+        bun run src/index.ts
+}
+
+start_nexus_monitor_web_service() {
+    local monitor_web_root="${NEXUS_MONITOR_WEB_ROOT:-$ROOT/apps/Nexus-Monitor/frontend/dist}"
+    if command -v "$CADDY_BIN" >/dev/null 2>&1 && [ -f "$monitor_web_root/index.html" ]; then
+        NEXUS_MONITOR_WEB_ROOT="$monitor_web_root" \
+            start_service "nexus-monitor-web" "$ROOT" 8094 \
+            "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-monitor.Caddyfile"
     fi
 }
 
@@ -796,9 +822,11 @@ start_named_service() {
         edge|nexus-edge) start_nexus_edge_service ;;
         nexus-project) start_nexus_project_service ;;
         nexus-project-web) start_nexus_project_web_service ;;
+        nexus-monitor) start_nexus_monitor_service ;;
+        nexus-monitor-web) start_nexus_monitor_web_service ;;
         proxy) start_proxy_service ;;
         mailapi) start_mailapi_service ;;
-        *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, proxy, creative, document, and developer suites"; return 1 ;;
+        *) warn "Per-service recovery is limited to auth, cloud, dashboard, nexus-api, nexus-chat, nexus-chat-web, nexus-deploy, nexus-monitor, proxy, creative, document, and developer suites"; return 1 ;;
     esac
 }
 
@@ -1144,6 +1172,21 @@ cmd_start() {
                     "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-project.Caddyfile" --adapter caddyfile
             else
                 warn "project UI not built — run: (cd apps/Nexus-Project/frontend && npm install && npm run build)"
+            fi
+        fi
+    fi
+
+    # 4d-4. Nexus-Monitor — observability dashboard on 3030/8094.
+    if [ -f "$ROOT/apps/Nexus-Monitor/package.json" ]; then
+        local monitor_web_root="${NEXUS_MONITOR_WEB_ROOT:-$ROOT/apps/Nexus-Monitor/frontend/dist}"
+        start_nexus_monitor_service
+        if command -v "$CADDY_BIN" >/dev/null 2>&1; then
+            if [ -f "$monitor_web_root/index.html" ]; then
+                start_service "nexus-monitor-web" "$ROOT" 8094 \
+                    NEXUS_MONITOR_WEB_ROOT="$monitor_web_root" \
+                    "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-monitor.Caddyfile" --adapter caddyfile
+            else
+                warn "monitor UI not built — run: (cd apps/Nexus-Monitor/frontend && npm install && npm run build)"
             fi
         fi
     fi
@@ -1499,7 +1542,7 @@ cmd_stop() {
     local svc
 
     log "Stopping all Nexus services..."
-    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-vault nexus-files nexus-finance nexus-tasks nexus-music ai database guardian edge nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-monitor nexus-monitor-web nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-vault nexus-files nexus-finance nexus-tasks nexus-music ai database guardian edge nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
         stop_service "$svc" || true
     done
     cd "$ROOT"
@@ -1509,7 +1552,7 @@ cmd_stop() {
 
 cmd_service_status() {
     echo "Service Status:"
-    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-vault nexus-files nexus-finance nexus-tasks nexus-music ai database guardian edge nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-deploy nexus-monitor nexus-monitor-web nexus-design nexus-graphic nexus-photos nexus-video nexus-notes nexus-docs nexus-wiki nexus-code nexus-vault nexus-files nexus-finance nexus-tasks nexus-music ai database guardian edge nexus-chat nexus-chat-web nexus-draw-web terminal nexus-api dashboard draw mailapi mailsmtpd proxy; do
         service_identity "$svc" || continue
         local pid port
         port="$(service_port "$svc")"

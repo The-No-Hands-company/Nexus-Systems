@@ -109,6 +109,7 @@ const FALLBACK_AI_UPSTREAM = process.env.AI_UPSTREAM || "http://127.0.0.1:3400";
 const FALLBACK_DATABASE_UPSTREAM = process.env.DATABASE_UPSTREAM || "http://127.0.0.1:3088";
 const FALLBACK_GUARDIAN_UPSTREAM = process.env.GUARDIAN_UPSTREAM || "http://127.0.0.1:4320";
 const FALLBACK_EDGE_UPSTREAM = process.env.EDGE_UPSTREAM || "http://127.0.0.1:4340";
+const FALLBACK_MONITOR_UPSTREAM = process.env.MONITOR_UPSTREAM || "http://127.0.0.1:8094";
 // deploy.<DOMAIN> is Nexus Deploy's control plane: its dashboard, its API and the
 // push-to-deploy webhook. The apps it runs are NOT here; they are reached on
 // their own hostnames through Cloud's routes.
@@ -834,6 +835,9 @@ async function handleRequestInner(
         fixedKind = "app";
       } else if (host === `project.${DOMAIN}` || host === `www.project.${DOMAIN}`) {
         upstreamUrl = FALLBACK_PROJECT_UPSTREAM;
+        fixedKind = "app";
+      } else if (host === `monitor.${DOMAIN}` || host === `www.monitor.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_MONITOR_UPSTREAM;
         fixedKind = "app";
       } else if (host === `design.${DOMAIN}` || host === `www.design.${DOMAIN}`) {
         upstreamUrl = FALLBACK_DESIGN_UPSTREAM;
