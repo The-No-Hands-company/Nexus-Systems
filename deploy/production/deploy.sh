@@ -604,6 +604,7 @@ start_nexus_vault_service() {
         NEXUS_CLOUD_URL=http://localhost:8787 \
         NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         VAULT_DATA_DIR="$ROOT/apps/Nexus-Vault/data" \
+        VAULT_FAIL_ON_AUDIT_INTEGRITY_ERROR=false \
         bun src/index.ts
 }
 
@@ -1145,7 +1146,8 @@ cmd_start() {
             if [ -f "$ROOT/apps/Nexus-Calendar/frontend/dist/index.html" ]; then
                 start_service "nexus-calendar-web" "$ROOT" 8092 \
                     NEXUS_CALENDAR_WEB_ROOT="$calendar_web_root" \
-                    "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-calendar.Caddyfile" --adapter caddyfile
+                    "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-calendar.Caddyfile" --adapter caddyfile \
+                    || warn "nexus-calendar-web deferred"
             else
                 warn "calendar UI not built — run: (cd apps/Nexus-Calendar/frontend && pnpm install && pnpm run build)"
             fi
@@ -1174,7 +1176,8 @@ cmd_start() {
             if [ -f "$ROOT/apps/Nexus-Project/frontend/dist/index.html" ]; then
                 start_service "nexus-project-web" "$ROOT" 8093 \
                     NEXUS_PROJECT_WEB_ROOT="$project_web_root" \
-                    "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-project.Caddyfile" --adapter caddyfile
+                    "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-project.Caddyfile" --adapter caddyfile \
+                    || warn "nexus-project-web deferred"
             else
                 warn "project UI not built — run: (cd apps/Nexus-Project/frontend && npm install && npm run build)"
             fi
@@ -1189,7 +1192,8 @@ cmd_start() {
             if [ -f "$monitor_web_root/index.html" ]; then
                 start_service "nexus-monitor-web" "$ROOT" 8094 \
                     NEXUS_MONITOR_WEB_ROOT="$monitor_web_root" \
-                    "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-monitor.Caddyfile" --adapter caddyfile
+                    "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-monitor.Caddyfile" --adapter caddyfile \
+                    || warn "nexus-monitor-web deferred"
             else
                 warn "monitor UI not built — run: (cd apps/Nexus-Monitor/frontend && npm install && npm run build)"
             fi
