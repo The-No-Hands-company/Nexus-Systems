@@ -1333,10 +1333,10 @@ cmd_start() {
     start_nexus_network_service
 
     # 4fe-j. Core Intelligence & Infrastructure Services
-    start_nexus_ai_service
-    start_nexus_database_service
-    start_nexus_guardian_service
-    start_nexus_edge_service
+    start_nexus_ai_service       || warn "nexus-ai deferred"
+    start_nexus_database_service || warn "nexus-database deferred"
+    start_nexus_guardian_service || warn "nexus-guardian deferred"
+    start_nexus_edge_service     || warn "nexus-edge deferred"
 
     # 4g. Nexus-Email API — the mail store behind app.$DOMAIN/mail.
     #
