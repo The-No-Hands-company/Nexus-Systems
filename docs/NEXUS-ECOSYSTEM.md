@@ -47,7 +47,7 @@ That gives four honest states:
 | **Scaffold** | The six-file `ghost` shape: registers with Systems-API, serves health, no domain logic | 73 |
 | **Stub** | Less than the scaffold — a directory with intent and little else | 6 |
 
-**115 rows total**: 113 `Nexus-*` directories, plus `apps/Nexus` (the Rust chat
+**134 rows total**: 132 `Nexus-*` entries in this register, plus `apps/Nexus` (the Rust chat
 runtime) and `apps/Phantom`, neither of which carries the prefix.
 
 Phantom is listed even though it is not an app. It is a protocol security layer
@@ -249,6 +249,10 @@ Every app in the ecosystem, by category, with measured status.
 | **Nexus-Modeling** | 3D modelling kernel targeting full-parity DCC | In development |
 | **Nexus-Photos** | Photo library and editing; live at photos.tnhc.dev | **Live** |
 | **Nexus-Video** | Video editing and processing; live at video.tnhc.dev | **Live** |
+| **Nexus-Tube** | Federated video platform (YouTube/Vimeo/Odysee-style): creator channels, community uploads, curated playlists, embedded player. Content stays on the host node; federation is the CDN | Scaffold |
+| **Nexus-Sound** | Audio streaming and discovery platform (SoundCloud/Mixcloud-style): unlimited track uploads, sets and mixes, artist following, embeddable player, timestamped comments | Scaffold |
+| **Nexus-Live** | Live streaming platform (Twitch/Kick-style): RTMP ingest (OBS-compatible), live chat, channel subscriptions, VOD archive, overlay and alert tooling | Scaffold |
+| **Nexus-Label** | Music distribution pipeline: pushes releases to Spotify, Apple Music, YouTube Music and other streaming services via free-tier distribution partners (Amuse, Level, Soundrop); manages ISRC codes, metadata, artwork, and schedules. No annual fee — the pipeline itself is the product | Scaffold |
 | **Nexus-Media** | Media library and playback | Scaffold |
 | **Nexus-Music** | Music library and playback | Scaffold |
 | **Nexus-Radio-Live** | Live radio streaming | Scaffold |
