@@ -1,4 +1,4 @@
-import { constants, accessSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { constants, accessSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 /**
@@ -14,9 +14,18 @@ import path from "node:path";
  */
 export const HOOK_NAMES = ["pre-receive", "post-receive"] as const;
 
+// When compiled to dist/, import.meta.dir is inside dist/ and the .ts source
+// files don't exist there — only the compiled .js files do. Fall back to .js
+// so that bun can still exec the hook in both dev and compiled contexts.
+function resolveEntrypoint(tsPath: string): string {
+  if (existsSync(tsPath)) return tsPath;
+  const jsPath = tsPath.replace(/\.ts$/, ".js");
+  return jsPath;
+}
+
 const ENTRYPOINTS: Record<(typeof HOOK_NAMES)[number], string> = {
-  "pre-receive": path.join(import.meta.dir, "../hooks/pre-receive.ts"),
-  "post-receive": path.join(import.meta.dir, "../hooks/post-receive.ts"),
+  "pre-receive": resolveEntrypoint(path.join(import.meta.dir, "../hooks/pre-receive.ts")),
+  "post-receive": resolveEntrypoint(path.join(import.meta.dir, "../hooks/post-receive.ts")),
 };
 
 function shellQuote(value: string): string {
