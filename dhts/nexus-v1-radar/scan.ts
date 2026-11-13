@@ -181,6 +181,7 @@ function countSourceFiles(dirPath: string): number {
 }
 
 export async function auditApp(app: AppDefinition): Promise<AppAuditResult> {
+  await Bun.sleep(0); // yield before sync I/O so the event loop stays responsive
   const rootDir = resolve(REPO_ROOT, app.dir);
   const dirExists = existsSync(rootDir);
 
