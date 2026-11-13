@@ -26,7 +26,35 @@ export interface ActivityRecord {
   created_at: string;
 }
 
-const SCHEMA_VERSION = 1;
+export type IssueState = "open" | "closed";
+
+export interface LabelRecord {
+  id: number;
+  repo_id: number;
+  name: string;
+  color: string;
+}
+
+export interface IssueRecord {
+  id: number;
+  repo_id: number;
+  number: number;
+  title: string;
+  body: string;
+  state: IssueState;
+  author_id: number | null;
+  assignee_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IssueWithMeta extends IssueRecord {
+  author_username: string | null;
+  assignee_username: string | null;
+  label_names: string;
+}
+
+const SCHEMA_VERSION = 2;
 
 /**
  * Forge metadata: users, access tokens, repositories, per-repository grants
@@ -56,50 +84,87 @@ export class ForgeDB {
         `forge database schema v${version} is newer than this code (v${SCHEMA_VERSION})`,
       );
     }
-    const tables = this.db.query("SELECT name FROM sqlite_master WHERE type = 'table'").all();
-    if (tables.length > 0) {
-      throw new Error("forge database has tables but no schema version; refusing to adopt it");
+
+    if (version === 0) {
+      const tables = this.db.query("SELECT name FROM sqlite_master WHERE type = 'table'").all();
+      if (tables.length > 0) {
+        throw new Error("forge database has tables but no schema version; refusing to adopt it");
+      }
+      this.db.transaction(() => {
+        this.db.exec(`
+          CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE TABLE tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            token_hash TEXT UNIQUE NOT NULL,
+            expires_at INTEGER NOT NULL,
+            revoked INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE TABLE repositories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            description TEXT,
+            visibility TEXT NOT NULL CHECK (visibility IN ('public', 'private')),
+            owner_id INTEGER NOT NULL REFERENCES users(id),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE TABLE grants (
+            repo_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            level TEXT NOT NULL CHECK (level IN ('read', 'write', 'admin')),
+            PRIMARY KEY (repo_id, user_id)
+          );
+          CREATE TABLE activity (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+            action TEXT NOT NULL,
+            actor_id INTEGER REFERENCES users(id),
+            details TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+        // fall through to v2 tables below
+      })();
     }
-    this.db.transaction(() => {
-      this.db.exec(`
-        CREATE TABLE users (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          username TEXT UNIQUE NOT NULL,
-          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE tokens (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          token_hash TEXT UNIQUE NOT NULL,
-          expires_at INTEGER NOT NULL,
-          revoked INTEGER NOT NULL DEFAULT 0,
-          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE repositories (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT UNIQUE NOT NULL,
-          description TEXT,
-          visibility TEXT NOT NULL CHECK (visibility IN ('public', 'private')),
-          owner_id INTEGER NOT NULL REFERENCES users(id),
-          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE grants (
-          repo_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          level TEXT NOT NULL CHECK (level IN ('read', 'write', 'admin')),
-          PRIMARY KEY (repo_id, user_id)
-        );
-        CREATE TABLE activity (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          repo_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-          action TEXT NOT NULL,
-          actor_id INTEGER REFERENCES users(id),
-          details TEXT,
-          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
-    })();
+
+    if (version < 2) {
+      this.db.transaction(() => {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS labels (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            color TEXT NOT NULL DEFAULT '#6E6E6E',
+            UNIQUE (repo_id, name)
+          );
+          CREATE TABLE IF NOT EXISTS issues (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+            number INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL DEFAULT '',
+            state TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open', 'closed')),
+            author_id INTEGER REFERENCES users(id),
+            assignee_id INTEGER REFERENCES users(id),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (repo_id, number)
+          );
+          CREATE TABLE IF NOT EXISTS issue_labels (
+            issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+            label_id INTEGER NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+            PRIMARY KEY (issue_id, label_id)
+          );
+          CREATE INDEX IF NOT EXISTS idx_issues_repo_state ON issues (repo_id, state);
+        `);
+        this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+      })();
+    }
   }
 
   addUser(username: string): UserRecord {
@@ -201,6 +266,131 @@ export class ForgeDB {
     return this.db
       .query("SELECT * FROM activity WHERE repo_id = ? ORDER BY id DESC LIMIT ?")
       .all(repoId, limit) as ActivityRecord[];
+  }
+
+  // ── Issues ────────────────────────────────────────────────────────────────
+
+  createIssue(
+    repoId: number,
+    title: string,
+    body: string,
+    authorId: number | null,
+  ): IssueRecord {
+    return this.db.transaction(() => {
+      const { next_num } = this.db
+        .query("SELECT COALESCE(MAX(number), 0) + 1 AS next_num FROM issues WHERE repo_id = ?")
+        .get(repoId) as { next_num: number };
+      return this.db
+        .query(
+          `INSERT INTO issues (repo_id, number, title, body, author_id)
+           VALUES (?, ?, ?, ?, ?) RETURNING *`,
+        )
+        .get(repoId, next_num, title, body, authorId) as IssueRecord;
+    })();
+  }
+
+  listIssues(
+    repoId: number,
+    state: IssueState | "all" = "open",
+    limit = 50,
+    skip = 0,
+  ): IssueWithMeta[] {
+    const stateClause = state === "all" ? "" : "AND i.state = ?";
+    const params: (number | string)[] =
+      state === "all" ? [repoId, limit, skip] : [repoId, state, limit, skip];
+    return this.db
+      .query(
+        `SELECT i.*,
+                a.username  AS author_username,
+                s.username  AS assignee_username,
+                COALESCE(GROUP_CONCAT(l.name, ','), '') AS label_names
+         FROM issues i
+         LEFT JOIN users a ON a.id = i.author_id
+         LEFT JOIN users s ON s.id = i.assignee_id
+         LEFT JOIN issue_labels il ON il.issue_id = i.id
+         LEFT JOIN labels l ON l.id = il.label_id
+         WHERE i.repo_id = ? ${stateClause}
+         GROUP BY i.id
+         ORDER BY i.id DESC LIMIT ? OFFSET ?`,
+      )
+      .all(...params) as IssueWithMeta[];
+  }
+
+  getIssue(repoId: number, number: number): IssueWithMeta | null {
+    return this.db
+      .query(
+        `SELECT i.*,
+                a.username  AS author_username,
+                s.username  AS assignee_username,
+                COALESCE(GROUP_CONCAT(l.name, ','), '') AS label_names
+         FROM issues i
+         LEFT JOIN users a ON a.id = i.author_id
+         LEFT JOIN users s ON s.id = i.assignee_id
+         LEFT JOIN issue_labels il ON il.issue_id = i.id
+         LEFT JOIN labels l ON l.id = il.label_id
+         WHERE i.repo_id = ? AND i.number = ?
+         GROUP BY i.id`,
+      )
+      .get(repoId, number) as IssueWithMeta | null;
+  }
+
+  updateIssue(
+    issueId: number,
+    fields: Partial<{ title: string; body: string; state: IssueState; assignee_id: number | null }>,
+  ): IssueRecord | null {
+    const sets: string[] = ["updated_at = CURRENT_TIMESTAMP"];
+    const vals: (string | number | null)[] = [];
+    if (fields.title !== undefined) { sets.push("title = ?"); vals.push(fields.title); }
+    if (fields.body !== undefined) { sets.push("body = ?"); vals.push(fields.body); }
+    if (fields.state !== undefined) { sets.push("state = ?"); vals.push(fields.state); }
+    if ("assignee_id" in fields) { sets.push("assignee_id = ?"); vals.push(fields.assignee_id ?? null); }
+    if (sets.length === 1) return null;
+    vals.push(issueId);
+    return this.db
+      .query(`UPDATE issues SET ${sets.join(", ")} WHERE id = ? RETURNING *`)
+      .get(...vals) as IssueRecord | null;
+  }
+
+  countIssues(repoId: number): { open: number; closed: number } {
+    const rows = this.db
+      .query("SELECT state, COUNT(*) AS n FROM issues WHERE repo_id = ? GROUP BY state")
+      .all(repoId) as { state: string; n: number }[];
+    const open = rows.find((r) => r.state === "open")?.n ?? 0;
+    const closed = rows.find((r) => r.state === "closed")?.n ?? 0;
+    return { open, closed };
+  }
+
+  // ── Labels ────────────────────────────────────────────────────────────────
+
+  ensureDefaultLabels(repoId: number): void {
+    const defaults = [
+      { name: "bug", color: "#FF4444" },
+      { name: "feature", color: "#CCFF00" },
+      { name: "question", color: "#4499FF" },
+      { name: "documentation", color: "#A0A0A0" },
+    ];
+    for (const { name, color } of defaults) {
+      this.db
+        .query(
+          "INSERT OR IGNORE INTO labels (repo_id, name, color) VALUES (?, ?, ?)",
+        )
+        .run(repoId, name, color);
+    }
+  }
+
+  listLabels(repoId: number): LabelRecord[] {
+    return this.db
+      .query("SELECT * FROM labels WHERE repo_id = ? ORDER BY name")
+      .all(repoId) as LabelRecord[];
+  }
+
+  setIssueLabels(issueId: number, labelIds: number[]): void {
+    this.db.transaction(() => {
+      this.db.query("DELETE FROM issue_labels WHERE issue_id = ?").run(issueId);
+      for (const lid of labelIds) {
+        this.db.query("INSERT OR IGNORE INTO issue_labels (issue_id, label_id) VALUES (?, ?)").run(issueId, lid);
+      }
+    })();
   }
 
   close(): void {

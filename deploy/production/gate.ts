@@ -22,6 +22,16 @@ export const AUTH_HOST = process.env.NEXUS_AUTH_HOST || `auth.${DOMAIN}`;
 export const API_HOST = process.env.NEXUS_API_HOST || `api.${DOMAIN}`;
 
 /**
+ * Forge's git smart HTTP uses HTTP Basic auth (the Forge token as the
+ * password). Git clients cannot carry session cookies, so the proxy gate must
+ * let those requests through and let Forge validate the credential itself.
+ * Only the /<repo>.git/ URL subtree is carved out; every other Forge path
+ * (the web UI, the JSON API) still requires a session.
+ */
+const FORGE_HOST = process.env.NEXUS_FORGE_HOST || `forge.${DOMAIN}`;
+const FORGE_GIT_PATH = /^\/[^/]+\.git\//;
+
+/**
  * Where the proxy reaches Auth internally. Never a public URL — that would
  * send the request back out through Cloudflare and into this proxy again,
  * which is the same trap NEXUS_AUTH_BASE_URL documents in deploy.sh.
@@ -363,6 +373,11 @@ export async function gate(
   // to become a login redirect, and it now does, carrying the address the user
   // asked for so they land there afterwards.
   if (url.pathname.startsWith("/assets/")) {
+    return { allow: true, identityToken: null };
+  }
+
+  // Git smart HTTP: let Forge handle its own credential check.
+  if (host === FORGE_HOST && FORGE_GIT_PATH.test(url.pathname)) {
     return { allow: true, identityToken: null };
   }
 

@@ -1,6 +1,7 @@
 import { authorize } from "../auth/access";
+import { forgeUserFromIdentity } from "../auth/identity";
 import { principalFromRequest } from "../auth/tokens";
-import type { ForgeDB, RepositoryRecord } from "../storage/db";
+import type { ForgeDB, IssueState, RepositoryRecord } from "../storage/db";
 import { runGit } from "../git/env";
 import { RepositoryError, type RepositoryManager } from "../storage/repository";
 
@@ -21,6 +22,7 @@ export interface ApiOptions {
 
 const REPO_PATH = /^\/api\/repos\/([^/]+)(\/activity)?$/;
 const REPO_BROWSE = /^\/api\/repos\/([^/]+)\/(branches|commits|tree|blob)$/;
+const REPO_ISSUES = /^\/api\/repos\/([^/]+)\/issues(?:\/(\d+))?$/;
 
 function safeRef(v: string | null): string {
   if (!v) return "HEAD";
@@ -39,10 +41,18 @@ export async function handleApi(request: Request, options: ApiOptions): Promise<
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/")) return null;
   const { db, repos } = options;
-  const principal = principalFromRequest(db, request);
+
+  // Resolve caller: Forge token (git/CLI) takes priority; fall back to TNHC identity JWT (browser).
+  const principal =
+    principalFromRequest(db, request) ?? (await forgeUserFromIdentity(db, request));
 
   if (url.pathname === "/api/auth/status" && request.method === "GET") {
     return json(200, { authenticated: principal !== null, user: principal });
+  }
+
+  if (url.pathname === "/api/auth/me" && request.method === "GET") {
+    if (!principal) return json(401, { error: "not authenticated" });
+    return json(200, { user: principal });
   }
 
   if (url.pathname === "/api/repos" && request.method === "GET") {
@@ -114,6 +124,75 @@ export async function handleApi(request: Request, options: ApiOptions): Promise<
     if (sub === "blob") return gitBlob(repoPath, ref, filePath);
   }
 
+  // ── Issues ────────────────────────────────────────────────────────────────
+
+  const issuesMatch = REPO_ISSUES.exec(url.pathname);
+  if (issuesMatch) {
+    const repoName = issuesMatch[1] ?? "";
+    const issueNum = issuesMatch[2] ? Number(issuesMatch[2]) : null;
+    const repo = db.getRepository(repoName);
+    if (!repo || !authorize(db, principal, repo, "read")) {
+      return json(404, { error: "repository not found" });
+    }
+
+    // GET /api/repos/:name/issues — list
+    if (issueNum === null && request.method === "GET") {
+      const rawState = url.searchParams.get("state") ?? "open";
+      const state: IssueState | "all" =
+        rawState === "closed" ? "closed" : rawState === "all" ? "all" : "open";
+      const limit = Math.min(Number(url.searchParams.get("limit") ?? "50") || 50, 100);
+      const skip = Math.max(Number(url.searchParams.get("skip") ?? "0") || 0, 0);
+      const issues = db.listIssues(repo.id, state, limit, skip);
+      const counts = db.countIssues(repo.id);
+      return json(200, {
+        issues: issues.map(issueView),
+        open: counts.open,
+        closed: counts.closed,
+      });
+    }
+
+    // POST /api/repos/:name/issues — create
+    if (issueNum === null && request.method === "POST") {
+      if (!principal) return json(401, { error: "authentication required" });
+      if (!authorize(db, principal, repo, "read")) return json(403, { error: "forbidden" });
+      let body: Record<string, unknown>;
+      try { body = (await request.json()) as Record<string, unknown>; }
+      catch { return json(400, { error: "body must be JSON" }); }
+      const title = typeof body.title === "string" ? body.title.trim() : "";
+      if (!title) return json(400, { error: "title is required" });
+      const issueBody = typeof body.body === "string" ? body.body : "";
+      const issue = db.createIssue(repo.id, title, issueBody, principal.id);
+      db.ensureDefaultLabels(repo.id);
+      return json(201, { issue: issueView(issue) });
+    }
+
+    // GET /api/repos/:name/issues/:number — single
+    if (issueNum !== null && request.method === "GET") {
+      const issue = db.getIssue(repo.id, issueNum);
+      if (!issue) return json(404, { error: "issue not found" });
+      return json(200, { issue: issueView(issue) });
+    }
+
+    // PATCH /api/repos/:name/issues/:number — update
+    if (issueNum !== null && request.method === "PATCH") {
+      if (!principal) return json(401, { error: "authentication required" });
+      const issue = db.getIssue(repo.id, issueNum);
+      if (!issue) return json(404, { error: "issue not found" });
+      let body: Record<string, unknown>;
+      try { body = (await request.json()) as Record<string, unknown>; }
+      catch { return json(400, { error: "body must be JSON" }); }
+      const fields: Parameters<typeof db.updateIssue>[1] = {};
+      if (typeof body.title === "string") fields.title = body.title.trim();
+      if (typeof body.body === "string") fields.body = body.body;
+      if (body.state === "open" || body.state === "closed") fields.state = body.state;
+      if ("assignee_id" in body) fields.assignee_id = typeof body.assignee_id === "number" ? body.assignee_id : null;
+      const updated = db.updateIssue(issue.id, fields);
+      return json(200, { issue: issueView(updated ?? issue) });
+    }
+  }
+
+  // ── Repo detail + activity ─────────────────────────────────────────────────
+
   const match = REPO_PATH.exec(url.pathname);
   if (match && request.method === "GET") {
     const repo = db.getRepository(match[1] ?? "");
@@ -126,6 +205,25 @@ export async function handleApi(request: Request, options: ApiOptions): Promise<
   }
 
   return json(404, { error: "not found" });
+}
+
+function issueView(issue: Parameters<typeof Object.assign>[0]) {
+  const i = issue as Record<string, unknown>;
+  const labels = typeof i.label_names === "string" && i.label_names
+    ? (i.label_names as string).split(",").filter(Boolean)
+    : [];
+  return {
+    id: i.id,
+    number: i.number,
+    title: i.title,
+    body: i.body,
+    state: i.state,
+    author: i.author_username ?? null,
+    assignee: i.assignee_username ?? null,
+    labels,
+    created_at: i.created_at,
+    updated_at: i.updated_at,
+  };
 }
 
 function publicView(repo: RepositoryRecord) {

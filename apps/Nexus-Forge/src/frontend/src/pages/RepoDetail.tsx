@@ -6,6 +6,8 @@ interface BranchInfo { branches: string[]; default: string | null; empty: boolea
 interface TreeEntry { name: string; type: "tree" | "blob"; size: number | null; }
 interface Commit { sha: string; shortSha: string; message: string; author: string; date: string; }
 interface BlobResult { content: string | null; encoding: string; path: string; }
+interface Issue { id: number; number: number; title: string; body: string; state: "open" | "closed"; author: string | null; assignee: string | null; labels: string[]; created_at: string; updated_at: string; }
+interface IssueList { issues: Issue[]; open: number; closed: number; }
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -31,6 +33,14 @@ function BookIcon() {
   return <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.828A2 2 0 0 1 2.828 1h4.344a2 2 0 0 1 1.414.586l.028.028A2 2 0 0 1 9 3v8.172A2 2 0 0 1 7.172 13H2.828A2 2 0 0 1 1 11.172V2.828zm9 0A2 2 0 0 1 11.828 1h.344A2 2 0 0 1 14 2.828v8.344A2 2 0 0 1 12.172 13H11.5a.5.5 0 0 1 0-1h.672A1 1 0 0 0 13 11.172V2.828A1 1 0 0 0 12.172 2h-.344A1 1 0 0 0 11 2.828V12.5a.5.5 0 0 1-1 0V2.828z"/></svg>;
 }
 
+function IssueOpenIcon() {
+  return <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0z"/></svg>;
+}
+
+function IssueClosedIcon() {
+  return <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.28 6.78a.75.75 0 0 0-1.06-1.06L7.25 8.69 5.78 7.22a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.06 0l3.5-3.5z"/><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-1.5 0a6.5 6.5 0 1 0-13 0 6.5 6.5 0 0 0 13 0z"/></svg>;
+}
+
 export default function RepoDetail() {
   const { name } = useParams<{ name: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -45,6 +55,9 @@ export default function RepoDetail() {
   const [tree, setTree] = useState<TreeEntry[] | null>(null);
   const [blob, setBlob] = useState<BlobResult | null>(null);
   const [commits, setCommits] = useState<Commit[] | null>(null);
+  const [issueData, setIssueData] = useState<IssueList | null>(null);
+  const [issueState, setIssueState] = useState<"open" | "closed">("open");
+  const [showNewIssue, setShowNewIssue] = useState(false);
   const [readme, setReadme] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +113,14 @@ export default function RepoDetail() {
       return;
     }
 
+    if (tab === "issues") {
+      setIssueData(null);
+      fetch(`/api/repos/${name}/issues?state=${issueState}`)
+        .then((r) => r.json())
+        .then((d) => setIssueData(d));
+      return;
+    }
+
     // Code tab
     if (file) {
       setBlob(null);
@@ -124,7 +145,7 @@ export default function RepoDetail() {
     } else {
       setReadme(null);
     }
-  }, [name, branchInfo, loading, tab, rawRef, path, file]);
+  }, [name, branchInfo, loading, tab, rawRef, path, file, issueState]);
 
   function copyCloneUrl() {
     if (!repo?.cloneUrl) return;
@@ -188,6 +209,12 @@ export default function RepoDetail() {
             onClick={() => navigate({ tab: "commits", path: "", file: "" })}
           >
             Commits
+          </button>
+          <button
+            className={`repo-tab${tab === "issues" ? " active" : ""}`}
+            onClick={() => navigate({ tab: "issues", path: "", file: "" })}
+          >
+            Issues
           </button>
         </div>
       </div>
@@ -336,6 +363,153 @@ git push origin main`}
           ))}
         </div>
       )}
+
+      {/* Issues tab */}
+      {tab === "issues" && (
+        <div>
+          <div className="issue-actions">
+            <div className="issue-state-bar">
+              <button
+                className={`issue-state-btn${issueState === "open" ? " active" : ""}`}
+                onClick={() => setIssueState("open")}
+              >
+                ● Open{issueData ? ` ${issueData.open}` : ""}
+              </button>
+              <button
+                className={`issue-state-btn${issueState === "closed" ? " active" : ""}`}
+                onClick={() => setIssueState("closed")}
+              >
+                ✓ Closed{issueData ? ` ${issueData.closed}` : ""}
+              </button>
+            </div>
+            <button className="btn btn-primary btn-sm" onClick={() => setShowNewIssue(true)}>
+              + New issue
+            </button>
+          </div>
+
+          {issueData === null && <p className="loading" style={{ padding: "16px 0" }}>Loading…</p>}
+
+          {issueData !== null && issueData.issues.length === 0 && (
+            <div className="empty-state">
+              <h3>No {issueState} issues</h3>
+              <p>{issueState === "open" ? "Great — no open issues!" : "No closed issues yet."}</p>
+            </div>
+          )}
+
+          {issueData !== null && issueData.issues.length > 0 && (
+            <div className="issue-list">
+              {issueData.issues.map((issue) => (
+                <div key={issue.id} className="issue-row">
+                  <span className={`issue-icon ${issue.state}`}>
+                    {issue.state === "open" ? <IssueOpenIcon /> : <IssueClosedIcon />}
+                  </span>
+                  <div className="issue-body">
+                    <div className="issue-title">
+                      #{issue.number} {issue.title}
+                      {issue.labels.map((l) => (
+                        <span key={l} className="issue-label" style={{ marginLeft: 6 }}>{l}</span>
+                      ))}
+                    </div>
+                    <div className="issue-meta">
+                      <span>opened {relativeTime(issue.created_at)}</span>
+                      {issue.author && <span>by {issue.author}</span>}
+                      {issue.assignee && <span>→ {issue.assignee}</span>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showNewIssue && name && (
+            <NewIssueModal
+              repoName={name}
+              onClose={() => setShowNewIssue(false)}
+              onCreated={() => {
+                setShowNewIssue(false);
+                setIssueData(null);
+                fetch(`/api/repos/${name}/issues?state=${issueState}`)
+                  .then((r) => r.json())
+                  .then((d) => setIssueData(d));
+              }}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NewIssueModal({
+  repoName,
+  onClose,
+  onCreated,
+}: {
+  repoName: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setSubmitting(true);
+    setErr(null);
+    try {
+      const res = await fetch(`/api/repos/${repoName}/issues`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title.trim(), body }),
+      });
+      const data = await res.json() as { error?: string };
+      if (!res.ok) { setErr(data.error ?? "Failed to create issue"); setSubmitting(false); return; }
+      onCreated();
+    } catch {
+      setErr("Network error");
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+        <h2 className="modal-title">New issue</h2>
+        {err && <p className="error-msg" style={{ marginBottom: 16 }}>{err}</p>}
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label className="form-label">Title</label>
+            <input
+              className="form-input"
+              placeholder="Short, descriptive title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              autoFocus
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Description <span style={{ fontWeight: 400, color: "var(--faint)" }}>(optional)</span></label>
+            <textarea
+              className="form-input"
+              placeholder="Describe the issue…"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={5}
+              style={{ resize: "vertical", fontFamily: "inherit" }}
+            />
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={submitting || !title.trim()}>
+              {submitting ? "Submitting…" : "Submit issue"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
