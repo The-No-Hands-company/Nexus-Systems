@@ -6,19 +6,31 @@ import { REGISTERED_APPS } from "./criteria";
 
 const PORT = parseInt(process.env.PORT || "3200", 10);
 const PUBLIC_DIR = resolve(import.meta.dir, "public");
+const CACHE_TTL_MS = 60_000; // refresh every 60s in the background
 
 let cachedSummary: EcosystemAuditSummary | null = null;
 let lastScannedTime = 0;
-const CACHE_TTL_MS = 3000; // 3 second cache to prevent probe flood while staying live
+let scanInProgress = false;
 
-async function getSummary(force = false): Promise<EcosystemAuditSummary> {
+function runBackgroundScan() {
+  if (scanInProgress) return;
+  scanInProgress = true;
+  auditEcosystem()
+    .then((s) => { cachedSummary = s; lastScannedTime = Date.now(); })
+    .catch((err) => console.error("[radar] background scan error:", err?.message ?? err))
+    .finally(() => { scanInProgress = false; });
+}
+
+function getSummary(force = false): EcosystemAuditSummary | null {
   const now = Date.now();
   if (force || !cachedSummary || now - lastScannedTime > CACHE_TTL_MS) {
-    cachedSummary = await auditEcosystem();
-    lastScannedTime = now;
+    runBackgroundScan();
   }
   return cachedSummary;
 }
+
+// Kick off initial scan at startup
+runBackgroundScan();
 
 const server = serve({
   port: PORT,
@@ -38,12 +50,14 @@ const server = serve({
 
     // API endpoints
     if (path === "/api/summary") {
-      const summary = await getSummary(false);
+      const summary = getSummary(false);
+      if (!summary) return Response.json({ scanning: true }, { status: 202, headers: corsHeaders });
       return Response.json(summary, { headers: corsHeaders });
     }
 
     if (path === "/api/rescan") {
-      const summary = await getSummary(true);
+      const summary = getSummary(true);
+      if (!summary) return Response.json({ scanning: true }, { status: 202, headers: corsHeaders });
       return Response.json(summary, { headers: corsHeaders });
     }
 
@@ -51,8 +65,13 @@ const server = serve({
       const appId = path.replace("/api/app/", "");
       const app = REGISTERED_APPS.find((a) => a.id === appId);
       if (!app) return Response.json({ error: "app_not_found" }, { status: 404, headers: corsHeaders });
-      const result = await auditApp(app);
-      return Response.json(result, { headers: corsHeaders });
+      try {
+        const result = await auditApp(app);
+        return Response.json(result, { headers: corsHeaders });
+      } catch (err: any) {
+        console.error("[radar] /api/app error:", err?.message ?? err);
+        return Response.json({ error: "scan_failed", detail: String(err?.message ?? err) }, { status: 500, headers: corsHeaders });
+      }
     }
 
     // Static files

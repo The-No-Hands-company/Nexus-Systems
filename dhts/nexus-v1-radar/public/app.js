@@ -14,7 +14,14 @@ async function fetchAudit(silent = false) {
   try {
     const res = await fetch("/api/summary");
     if (!res.ok) throw new Error("Failed to load live audit summary");
-    currentData = await res.json();
+    const data = await res.json();
+    if (data.scanning) {
+      // Server is still running the first scan — retry in 5s
+      grid.innerHTML = '<div class="loading-state">Scanning ecosystem daemons & public endpoints — first scan in progress, retrying in 5s…</div>';
+      setTimeout(() => fetchAudit(false), 5000);
+      return;
+    }
+    currentData = data;
     renderAll();
   } catch (err) {
     if (!silent) {

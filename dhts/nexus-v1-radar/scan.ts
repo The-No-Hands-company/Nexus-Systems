@@ -355,10 +355,7 @@ export async function auditApp(app: AppDefinition): Promise<AppAuditResult> {
 }
 
 export async function auditEcosystem(): Promise<EcosystemAuditSummary> {
-  const results: AppAuditResult[] = [];
-  for (const app of REGISTERED_APPS) {
-    results.push(await auditApp(app));
-  }
+  const results: AppAuditResult[] = await Promise.all(REGISTERED_APPS.map(auditApp));
 
   // Sort by operational status first (degraded first so they get noticed), then score ascending
   results.sort((a, b) => {
